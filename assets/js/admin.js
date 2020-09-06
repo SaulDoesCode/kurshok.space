@@ -16,16 +16,16 @@ const app = domlib.emitter()
   </div>
   <div class="editor">
       <div class="pad">
-          <label>editor</label>
-          <textarea name="raw_content" cols="30" rows="10" ref="rawContentInput">
-          </textarea>
+        <label>editor</label>
+        <textarea name="raw_content" cols="30" rows="10" ref="rawContentInput">
+        </textarea>
       </div>
       <div class="preview" ref="preview">
       </div>
   </div>
   <div class="tager">
-      <label>tags</label>
-      <input type="text" name="tags" ref="tagsInput">
+    <label>tags</label>
+    <input type="text" name="tags" ref="tagsInput">
   </div>
   <div class="kind">
       <label>kind</label>
