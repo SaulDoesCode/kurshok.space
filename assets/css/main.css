@@ -1,0 +1,178 @@
+/*:root {}*/
+
+* {
+    position: relative;
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+}
+
+.auth {
+    display: inline-flex;
+    flex-direction: row wrap;
+    justify-content: space-between;
+    align-content: center;
+    align-items: center;
+    overflow: visible;
+    width: min-content;
+    margin: 1.5em;
+    padding: .5em;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0px 12px 38px -9px rgba(0, 0, 0, 0.24);
+}
+
+.auth label {
+    letter-spacing: 2px;
+    color: hsl(0, 0%, 24%);
+}
+
+.auth input {
+    width: 200px;
+    color: hsl(0, 0%, 30%);
+    background-color: hsl(0, 0%, 97%);
+    border: 0;
+    border-bottom: 1px solid hsl(0, 0%, 78%);
+    border-radius: 0;
+    padding: .2em .7em;
+    transition: 135ms ease-in-out;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+    border-top: 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom-width: 1px;
+    outline: 0;
+    -webkit-text-fill-color: hsl(0, 0%, 30%);
+    color: hsl(0, 0%, 30%);
+    -webkit-box-shadow: inset 0 0 0px 1000px hsl(0, 0%, 97%);
+    box-shadow: inset 0 0 0px 1000px hsl(0, 0%, 97%);
+    background-color: hsl(0, 0%, 97%);
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+.auth input:focus {
+    border: 0;
+}
+
+.auth .field {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-content: center;
+    align-items: center;
+    overflow: hidden;
+    margin-right: 1em;
+}
+
+.auth .submit {
+    display: flex;
+    width: auto;
+    flex-flow: row wrap;
+    justify-content: center;
+    align-content: center;
+    align-items: center;
+    border-radius: 0;
+    border: 0;
+    height: 1.3cm;
+    width: 1.3cm;
+    border-radius: 100%;
+    font-size: 1.5em;
+    cursor: pointer;
+    color: hsl(0, 0%, 99%);
+    background: hsl(0, 0%, 100%);
+    box-shadow: 0 2px 12px 2px rgba(0, 0, 0, .12);
+    text-shadow: 0 1px 2px rgba(138, 11, 43, 0.9);
+    margin: .5em;
+    transition: all 120ms ease;
+}
+
+.auth .submit:hover {
+    background: hsl(0, 0%, 98%);
+    box-shadow: 0 0px 3px rgba(0, 0, 0, .12);
+}
+
+.auth .submit:focus:hover {
+    background: hsl(0, 0%, 94%);
+}
+
+.auth .submit:focus {
+    background: hsl(0, 0%, 97%);
+    text-shadow: 0 1px 3px rgba(0,0, 0,.12);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, .12), 0 1px 3px rgba(0, 0, 0, .4);
+    border: 0;
+}
+
+.auth .field {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+    pointer-events: none;
+    transition: all 130ms ease-out;
+}
+
+.auth.open .field {
+    opacity: 1;
+    margin-right: 1em;
+    pointer-events: all;
+    width: min-content;
+    height: min-content;
+}
+
+.auth .field > label {
+    display: none;
+}
+.auth.open .field > label {
+    display: initial;
+}
+.auth .field > input {
+    width: 0;
+}
+.auth.open .field > input {
+    width: 200px;
+}
+
+.auth .submit {
+    box-shadow: none;
+    margin: 0;
+    pointer-events: none;
+}
+
+.auth.open .submit {
+    box-shadow: 0 2px 12px 2px rgba(0, 0, 0, .12);
+    margin: .5em;
+    pointer-events: all;
+}
+
+.hero .title {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: .05em .25em .25em .25em;
+    color: #fff;
+    font-size: 2.4em;
+    margin: .2em .2em .7em .2em;
+    background: hsl(0, 0%, 22%);
+    color: hsl(0, 0%, 100%);
+    border-radius: .1em;
+    text-shadow: -2px 5px 3px rgba(0, 0, 0, .2);
+}
+
+@media all and (max-width: 680px) {
+    .hero {
+        justify-content: space-around;
+    }
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grimstack</title>
+  <link rel="stylesheet" href="/css/marx.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/domlib.min.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/view.js"></script>
+  {% include 'head-imports.html' %}
+</head>
+
+<body>
+  <noscript>No JavaScript? Or, old browswer perhaps? <br> Well, then, no website :|</noscript>
+  <header>
+    <div>
+      <h1>Grimstack</h1>
+    </div>
+    <div>
+      <nav>
+        <section class="dropdown">
+          <header>Links</header>
+          <div>
+            <div>Link 1</div>
+            <div>Link 2</div>
+            <div>Link 3</div>
+            <div>Link 4</div>
+            <div>Link 5</div>
+          </div>
+        </section>
+
+        <section class="dropdown {% if username is undefined %}dropdown-auth{% endif %}">
+          <header>Auth</header>
+          <div>
+            {% if username is undefined %}
+            <div class="auth">
+              <div class="field">
+                <label for="auth-username">Username</label>
+                <input type="text" name="username" id="auth-username">
+                <label for="auth-pwd">Password</label>
+                <input type="password" name="password" id="auth-pwd">
+              </div>
+              <button class="submit" onclick="app.authContingent()">🔑</button>
+            </div>
+            <script src="/js/auth.js"></script>
+            {% else %}
+            <div>Account</div>
+            <div>Logout</div>
+            {% endif %}
+          </div>
+        </section>
+
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+  </main>
+
+</body>
+
+</html>

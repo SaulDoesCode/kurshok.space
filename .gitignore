@@ -1,0 +1,6 @@
+/target
+/storage
+/private
+./private/*
+*.pem
+config.toml
