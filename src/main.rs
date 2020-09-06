@@ -5,7 +5,6 @@ extern crate simd_json;
 
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
-
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]static GLOBAL: Jemalloc = Jemalloc;
 
@@ -58,6 +57,11 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
+    if CONF.read().dev_mode {
+        admin_functions::watch_and_update_files();
+        println!("devmode file watching active");
+    }
+
     HttpServer::new(|| 
         App::new()
             .service(web::resource("*").route(
@@ -87,11 +91,6 @@ async fn main() -> std::io::Result<()> {
     let orc = Arc::new(Orchestrator::new(60 * 60 * 24 * 7 * 2));
 
     let orc_clone = orc.clone();
-
-    if orc.dev_mode {
-        admin_functions::watch_and_update_files();
-        println!("devmode file watching active");
-    }
 
     let app_server = HttpServer::new(move || App::new()
         .wrap(actix_web::middleware::Compress::default())
@@ -182,21 +181,29 @@ async fn index(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> impl Resp
     let (o_usr, potential_renewal_cookie) = orc.user_by_session_renew(&req, Duration::days(3));
     if let Some(usr) = o_usr {
         ctx.insert("username", &usr.username);
+        ctx.insert("dev_mode", &orc.dev_mode);
     }
 
-    if let Ok(s) = TEMPLATES.read().render("index.html", &ctx) {
-        return match potential_renewal_cookie {
+    match TEMPLATES.read().render("index.html", &ctx) {
+        Ok(s) => match potential_renewal_cookie {
             Some(cookie) => HttpResponse::Ok()
                 .cookie(cookie)
                 .content_type("text/html")
                 .body(s),
             None => HttpResponse::Ok().content_type("text/html").body(s),
-        };
+        },
+        Err(err) => {
+            if orc.dev_mode {
+                HttpResponse::Ok()
+                    .content_type("text/plain")
+                    .body(&format!("index.html template is broken - error : {}", err))
+            } else {
+                HttpResponse::Ok()
+                    .content_type("text/plain")
+                    .body("The home page template is broken! :( We have failed you.")
+            }
+        }
     }
-
-    HttpResponse::Ok()
-        .content_type("text/plain")
-        .body("The home page template is broken! :( We have failed you.")
 }
 
 #[get("/admin")]
@@ -204,6 +211,7 @@ async fn admin_panel(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> Htt
     let mut ctx = Context::new();
     if let Some(usr) = orc.admin_by_session(&req) {
         ctx.insert("username", &usr.username);
+        ctx.insert("dev_mode", &orc.dev_mode);
     } else {
         return HttpResponse::Found()
             .header(actix_web::http::header::LOCATION, "/admin-gateway")
@@ -224,6 +232,7 @@ async fn admin_gateway(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> H
     let mut ctx = Context::new();
     if let Some(usr) = orc.user_by_session(&req) {
         ctx.insert("username", &usr.username);
+        ctx.insert("dev_mode", &orc.dev_mode);
     } else {
         return HttpResponse::Found()
             .header(actix_web::http::header::LOCATION, "/")
@@ -296,7 +305,9 @@ async fn serve_files_and_templates(
             name = name + ".html";
         }
 
-        let ctx = Context::new();
+        let mut ctx = Context::new();
+        ctx.insert("dev_mode", &orc.dev_mode);
+
         if let Ok(s) = TEMPLATES.read().render(&name, &ctx) {
             return HttpResponse::Ok()
                 .content_type(if is_js {
