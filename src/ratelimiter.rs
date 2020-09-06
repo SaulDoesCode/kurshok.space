@@ -1,7 +1,7 @@
 use bincode::{Options};
 use chrono::{prelude::*, Duration, offset::{Utc}};
 use serde::{Serialize, Deserialize};
-use sled::{Tree};
+use sled::{Db, Tree};
 use std::sync::{atomic::{AtomicU64, Ordering::{SeqCst}}, Arc};
 
 lazy_static!{
@@ -9,24 +9,25 @@ lazy_static!{
 }
 
 pub struct RateLimiter {
-  store: Tree,
-  limit: u64,
-  count: Arc<AtomicU64>,
+  pub db: Db,
+  pub store: Tree,
+  pub limit: u64,
+  pub count: Arc<AtomicU64>,
 }
 
 impl RateLimiter {
   pub fn setup_default() -> Self {
-    let rl_db = sled::open("./storage/rl.db").unwrap();
-    let store = rl_db.open_tree("rl").unwrap();
+    let db = sled::open("./storage/rl.db").unwrap();
+    let store = db.open_tree("rl").unwrap();
     let count = Arc::new(AtomicU64::new(0));
     count.fetch_add(store.len() as u64, SeqCst);
-    RateLimiter{store, limit: 100_000, count}
+    RateLimiter{db, store, limit: 100_000, count}
   }
 
-  pub fn new(store: Tree, limit: u64) -> Self {
+  pub fn new(db: Db, store: Tree, limit: u64) -> Self {
     let count = Arc::new(AtomicU64::new(0));
     count.fetch_add(store.len() as u64, SeqCst);
-    Self{store, limit, count}
+    Self{db, store, limit, count}
   }
 
   pub fn hit(&self, data: &[u8], threshhold: u64, dur: Duration) -> RateLimited {

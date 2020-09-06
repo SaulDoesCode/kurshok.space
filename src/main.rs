@@ -86,15 +86,17 @@ async fn main() -> std::io::Result<()> {
 
     let orc = Arc::new(Orchestrator::new(60 * 60 * 24 * 7 * 2));
 
+    let orc_clone = orc.clone();
+
     if orc.dev_mode {
         admin_functions::watch_and_update_files();
         println!("devmode file watching active");
     }
 
-    HttpServer::new(move || App::new()
+    let app_server = HttpServer::new(move || App::new()
         .wrap(actix_web::middleware::Compress::default())
         
-        .data(orc.clone())
+        .data(orc_clone.clone())
 
         .service(index)
         
@@ -125,7 +127,17 @@ async fn main() -> std::io::Result<()> {
     .bind_rustls("0.0.0.0:443", tls_config)?
     .backlog(4096)
     .run()
-    .await
+    .await;
+
+    tokio::spawn(async move {
+        orc.writ_db.flush().unwrap();
+        orc.db.flush().unwrap();
+        orc.ratelimiter.db.flush().unwrap();
+
+        drop(orc);
+    }).await?;
+
+    app_server
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
