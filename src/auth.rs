@@ -129,10 +129,6 @@ impl Orchestrator {
     false  
   }
 
-  pub fn is_authenticated_admin(&self, req: &HttpRequest) -> Option<User> {
-    self.admin_by_session(req)
-  }
-
   pub fn is_valid_session(&self, req: &HttpRequest) -> bool {
     if let Some(auth_cookie) = req.cookie("auth") {
       let sess_id = auth_cookie.value();
@@ -150,7 +146,10 @@ impl Orchestrator {
   }
 
   pub fn is_admin(&self, usr_id: &str) -> bool {
-    self.admins.contains_key(usr_id.as_bytes()).unwrap()
+    if let Ok(is_admin) = self.admins.contains_key(usr_id.as_bytes()) {
+      return is_admin;
+    }
+    false
   }
 
   pub fn user_by_session(&self, req: &HttpRequest) -> Option<User> {
@@ -270,6 +269,22 @@ impl Orchestrator {
       }
     }
     None
+  }
+
+  pub fn is_valid_admin_session(&self, req: &HttpRequest) -> bool {
+    if let Some(auth_cookie) = req.cookie("auth") {
+      let sess_id = auth_cookie.value();
+      if let Some(session) = get_struct::<UserSession>(&self.sessions, sess_id.as_bytes()) {
+        if session.has_expired() {
+          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
+            println!("removing expired session from session tree failed: {}", e);
+          }
+        } else if let Ok(is_admin) = self.admins.contains_key(session.usr_id) {
+          return is_admin;
+        }
+      }
+    }
+    false
   }
 
   pub fn user_by_id(&self, id: &str) -> Option<User> {
@@ -737,7 +752,7 @@ pub async fn remove_administrality(
   req: HttpRequest,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(ref mut usr) = orc.is_authenticated_admin(&req) {
+  if let Some(ref mut usr) = orc.admin_by_session(&req) {
     if orc.revoke_admin(&usr.id) {
       return HttpResponse::Accepted().json(json!({
         "ok": true,
@@ -756,7 +771,7 @@ pub async fn check_administrality(
   req: HttpRequest,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if orc.is_authenticated_admin(&req).is_some() {
+  if orc.is_valid_admin_session(&req) {
     return HttpResponse::Accepted().json(json!({
       "ok": true,
       "data": "genuine admin"

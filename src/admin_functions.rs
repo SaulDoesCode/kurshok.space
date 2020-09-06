@@ -218,7 +218,7 @@ pub async fn remote_http(
     remote_req: web::Json<RemoteHttpRequest>,
     orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-    if let Some(_usr) = orc.admin_by_session(&req) {
+    if orc.is_valid_admin_session(&req) {
         if let Some(res) = remote_req.run().await {
             return HttpResponse::Ok().json(json!({
                 "ok": true,
