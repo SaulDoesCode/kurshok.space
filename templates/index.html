@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Grimstack</title>
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
     {% if not dev_mode or dev_mode is undefined  %}
@@ -10,14 +10,20 @@
     {% endif %}
     <link rel="stylesheet" href="/css/marx.min.css">
     <link rel="stylesheet" href="/css/site.min.css">
+    {% if username is undefined %}
+        <link rel="stylesheet" href="/css/auth.min.css">
+    {% endif %}
     <script src="/js/domlib.min.js"></script>
     <script src="/js/site.min.js" defer></script>
+    {% if username is undefined %}
+        <script src="/js/auth.min.js" defer></script>
+    {% endif %}
 </head>
 <body>
     <nav class="hero">
         <header>Grimstack</header>
         {% if username is defined %}
-            <div class="profile-launcher">{{ username }}</div>
+            <button class="profile-launcher">{{ username }}</button>
         {% else %}
             <button class="auth-launcher">Auth</button>
         {% endif %}

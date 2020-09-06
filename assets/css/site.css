@@ -4,9 +4,14 @@ body > * {
 }
 
 body {
+  display: flex;
+  justify-content: start;
+  align-items: center;
+  align-content: center;
+  flex-flow: column nowrap;
   background: #363535;
-  min-height: 98vh;
-  display: block;
+  height: 100vh;
+  min-height: 98vh;  
   top: 0;
   left: 0;
   padding: 0;
@@ -29,6 +34,8 @@ body > * > header {
   color: #fff;
   padding: .25em .75em;
   margin: 0;
+  flex: 0 1 auto;
+  width: 100%;
   box-sizing: border-box;
 }
 
@@ -37,15 +44,17 @@ body > * > header {
   margin: 0;
   font-size: 1.5em;
 }
-.hero > .auth-launcher {
+.hero > .auth-launcher,
+.hero > .profile-launcher {
   display: inline-block;
   text-align: center;
-  margin: .5em;
+  margin: .4em;
   padding: .1em .35em;
   font-size: 1.1em;
+  border-radius: 4px;
   white-space: nowrap;
   background: hsla(0, 0%, 0%, 0.25);
+  cursor: pointer;
 }
 
-.content-display {
-}
+/* .content-display {} */

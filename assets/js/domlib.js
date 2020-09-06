@@ -481,7 +481,7 @@ const domfn = {
   },
 
   class (node, c, state) {
-    if (node || c != null || node.classList) {
+    if (node && c != null && node.classList) {
         if (d.isArr(node)) 
             for (const n of node) domfn.class(n, c, state)
         else if (c.constructor === Object)
@@ -495,7 +495,7 @@ const domfn = {
     return node
   },
 
-  hasClass: d.curry((node, name) => node.classList.contains(name)),
+  hasClass: (node, name) => node.classList.contains(name),
 
   attr (node, attr, val) {
     if (attr.constructor === Object) {
@@ -645,8 +645,8 @@ return d
             for (const key in ops) {
                 if ((val = ops[key]) == null) continue
 
-                if (key[0] === 'o' && key[1] === 'n') {
-                    const isOnce = key[2] === 'c'
+                if (key[0] == 'o' && key[1] == 'n') {
+                    const isOnce = key[2] == 'c'
                     const i = isOnce ? 4 : 2
                     const mode = key.substr(0, i)
                     let type = key.substr(i)
