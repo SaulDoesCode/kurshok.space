@@ -129,22 +129,6 @@ impl Orchestrator {
     false  
   }
 
-  pub fn is_valid_session(&self, req: &HttpRequest) -> bool {
-    if let Some(auth_cookie) = req.cookie("auth") {
-      let sess_id = auth_cookie.value();
-      if let Some(session) = get_struct::<UserSession>(&self.sessions, sess_id.as_bytes()) {
-        if session.has_expired() {
-          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
-            println!("removing expired session from session tree failed: {}", e);
-          }
-        } else {
-          return true;
-        }
-      }
-    }
-    false
-  }
-
   pub fn is_admin(&self, usr_id: &str) -> bool {
     if let Ok(is_admin) = self.admins.contains_key(usr_id.as_bytes()) {
       return is_admin;
@@ -281,6 +265,22 @@ impl Orchestrator {
           }
         } else if let Ok(is_admin) = self.admins.contains_key(session.usr_id) {
           return is_admin;
+        }
+      }
+    }
+    false
+  }
+
+  pub fn is_valid_session(&self, req: &HttpRequest) -> bool {
+    if let Some(auth_cookie) = req.cookie("auth") {
+      let sess_id = auth_cookie.value();
+      if let Some(session) = get_struct::<UserSession>(&self.sessions, sess_id.as_bytes()) {
+        if session.has_expired() {
+          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
+            println!("removing expired session from session tree failed: {}", e);
+          }
+        } else {
+          return true;
         }
       }
     }
@@ -457,8 +457,11 @@ impl Orchestrator {
     let res: TransactionResult<(), ()> = self.user_attributes.transaction(|usr_attrs| {
       if let Some(raw_attrs) = usr_attrs.get(usr_id.as_bytes())? {
         let attributes: Vec<String> = binbe_deserialize::<Vec<String>>(&raw_attrs)
-          .iter().filter(|t| !attrs.contains(t))
-          .cloned().collect();
+          .iter()
+          .filter(|t| !attrs.contains(t))
+          .cloned()
+          .collect();
+
         usr_attrs.insert(
           usr_id.as_bytes(),
           binbe_serialize(&attributes)
@@ -774,11 +777,11 @@ pub async fn check_administrality(
   if orc.is_valid_admin_session(&req) {
     return HttpResponse::Accepted().json(json!({
       "ok": true,
-      "data": "genuine admin"
+      "data": "Genuine admin"
     }));
   }
   HttpResponse::Forbidden().json(json!({
     "ok": false,
-    "data": "silly impostor, you are not admin"
+    "data": "Silly impostor, you are not admin"
   }))
 }
