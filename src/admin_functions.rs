@@ -39,7 +39,7 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
                     for path in event.paths {
                         if !path.is_file() {continue;}
                         if path.to_str().unwrap().contains("templates") {
-                            print!("reloading templates...");
+                            println!("reloading templates...");
                             let mut templates = TEMPLATES.write();
                             if (*templates).full_reload().is_err() {
                                 println!(":( the templates were not reloaded, trouble is afoot.");
