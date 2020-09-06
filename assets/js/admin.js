@@ -11,30 +11,29 @@ const app = domlib.emitter()
   } = domlib.html`
 <section class="writ-editor">
   <div class="title">
-      <label>title</label>
-      <input type="text" name="title" ref="titleInput">
+    <label>title</label>
+    <input type="text" name="title" ref="titleInput">
   </div>
   <div class="editor">
-      <div class="pad">
-        <label>editor</label>
-        <textarea name="raw_content" cols="30" rows="10" ref="rawContentInput">
-        </textarea>
-      </div>
-      <div class="preview" ref="preview">
-      </div>
+    <div class="pad">
+      <label>editor</label>
+      <textarea name="raw_content" cols="30" rows="10" ref="rawContentInput">
+      </textarea>
+    </div>
+    <div class="preview" ref="preview">
+    </div>
   </div>
   <div class="tager">
     <label>tags</label>
     <input type="text" name="tags" ref="tagsInput">
   </div>
   <div class="kind">
-      <label>kind</label>
-      <input type="text" name="kind" value="post" ref="writKind">
+    <label>kind</label>
+    <input type="text" name="kind" value="post" ref="writKind">
   </div>
   <br>
   <button ref="pushWritButton">push writ</button>
 </section>
-
 <section class="writ-list" ref="writList"></section>
 `.renderCollect()
 

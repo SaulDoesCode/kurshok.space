@@ -1,0 +1,16 @@
+{
+  "name": "grimstack-scripts",
+  "version": "0.0.1",
+  "description": "development scripts for grimstack server",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Saul van der Walt",
+  "license": "MIT",
+  "dependencies": {
+    "csso": "^4.0.3",
+    "csso-cli": "^3.0.0",
+    "terser": "^5.3.0"
+  }
+}

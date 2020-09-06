@@ -7,7 +7,7 @@ os.getcwd()
 
 if len(sys.argv) > 1 and ".js" in sys.argv[1]:
     print("\ntrying to minify " + sys.argv[1] + " ...")
-    os.system("exec /home/saul/.yarn/bin/terser " + sys.argv[1] + " -c -m -o " + sys.argv[1][:-3] + ".min.js")
+    os.system("exec ../../scripts/node_modules/.bin/terser " + sys.argv[1] + " -c -m -o " + sys.argv[1][:-3] + ".min.js")
     
     print("done minifying, did it work? ")
 else:
@@ -16,6 +16,6 @@ else:
         for file in files:
             if ".js" in file and ".min.js" not in file:
                 print(file)
-                os.system("exec /home/saul/.yarn/bin/terser " + file + " -c -m -o " + file[:-3] + ".min.js")
+                os.system("exec ../../scripts/node_modules/.bin/terser " + file + " -c -m -o " + file[:-3] + ".min.js")
 
     print("done, all is minified!")
