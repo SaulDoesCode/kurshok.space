@@ -2,9 +2,11 @@
 const DO_TOKEN = `{{ do_token }}`
 const DOMAIN = `grimstack.io`
 
-app.fetchRecords = async () => {
+app.fetchRecords = async (typeFilter = 'A') => {
     try {
-        const res = await app.remoteHttp(`https://api.digitalocean.com/v2/domains/${DOMAIN}/records`, {
+        let url = `https://api.digitalocean.com/v2/domains/${DOMAIN}/records`
+        if (typeFilter != null && typeFilter != '') url += '?type=' + typeFilter
+        const res = await app.remoteHttp(url, {
             bearer_token: DO_TOKEN,
         })
         if (!res.ok) throw new Error(`fetchRecords error:${res.status}`)
@@ -14,13 +16,13 @@ app.fetchRecords = async () => {
     }
 }
 
-app.updateRecord = async (domain, rType = 'A') => {
+app.updateRecord = async (domain, typeFilter = 'A') => {
     const ipv4 = (await app.remoteHttp('http://ipv4bot.whatismyipaddress.com')).data.body
     console.log(ipv4)
 
     let record
     (await app.fetchRecords()).forEach(r => {
-        if (r.type == rType && r.name == domain) {
+        if (r.type == typeFilter && r.name == domain) {
             record = r
         }
     });
