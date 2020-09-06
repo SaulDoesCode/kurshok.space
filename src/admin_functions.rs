@@ -55,7 +55,7 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
                             if ext == "js" {
                                 let res = Command::new("python")
                                     .current_dir("./assets/js")
-                                    .arg("minify-all.py")
+                                    .arg("../../scripts/minify-js.py")
                                     .arg(&filename)
                                     .output();
         
@@ -67,7 +67,7 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
                             } else if ext == "css" {
                                 let res = Command::new("python")
                                     .current_dir("./assets/css")
-                                    .arg("minify-all.py")
+                                    .arg("../../scripts/minify-css.py")
                                     .arg(&filename)
                                     .output();
         
