@@ -4,3 +4,4 @@
 ./private/*
 *.pem
 config.toml
+node_modules
