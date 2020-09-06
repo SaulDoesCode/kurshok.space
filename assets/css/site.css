@@ -6,16 +6,11 @@ body > * {
 body {
   background: #363535;
   min-height: 98vh;
+  display: block;
   top: 0;
   left: 0;
   padding: 0;
   margin: 0;
-  font-family: Tahoma, Geneva, Verdana, sans-serif;
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  grid-template-rows: 0.1fr auto;
-  gap: .25em .25em;
-  grid-template-areas: "site-logo site-logo site-logo" "content-display content-display stray-thoughts";
 }
 
 body > * > header {
@@ -25,39 +20,32 @@ body > * > header {
   font-weight: 600;
 }
 
-.stray-thoughts {
-  display: inline-flex;
-  align-content: center;
-  align-items: space-evenly;
-  justify-content: center;
-  grid-area: stray-thoughts;
-  background: hsl(0, 0%, 26%);
-  margin: .5em;
-  border-radius: 5px;
-  min-width: 300px;
-  width: auto;
-  height: calc(100% - 1em);
-}
-
-.site-logo {
-  grid-area: site-logo;
+.hero {
   display: flex;
   align-content: center;
   align-items: center;
-  justify-content: center;
-  flex-flow: column;
+  justify-content: space-between;
+  flex-flow: row;
   color: #fff;
   padding: .25em .75em;
   margin: 0;
   box-sizing: border-box;
 }
 
-.content-display {
-  grid-area: content-display;
+.hero > header {
+  display: inline-block;
+  margin: 0;
+  font-size: 1.5em;
+}
+.hero > .auth-launcher {
+  display: inline-block;
+  text-align: center;
+  margin: .5em;
+  padding: .1em .35em;
+  font-size: 1.1em;
+  white-space: nowrap;
+  background: hsla(0, 0%, 0%, 0.25);
 }
 
-.site-logo > h1 {
-  display: inline-block;
-  text-align: right;
-  margin: 0;
+.content-display {
 }

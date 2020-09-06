@@ -1,2 +1,3 @@
+const app = domlib.emitter()
 {
 }

@@ -5,19 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grimstack</title>
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+    {% if not dev_mode or dev_mode is undefined  %}
+        <link href="https://fonts.googleapis.com/css2?family=Cantarell:wght@400;700&display=swap" rel="stylesheet">
+    {% endif %}
     <link rel="stylesheet" href="/css/marx.min.css">
     <link rel="stylesheet" href="/css/site.min.css">
     <script src="/js/domlib.min.js"></script>
     <script src="/js/site.min.js" defer></script>
 </head>
 <body>
-    <header class="site-logo">
-        <h1>Grimstack</h1>
-    </header>
-
-    <aside class="stray-thoughts">
-        <header>stray thoughts</header>
-    </aside>
+    <nav class="hero">
+        <header>Grimstack</header>
+        {% if username is defined %}
+            <div class="profile-launcher">{{ username }}</div>
+        {% else %}
+            <button class="auth-launcher">Auth</button>
+        {% endif %}
+    </nav>
 
     <main class="content-display">
         
