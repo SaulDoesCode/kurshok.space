@@ -1,4 +1,4 @@
-const domlib = (d => {
+export default (d => {
 d.isArr = Array.isArray
 
 d.isNil = o => o == null
@@ -211,9 +211,8 @@ d.merge.able = o => d.isArr(o) || (o != null && typeof o === 'object' && !d.isFu
 
 d.emitter = (host = Object.create(null), listeners = new Map()) => Object.assign(host, {
     emit: d.infinify((event, ...data) => d.runAsync(() => {
-        if (listeners.has(event)) {
-            for (const h of listeners.get(event)) h.apply(null, data)
-        }
+      if (listeners.has(event))
+        for (const h of listeners.get(event)) h.apply(null, data)
     })),
     on: d.infinify((event, handler) => {
         if (!listeners.has(event)) listeners.set(event, new Set())
@@ -283,25 +282,25 @@ const listen = function (once, target, type, fn, options = false) {
 
     let wrapper
     if (typeof fn === 'string' && options instanceof Function) {
-        let matcher = fn
-        fn = options
-        options = arguments[5]
-        if (options == null) options = false
-        wrapper = function (event) {
-            if (
-                event.target != null &&
-                event.target !== this &&
-                event.target.matches(matcher)
-            ) {
-                fn.call(this, event, target)
-                if (off.once) off()
-            }
+      let matcher = fn
+      fn = options
+      options = arguments[5]
+      if (options == null) options = false
+      wrapper = function (event) {
+        if (
+          event.target != null &&
+          event.target !== this &&
+          event.target.matches(matcher)
+        ) {
+          fn.call(this, event, target)
+          if (off.once) off()
         }
+      }
     } else {
-        wrapper = function (event) {
-            fn.call(this, event, target)
-            if (off.once) off()
-        }
+      wrapper = function (event) {
+          fn.call(this, event, target)
+          if (off.once) off()
+      }
     }
 
     const on = mode => {
@@ -376,7 +375,7 @@ d.vpend = (
 /*
 * prime takes an array of renderable entities
 * and turns them into just nodes and functions
-* (to be degloved later rather than sooner [by vpend])
+* (to be unwrapped/degloved later rather than sooner [by vpend])
 */
 d.prime = (...nodes) => {
   for (let i = 0; i < nodes.length; i++) {

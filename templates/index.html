@@ -4,20 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Grimstack</title>
+    link
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+    <link rel="modulepreload" href="/js/domlib.min.js">
     {% if not dev_mode or dev_mode is undefined  %}
-        <link href="https://fonts.googleapis.com/css2?family=Cantarell:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cantarell:wght@400;700&display=swap" rel="stylesheet">
     {% endif %}
     <link rel="stylesheet" href="/css/marx.min.css">
     <link rel="stylesheet" href="/css/site.min.css">
     {% if username is undefined %}
-        <link rel="stylesheet" href="/css/auth.min.css">
+    <link rel="stylesheet" href="/css/auth.min.css">
     {% endif %}
-    <script src="/js/domlib.min.js"></script>
-    <script src="/js/site.min.js" defer></script>
-    {% if username is undefined %}
-        <script src="/js/auth.min.js" defer></script>
-    {% endif %}
+    <script src="/js/site.min.js" type="module" defer></script>
 </head>
 <body>
     <nav class="hero">
@@ -26,11 +24,10 @@
             <button class="profile-launcher">{{ username }}</button>
         {% else %}
             <button class="auth-launcher">Auth</button>
+            <script src="/js/auth.min.js" type="module" async defer></script>
         {% endif %}
     </nav>
 
-    <main class="content-display">
-        
-    </main>
+    <main class="content-display"></main>
 </body>
 </html>
