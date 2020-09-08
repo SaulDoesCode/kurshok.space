@@ -1,7 +1,7 @@
 import domlib from '/js/domlib.min.js'
 
 const app = domlib.emitter()
-
+app.d = domlib
 const jsonHTTPMethod = method => (url, body) => fetch(url, {
     method,
     headers: {'Content-Type': 'application/json'},

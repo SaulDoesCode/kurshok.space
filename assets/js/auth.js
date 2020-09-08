@@ -1,11 +1,14 @@
 import app from '/js/site.min.js'
-import d from '/js/domlib.min.js'
-
-const df = d.domfn
+const d = app.d, df = d.domfn
 
 const authLauncher = d.query('.auth-launcher')
 
-const {authView, usernameInput, passwordInput} = d.h`
+const {
+  authView,
+  usernameInput,
+  passwordInput,
+  authBtn
+} = d.h `
 <section class="auth-view" ref="authView">
   <div>
     <div class="auth-form-field">
@@ -14,7 +17,7 @@ const {authView, usernameInput, passwordInput} = d.h`
       <label for="auth-pwd">Password</label>
       <input type="password" name="password" id="auth-pwd" ref="passwordInput">
     </div>
-    <button class="submit" onclick="() => app.authenticate()">authenticate</button>
+    <button class="submit" ref="authBtn">authenticate</button>
   </div>
 </section>`.collect()
 
@@ -29,10 +32,9 @@ app.authViewToggle = (state = !df.hasClass(authView, 'open')) => {
   } else {
     df.remove(authView)
   }
-  return state
 }
 
-const clickOutHandler = d.on.click(document.body, e => {
+const clickOutHandler = d.on.pointerdown(document.body, e => {
   if (
     e.target != authView &&
     !authView.contains(e.target) &&
@@ -45,22 +47,31 @@ const clickOutHandler = d.on.click(document.body, e => {
   }
 }).off()
 
-d.on.click(authLauncher, app.clickAuthLauncher = e => {
+d.on.pointerdown(authLauncher, app.clickAuthLauncher = e => {
   e.preventDefault()
   app.authViewToggle()
 })
 
-app.authenticate = (
+app.authenticate = async (
   username = usernameInput.value.trim(),
   password = passwordInput.value.trim()
 ) => {
   if (username == '') throw new Error('username is invalid')
   if (password == '') throw new Error('password is invalid')
-
-  app.jsonPost('/auth', { username, password })
-  .then(res => res.json())
-  .then(data => {
-    console.log(data)
-    if (data.ok) location.reload()
-  })
+  console.log('attempting authentication')
+  const res = await app.jsonPost('/auth', { username, password })
+  const data = await res.json()
+  console.log(data)
+  if (data.ok) location.reload()
 }
+
+const authClickHandle = d.once.click(authBtn, async e => {
+  try {
+    await app.authenticate()
+  } catch(e) {
+    console.error(e)
+    authClickHandle.on()
+  }
+})
+
+app.authViewToggle()
