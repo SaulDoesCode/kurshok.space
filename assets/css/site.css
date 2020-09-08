@@ -11,7 +11,6 @@ body {
   flex-flow: column nowrap;
   background: #363535;
   color: #fff;
-  height: 100vh;
   min-height: 98vh;  
   top: 0;
   left: 0;
