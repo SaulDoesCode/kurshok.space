@@ -253,6 +253,13 @@ async fn serve_files_and_templates(
     orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
     let path: &str = req.path();
+    if path.ends_with("/") {
+        return HttpResponse::Found()
+            .header(actix_web::http::header::LOCATION, path.trim_end_matches("/"))
+            .finish()
+            .into_body();
+    }
+
     if path.contains("admin") {
         if let Some(usr) = orc.admin_by_session(&req) {
             let asset_dir = format!("./assets{}", path);
