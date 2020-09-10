@@ -86,7 +86,10 @@ async fn main() -> std::io::Result<()> {
     let cert_chain = certs(cert_file).unwrap();
     let mut keys = pkcs8_private_keys(key_file).unwrap();
 
-    tls_config.set_single_cert(cert_chain, keys.remove(0)).expect("tls_config.set_single_cert failed for some reason");
+    if let Err(e) = tls_config.set_single_cert(cert_chain, keys.remove(0)) {
+        println!("tls_config.set_single_cert failed: {}", e);
+        std::process::exit(1);
+    }
 
     let orc = Arc::new(Orchestrator::new(60 * 60 * 24 * 7 * 2));
 
