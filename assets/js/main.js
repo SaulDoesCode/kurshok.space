@@ -1,4 +1,4 @@
-const app = domlib.emitter()
+const app = {}
 
 app.writs = []
 
