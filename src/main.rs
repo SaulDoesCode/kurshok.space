@@ -10,11 +10,12 @@ use jemallocator::Jemalloc;
 
 mod utils;
 mod ratelimiter;
+mod admin_functions;
 mod orchestrator;
 mod auth;
 mod writs;
 mod comments;
-mod admin_functions;
+mod posts;
 
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use chrono::Duration;
@@ -116,7 +117,8 @@ async fn main() -> std::io::Result<()> {
         
         .service(comments::post_comment_query)
         .service(comments::make_comment)
-        
+
+        .service(posts::render_post)
         
         .service(admin_functions::remote_http)
         
@@ -165,7 +167,7 @@ lazy_static! {
                 std::process::exit(1);
             }
         };
-        tera.autoescape_on(vec!["html", ".sql"]);
+        tera.autoescape_on(vec![]);
         RwLock::new(tera)
     };
 

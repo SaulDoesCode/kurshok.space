@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Grimstack</title>
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+    <link rel="modulepreload" href="/js/domlib.min.js">
+    {% if not dev_mode or dev_mode is undefined  %}
+    <link href="https://fonts.googleapis.com/css2?family=Cantarell:wght@400;700&display=swap" rel="stylesheet">
+    {% endif %}
+    <link rel="stylesheet" href="/css/marx.min.css">
+    <link rel="stylesheet" href="/css/site.min.css">
+    {% if username is undefined %}
+    <link rel="stylesheet" href="/css/auth.min.css">
+    {% endif %}
+    <script src="/js/site.min.js" type="module" defer></script>
+</head>
+
+<body>
+    <nav class="hero">
+        <header>Grimstack</header>
+        {% if username is defined %}
+        <button class="profile-launcher" title="click to see or build your profile">{{ username }}</button>
+        <script type="module" defer>
+            import d from '/js/domlib.min.js'
+                d.once.click('.profile-launcher', () => import('/js/profile.min.js'))
+            </script>
+        {% else %}
+        <button class="auth-launcher" title="click for a login or signup modal">Auth</button>
+        <script type="module" defer>
+            import d from '/js/domlib.min.js'
+                d.once.click('.auth-launcher', async e => {
+                    e.preventDefault()
+                    import('/js/auth.min.js')
+                })
+            </script>
+        {% endif %}
+    </nav>
+
+    <main class="content-display">
+        <section class="post-header">
+            <h3>{{ public_writ.title }}</h3>
+        </section>
+
+        <article>
+            {{ public_writ.content }}
+        </article>
+
+    </main>
+</body>
+
+</html>

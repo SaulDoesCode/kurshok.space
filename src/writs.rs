@@ -22,7 +22,6 @@ use crate::utils::{
 };
 
 impl Orchestrator {
-
   pub fn new_writ_id(&self, author_id: &str, kind: &str) -> String {
     format!("{}:{}:{}", kind, author_id, self.writ_db.generate_id().unwrap())
   }
@@ -69,13 +68,14 @@ impl Orchestrator {
     } else {
       false
     };
+
     let amount = if let Some(a) = &query.amount { a.clone() } else { 20 };
 
     if !is_admin {
       if amount > 50 { return None; }
     } else if amount > 500 { return None; }
 
-    let mut writs = vec!();
+    let mut writs: Vec<Writ> = vec!();
     let mut count: u64 = 0;
 
     let mut author_ids: Option<Vec<sled::IVec>> = None;
@@ -103,158 +103,85 @@ impl Orchestrator {
       }
     }
 
-    let mut date = String::new();
-    let now = Utc::now();
-    if let Some(y) = &query.year {
-      date.push_str(format!("{}", y).as_str());
-    }
-    if let Some(m) = &query.month {
-      if date.is_empty() {
-        date.push_str(format!("{}", now.year()).as_str());
-      }
-      if *m > 12 || *m == 0 {
-        return None;
-      }
-      date.push_str(format!("{}", m).as_str());
-    }
-    if let Some(d) = &query.day {
-      if date.is_empty() {
-        date.push_str(format!("{}", now.year()).as_str());
-      }
-      if query.month.is_none() {
-        date.push_str(format!("{}", now.month()).as_str());
-      }
-      if *d > 31 || *d == 0 {
-        return None;
-      }
-      date.push_str(format!("{}", d).as_str());
-    }
-    if let Some(h) = &query.hour {
-      if date.is_empty() {
-        date.push_str(format!("{}", now.year()).as_str());
-      }
-      if query.month.is_none() {
-        date.push_str(format!("{}", now.month()).as_str());
-      }
-      if query.day.is_none() {
-        date.push_str(format!("{}", now.day()).as_str());
-      }
-      if *h > 24 {
-        return None;
-      }
-      date.push_str(format!("{}", h).as_str());
-    }
-
-    let date_scan = !date.is_empty();
-
-    let mut writ_iter = if date_scan {
-      let partial_date_id = format!("{}:{}", query.kind, date);
-      self.dates.scan_prefix(partial_date_id.as_bytes())
+    let user_attributes: Option<Vec<String>> = if let Some(usr) = &o_usr {
+      Some(self.user_attributes(&usr.id))
     } else {
-      let mut partial_id = format!("{}:", query.kind);
-      if let Some(author_id) = &query.author_id {
-        partial_id.push_str(author_id);
-      }
-      self.writs.scan_prefix(partial_id.as_bytes())
+      None
     };
 
-    let mut user_attributes: Option<Vec<String>> = None;
-
-    while let Some(res) = writ_iter.next_back() {
-      if query.page < 2 {
-          if count == amount { break; }
-      } else if count != (amount * query.page) {
-          count += 1;
-          continue;
-      }
-
-      if res.is_err() {
-        continue;
-      }
-
-      let writ: Writ = if date_scan {
-        let (_, raw_id) = res.unwrap();
-        let id = raw_id.to_string();
-        if let Some(author_id) = &query.author_id {
-          if !id.contains(format!(":{}:", author_id).as_str()) {
-            continue;
-          }
-        }
-        if let Some(skip_ids) = query.skip_ids.clone() {
-          if skip_ids.contains(&id) {
-              continue;
-          }
-        }
-        if let Some(w) = get_struct(&self.writs, &raw_id) {
-          w
-        } else {
-          continue;
-        }
-      } else {
-        let w: Writ = res.unwrap().1.to_type();
-        if let Some(skip_ids) = query.skip_ids.clone() {
-          if skip_ids.contains(&w.id) {
-              continue;
-          }
-        }
-        w
-      };
-
+    let check_writ_against_query = |writ: &Writ, date_scan: bool| {
       if let Some(posted_before) = &query.posted_before {
         if writ.posted > *posted_before {
-          continue;
+          return false;
         }
       }
 
       if let Some(posted_after) = &query.posted_after {
         if writ.posted < *posted_after {
-          continue;
+          return false;
         }
       }
-      
+
+      if !date_scan {
+        if let Some(y) = &query.year {
+          if writ.posted.year() != *y {
+            return false;
+          }
+        }
+        if let Some(m) = &query.month {
+          if writ.posted.month() != *m {
+            return false;
+          }
+        }
+        if let Some(d) = &query.day {
+          if writ.posted.day() != *d {
+            return false;
+          }
+        }
+        if let Some(h) = &query.hour {
+          if writ.posted.hour() != *h {
+            return false;
+          }
+        }
+      }
+
       let author_id = writ.author_id();
 
       if let Some(usr) = &o_usr {
         if author_id == usr.id || is_admin {
           if let Some(public) = &query.public {
             if writ.public != *public {
-              continue;
+              return false;
             }
           } else if !writ.public {
-            continue;
+            return false;
           }
         }
-        
+
         if let Some(viewable_by) = &query.viewable_by {
-          let attrs = if let Some(attrs) = &user_attributes {
-            attrs
-          } else {
-            user_attributes = Some(self.user_attributes(&usr.id));
-            if let Some(attr) = &user_attributes {
-              attr
-            } else {
-              continue;
+          if let Some(attrs) = &user_attributes {  
+            if !viewable_by.iter().all(|a| attrs.contains(&a)) {
+              return false;
             }
+          } else {
+            return false;
           };
-          if !viewable_by.iter().all(|a| attrs.contains(&a)) {
-            continue;
-          }
         }
       } else if !writ.public {
-        continue;
+        return false;
       }
 
       if let Some(ids) = &author_ids {
         let author_id_bytes = author_id.as_bytes();
         if !ids.contains(&author_id_bytes.into()) {
-          continue;
+          return false;
         }
       }
 
       if let Some(tags) = &query.tags {
         for tag in tags {
           if !writ.tags.contains(tag) {
-            continue;
+            return false;
           }
         }
       }
@@ -262,25 +189,152 @@ impl Orchestrator {
       if let Some(omit_tags) = &query.omit_tags {
         for tag in omit_tags {
           if writ.tags.contains(tag) {
-            continue;
+            return false;
           }
         }
       }
 
       if let Some(title) = &query.title {
-        if writ.title == *title {
-          writs.push(writ);
+        if writ.title != *title {
+          return false;
         }
-        break;
       } else if let Some(slug) = &query.slug {
-        if writ.slug == *slug {
-          writs.push(writ);
+        if writ.slug != *slug {
+          return false;
         }
-        break;
       }
 
-      count += 1;
-      writs.push(writ);
+      true
+    };
+
+    if let Some(ids) = &query.ids {
+      for id in ids {
+        if query.page < 2 {
+            if count == amount { break; }
+        } else if count != (amount * query.page) {
+            count += 1;
+            continue;
+        }
+
+        if let Some(skip_ids) = &query.skip_ids {
+          if skip_ids.contains(id) {
+            continue;
+          }
+        }
+
+        if let Some(author_id) = &query.author_id {
+          if !id.contains(&format!(":{}:", author_id)) {
+            continue;
+          }
+        }
+
+        let writ: Writ = if let Some(w) = get_struct(&self.writs, id.as_bytes()) {
+          w
+        } else {
+          continue;
+        };
+
+        if check_writ_against_query(&writ, false) {
+          count += 1;
+          writs.push(writ);
+        }
+      }
+    } else {
+      let mut date = String::new();
+      let now = Utc::now();
+      if let Some(y) = &query.year {
+        date.push_str(&format!("{}", y));
+      }
+      if let Some(m) = &query.month {
+        if date.is_empty() {
+          date.push_str(&format!("{}", now.year()));
+        }
+        if *m > 12 || *m == 0 {
+          return None;
+        }
+        date.push_str(&format!("{}", m));
+      }
+      if let Some(d) = &query.day {
+        if date.is_empty() {
+          date.push_str(&format!("{}", now.year()));
+        }
+        if query.month.is_none() {
+          date.push_str(&format!("{}", now.month()));
+        }
+        if *d > 31 || *d == 0 {
+          return None;
+        }
+        date.push_str(&format!("{}", d));
+      }
+      if let Some(h) = &query.hour {
+        if date.is_empty() {
+          date.push_str(&format!("{}", now.year()));
+        }
+        if query.month.is_none() {
+          date.push_str(&format!("{}", now.month()));
+        }
+        if query.day.is_none() {
+          date.push_str(&format!("{}", now.day()));
+        }
+        if *h > 24 {
+          return None;
+        }
+        date.push_str(&format!("{}", h));
+      }
+
+      let date_scan = !date.is_empty();
+
+      let mut writ_iter = if date_scan {
+        let partial_date_id = format!("{}:{}", query.kind, date);
+        self.dates.scan_prefix(partial_date_id.as_bytes())
+      } else {
+        let mut partial_id = format!("{}:", query.kind);
+        if let Some(author_id) = &query.author_id {
+          partial_id.push_str(author_id);
+        }
+        self.writs.scan_prefix(partial_id.as_bytes())
+      };
+
+      while let Some(Ok(res)) = writ_iter.next_back() {
+        if query.page < 2 {
+            if count == amount { break; }
+        } else if count != (amount * query.page) {
+            count += 1;
+            continue;
+        }
+
+        let writ: Writ = if date_scan {
+          let id = res.1.to_string();
+          if let Some(skip_ids) = &query.skip_ids {
+            if skip_ids.contains(&id) {
+                continue;
+            }
+          }
+          if let Some(author_id) = &query.author_id {
+            if !id.contains(&format!(":{}:", author_id)) {
+              continue;
+            }
+          }
+          if let Some(w) = get_struct(&self.writs, &res.1) {
+            w
+          } else {
+            continue;
+          }
+        } else {
+          let w: Writ = res.1.to_type();
+          if let Some(skip_ids) = &query.skip_ids {
+            if skip_ids.contains(&w.id) {
+                continue;
+            }
+          }
+          w
+        };
+
+        if check_writ_against_query(&writ, date_scan) {
+          count += 1;
+          writs.push(writ);
+        }
+      }
     }
 
     if writs.len() == 0 {
@@ -294,13 +348,13 @@ impl Orchestrator {
     query: WritQuery,
     o_usr: Option<User>,
   ) -> Option<Vec<PublicWrit>> {
-    let usr_id = if let Some(usr) = &o_usr { Some(usr.id.clone()) } else { None };
+    let usr_id = match &o_usr { Some(usr) => Some(usr.id.clone()), None => None, };
     let with_content = query.with_content.unwrap_or(true);
     if let Some(writs) = self.writ_query(query, o_usr) {
       let mut public_writs = vec!();
       for w in writs {
-        if !w.public {continue;}
-        if let Some(pw) = w.public(self, usr_id.clone(), with_content) {
+        // if !w.public {continue;}
+        if let Some(pw) = w.public(self, &usr_id, with_content) {
           public_writs.push(pw);
         }
       }
@@ -369,6 +423,35 @@ pub struct WritQuery {
     pub kind: String,
 }
 
+impl std::default::Default for WritQuery {
+  fn default() -> Self {
+    WritQuery{
+      title: None,
+      slug: None,
+      tags: None,
+      omit_tags: None,
+      viewable_by: None,
+      ids: None,
+      skip_ids: None,
+      authors: None,
+      public: None,
+      author_name: None,
+      author_handle: None,
+      author_id: None,
+      posted_before: None,
+      posted_after: None,
+      year: None,
+      month: None,
+      day: None,
+      hour: None,
+      with_content: None,
+      amount: None,
+      page: 0,
+      kind: "post".to_string(),
+    }
+  }
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct PublicWrit {
   id: String, // {author_id}:{writ_id}
@@ -432,46 +515,42 @@ impl Writ {
   pub fn public(
     &self,
     orc: &Orchestrator,
-    requestor_id: Option<String>,
+    requestor_id: &Option<String>,
     with_content: bool,
   ) -> Option<PublicWrit> {
     let author_id = self.author_id();
 
     if !self.public {
-      if let Some(req_id) = &requestor_id {
+      if let Some(req_id) = requestor_id {
         if author_id != *req_id {
           return None;
         }
       } else {
         return None;
       }
+      if orc.dev_mode {
+        println!("writ.public: got past public viewability checking");
+      }
     }
 
+    let author = if let Some(author) = orc.user_by_id(author_id) {
+      author
+    } else {
+      if orc.dev_mode {
+        println!("writ.public: no such author");
+      }
+      return None;
+    };
+
     let res: TransactionResult<PublicWrit, ()> = (
-      &orc.usernames,
-      &orc.handles,
       &orc.content,
       &orc.votes,
       &orc.writ_voters,
     ).transaction(|(
-      usernames,
-      handles,
       content_tree,
       votes,
       writ_voters,
     )| {
-      let author_name = if let Some(username) = usernames.get(author_id.as_bytes())? {
-        username.to_string()
-      } else {
-        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-      };
-      
-      let author_handle = if let Some(handle) = handles.get(author_id.as_bytes())? {
-        handle.to_string()
-      } else {
-        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-      };
-      
       let vote: i64 = if let Some(res) = votes.get(self.id.as_bytes())? {
         res.to_i64()
       } else {
@@ -482,6 +561,9 @@ impl Writ {
         if let Some(res) = content_tree.get(self.id.as_bytes())? {
           Some(res.to_string())
         } else {
+          if orc.dev_mode {
+            println!("writ.public: could not retrieve content");
+          }
           return Err(sled::transaction::ConflictableTransactionError::Abort(()));
         }
       } else {
@@ -489,10 +571,10 @@ impl Writ {
       };
   
       let you_voted = if let Some(req_id) = &requestor_id {
-        if let Some(raw) = writ_voters.get(self.vote_id(&req_id).as_bytes())? {
+        if let Some(raw) = writ_voters.get(self.vote_id(req_id.as_str()).as_bytes())? {
           Some(raw.to_type::<WritVote>().up)
         } else {
-          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+          None
         }
       } else {
         None
@@ -501,8 +583,8 @@ impl Writ {
       Ok(PublicWrit{
         id: self.id.clone(),
         title: self.title.clone(),
-        author_name,
-        author_handle,
+        author_name: author.username.clone(),
+        author_handle: author.handle.clone(),
         kind: self.kind.clone(),
         tags: self.tags.clone(),
         posted: self.posted,
@@ -512,10 +594,15 @@ impl Writ {
       })
     });
 
-    if let Ok(pw) = res {
-      return Some(pw);
+    match res {
+      Ok(pw) => Some(pw),
+      Err(e) => {
+        if orc.dev_mode {
+          println!("writ.public crapped out with: {:?}", e);
+        }
+        None
+      }
     }
-    None
   }
 
   pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: bool) -> bool {
