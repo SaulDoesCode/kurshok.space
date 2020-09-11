@@ -1,7 +1,6 @@
 use actix_web::{post, delete, put, web, HttpRequest, HttpResponse};
 use chrono::{offset::Utc, prelude::*, Duration};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use sled::{Transactional, transaction::*};
 use std::{cell::Cell, collections::HashMap, sync::Arc};
 
@@ -898,16 +897,14 @@ pub async fn post_comment_query(
 
   match comment_query(o_usr, query.into_inner(), orc.as_ref()).await {
     Some(comments) => {
-      let public_comments: Vec<PublicCommentTree> = comments.into_par_iter()
+      let public_comments: Vec<PublicCommentTree> = comments
+        .into_par_iter()
         .filter_map(|c| c.public(orc.as_ref(), &usr_id))
         .collect();
 
-      HttpResponse::Ok().json(json!({
-        "ok": true,
-        "data": public_comments
-      }))
+      crate::responses::Ok(public_comments)
     },
-    None => HttpResponse::NotFound().json(json!({"ok": false}))
+    None => crate::responses::NotFoundEmpty()
   }  
 }
 
@@ -927,10 +924,9 @@ pub async fn make_comment(
 ) -> HttpResponse {
   let usr = match orc.user_by_session(&req) {
     Some(usr) => usr,
-    None => return HttpResponse::BadRequest().json(json!({
-      "ok": false,
-      "status": "only authorized users may post comments"
-    })),
+    None => return crate::responses::BadRequest(
+      "only authorized users may post comments"
+    ),
   };
 
   let mut rc = rc.into_inner();
@@ -941,19 +937,17 @@ pub async fn make_comment(
     let hitter = orc.hash(rc.raw_content.as_bytes());
     let rl = orc.ratelimiter.hit(&hitter, 1, Duration::minutes(60));
     if rl.is_timing_out() {
-      return HttpResponse::TooManyRequests().json(json!({
-        "ok": false,
-        "status": &format!("don't copy existing comments, write your own")
-      }));
+      return crate::responses::TooManyRequests(
+        format!("don't copy existing comments, write your own")
+      );
     }
 
     let hitter = format!("cmnt{}", usr.id);
     let rl = orc.ratelimiter.hit(hitter.as_bytes(), 3, Duration::minutes(2));
     if rl.is_timing_out() {
-      return HttpResponse::TooManyRequests().json(json!({
-        "ok": false,
-        "status": &format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
-      }));
+      return crate::responses::TooManyRequests(
+        format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
+      );
     }
   }
 
@@ -971,37 +965,32 @@ pub async fn delete_comment(
 ) -> HttpResponse {
   let usr = match orc.user_by_session(&req) {
     Some(usr) => usr,
-    None => return HttpResponse::Forbidden().json(json!({
-      "ok": false,
-      "status": "You can't delete your comments if you're not logged in"
-    })),
+    None => return crate::responses::Forbidden(
+      "You can't delete your comments if you're not logged in"
+    ),
   };
 
   if let Some(comment) = Comment::from_id(orc.as_ref(), ctd.as_bytes()) {
     if usr.username == comment.author_name {
       if comment.delete(orc.as_ref()) {
-        return HttpResponse::BadRequest().json(json!({
-          "ok": true,
-          "status": "comment successfully deleted"
-        }));
+        return crate::responses::BadRequest(
+          "comment successfully deleted"
+        );
       }
     } else {
-      return HttpResponse::Forbidden().json(json!({
-        "ok": false,
-        "status": "You can't delete someone else's comment"
-      }));  
+      return crate::responses::Forbidden(
+        "You can't delete someone else's comment"
+      );
     }
   } else {
-    return HttpResponse::BadRequest().json(json!({
-      "ok": false,
-      "status": "can't delete non-existent comment"
-    }));
+    return crate::responses::BadRequest(
+      "can't delete non-existent comment"
+    );
   }
 
-  HttpResponse::InternalServerError().json(json!({
-    "ok": false,
-    "status": "troubles abound, failed to delete comment :("
-  }))
+  crate::responses::InternalServerError(
+    "troubles abound, failed to delete comment :("
+  )
 }
 
 pub async fn make_comment_on_writ(usr: User, rc: RawComment, orc: &Orchestrator) -> HttpResponse {
@@ -1013,20 +1002,16 @@ pub async fn make_comment_on_writ(usr: User, rc: RawComment, orc: &Orchestrator)
       rc.raw_content,
       rc.author_only.unwrap_or(false)
     ) {
-      return HttpResponse::Accepted().json(json!({
-        "ok": true,
-        "data": comment
-      }));
+      return crate::responses::Accepted(comment);
     }
-    return HttpResponse::BadRequest().json(json!({
-      "ok": false,
-      "status": "Can't comment on non-existing post"
-    }));
+    return crate::responses::BadRequest(
+      "Can't comment on non-existing post"
+    );
   }
-  HttpResponse::InternalServerError().json(json!({
-    "ok": false,
-    "status": "troubles abound, couldn't make subcomment :("
-  }))
+
+  crate::responses::InternalServerError(
+    "troubles abound, couldn't make subcomment :("
+  )
 }
 
 pub async fn make_comment_on_comment(
@@ -1037,15 +1022,22 @@ pub async fn make_comment_on_comment(
   if let Ok(Some(val)) = orc.comment_settings.get(rc.writ_id.as_bytes()) {
     let settings: CommentSettings = val.to_type();
     if let Some(parent_comment) = Comment::from_id(orc, rc.parent_id.as_bytes()) {
-      if let Some(comment) = comment_on_comment(orc, &settings, &parent_comment, &usr, rc.raw_content, rc.author_only.unwrap_or(false)) {
-        return HttpResponse::Accepted().json(json!({"ok": true, "data": comment}));
+      if let Some(comment) = comment_on_comment(
+        orc, 
+        &settings, 
+        &parent_comment,
+        &usr,
+        rc.raw_content,
+        rc.author_only.unwrap_or(false)
+      ) {
+        return crate::responses::AcceptedData(comment);
       }
     }
   }
-  HttpResponse::InternalServerError().json(json!({
-    "ok": false,
-    "status": "troubles abound, couldn't make subcomment :("
-  }))
+
+  crate::responses::InternalServerError(
+    "troubles abound, couldn't make subcomment :("
+  )
 }
 
 fn get_prefix_and_parts(id: &str, prefix_parts: usize) -> (String, Vec<String>) {
@@ -1053,6 +1045,8 @@ fn get_prefix_and_parts(id: &str, prefix_parts: usize) -> (String, Vec<String>) 
     .filter(|s| *s != "")
     .map(|p| p.to_string())
     .collect();
+
   let prefix = parts.drain(..prefix_parts).join("/");
+
   (prefix, parts)
 }

@@ -1,9 +1,9 @@
-use bincode::{Options};
+use bincode::Options;
 use comrak::{markdown_to_html, ComrakOptions};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use regex::Regex;
-use serde::{Serialize};
-use sled::{Tree, IVec};
+use serde::Serialize;
+use sled::{IVec, Tree};
 
 use std::convert::TryInto;
 

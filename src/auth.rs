@@ -1,7 +1,7 @@
 use argon2::Config;
 use chrono::{offset::Utc, prelude::*, Duration};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use simd_json::json;
 use sled::{Transactional, transaction::*};
 use slug::slugify;
 
@@ -548,10 +548,7 @@ pub async fn logout(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> Http
       status = "login was already bad or expired, no worries";
     }
   }
-  let mut res = HttpResponse::Accepted().json(json!({
-    "ok": true,
-    "status": status
-  }));
+  let mut res = crate::responses::Accepted(status);
   res.del_cookie("auth");
   res
 }
@@ -590,10 +587,7 @@ pub fn renew_session_cookie<'c>(
 
 pub async fn login(usr: User, first_time: bool, orc: web::Data<Arc<Orchestrator>>) -> HttpResponse {
   let token = if let Some(t) = orc.setup_session(usr.id) { t } else {
-    return HttpResponse::Forbidden().json(json!({
-      "ok": false,
-      "status": "trouble setting up session"
-    }));
+    return crate::responses::Forbidden("trouble setting up session");
   };
 
   let cookie = if !orc.dev_mode {
@@ -609,26 +603,25 @@ pub async fn login(usr: User, first_time: bool, orc: web::Data<Arc<Orchestrator>
       .max_age(time::Duration::seconds(orc.expiry_tll))
       .finish()
   };
-
-  HttpResponse::Accepted().cookie(cookie).json(json!({
-    "ok": true,
-    "staus": "successfully logged in",
-    "first_time": first_time,
-  }))
+  
+  HttpResponse::Accepted()
+  .cookie(cookie)
+  .json(crate::responses::APIStatusDataResponse {
+    ok: true, 
+    data: "successfully logged in",
+    status: json!({"first_time": first_time})
+  })
 }
 
 #[get("/auth")]
-pub async fn check_authentication(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> HttpResponse {
+pub async fn check_authentication(
+  req: HttpRequest,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
   if orc.is_valid_session(&req) {
-    return HttpResponse::Accepted().json(json!({
-      "ok": true,
-      "data": "authenticated"
-    }));
+    return crate::responses::Accepted("authenticated");
   }
-  HttpResponse::Forbidden().json(json!({
-    "ok": false,
-    "data": "not authenticated"
-  }))
+  crate::responses::Forbidden("not authenticated")
 }
 
 #[post("/auth")]
@@ -640,32 +633,26 @@ pub async fn auth_attempt(
   let (username, pwd) = (ar.username.as_str(), ar.password.as_str());
 
   if !is_username_ok(username) {
-    return HttpResponse::BadRequest().json(json!({
-      "ok": false,
-      "status": "username is no good, it's either too long, too short, or has weird characters in it, fix it up and try again."
-    }));
+    return crate::responses::BadRequest(
+      "username is no good, it's either too long, too short, or has weird characters in it, fix it up and try again."
+    );
   }
   if !is_password_ok(pwd) {
-    return HttpResponse::BadRequest().json(json!({
-      "ok": false,
-      "status": "malformed password"
-    }));
+    return crate::responses::BadRequest("malformed password");
   }
 
   if let Some(usr) = orc.user_by_session(&req) {
-    return HttpResponse::Accepted().json(json!({
-      "ok": true,
-      "status": &format!("Hey {}, you're already authenticated.", usr.username)
-    }));
+    return crate::responses::Accepted(
+      format!("Hey {}, you're already authenticated.", usr.username)
+    );
   }
 
   let hitter = req.peer_addr().map_or(username.to_string(), |a| format!("{}{}", username, a));
   let rl = orc.ratelimiter.hit(hitter.as_bytes(), 3, Duration::minutes(2));
   if rl.is_timing_out() {
-    return HttpResponse::TooManyRequests().json(json!({
-      "ok": false,
-      "status": &format!("Too many requests, timeout has {} minutes left.", rl.minutes_left())
-    }));
+    return crate::responses::TooManyRequests(
+      format!("Too many requests, timeout has {} minutes left.", rl.minutes_left())
+    );
   }
 
   if orc.username_taken(username) {
@@ -673,10 +660,9 @@ pub async fn auth_attempt(
       orc.ratelimiter.forget(hitter.as_bytes());
       return login(usr, false, orc.clone()).await;
     }
-    return HttpResponse::BadRequest().json(json!({
-      "ok": false,
-      "status": "either your password is wrong or the username is already taken."
-    }));
+    return crate::responses::BadRequest(
+      "either your password is wrong or the username is already taken."
+    );
   }
 
   if let Some(usr) = orc.create_user(ar.into_inner()) {
@@ -684,10 +670,7 @@ pub async fn auth_attempt(
     return login(usr, true, orc).await;
   }
 
-  HttpResponse::Forbidden().json(json!({
-    "ok": false,
-    "status": "not working, we might be under attack"
-  }))
+  crate::responses::Forbidden("not working, we might be under attack")
 }
 
 #[derive(Serialize, Deserialize)]
@@ -702,52 +685,44 @@ pub async fn administer_administrality(
   if CONF.read().admin_key == ar.key {
     if let Some(ref mut usr) = orc.user_by_session(&req) {
       if orc.make_admin(&usr.id, 0) {
-        return HttpResponse::Accepted().json(json!({
-          "ok": true,
-          "status": "Congratulations, you are now an admin."
-        }));
+        return crate::responses::Accepted(
+          "Congratulations, you are now an admin."
+        );
       }
-      return HttpResponse::InternalServerError().json(json!({
-        "ok": false,
-        "status": format!(
+      return crate::responses::InternalServerError(
+        format!(
           "Sorry {}, you got it right, but there was a database error. Try again later. ;D",
           usr.username
-        ),
-      }));
+        )
+      );
     } else if let Some(remote_addr) = req.connection_info().remote_addr() {
       let hitter = format!("aA{}", remote_addr);
       let rl = orc.ratelimiter.hit(hitter.as_bytes(), 2, Duration::minutes(60));
       if rl.is_timing_out() {
-        return HttpResponse::TooManyRequests().json(json!({
-          "ok": false,
-          "status": &format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
-        }));
+        return crate::responses::TooManyRequests(
+          format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
+        );
       }
     }
   } else if let Some(auth_cookie) = req.cookie("auth") {
     let hitter = format!("aA{}", auth_cookie.value());
     let rl = orc.ratelimiter.hit(hitter.as_bytes(), 2, Duration::minutes(60));
     if rl.is_timing_out() {
-      return HttpResponse::TooManyRequests().json(json!({
-        "ok": false,
-        "status": &format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
-      }));
+      return crate::responses::TooManyRequests(
+        format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
+      );
     }
   } else if let Some(remote_addr) = req.connection_info().remote_addr() {
     let hitter = format!("aA{}", remote_addr);
     let rl = orc.ratelimiter.hit(hitter.as_bytes(), 2, Duration::minutes(60));
     if rl.is_timing_out() {
-      return HttpResponse::TooManyRequests().json(json!({
-        "ok": false,
-        "status": &format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
-      }));
+      return crate::responses::TooManyRequests(
+        format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
+      );
     }
   }
 
-  HttpResponse::Forbidden().json(json!({
-    "ok": false,
-    "status": "Sorry, no administrality for you."
-  }))
+  crate::responses::Forbidden("Sorry, no administrality for you.")
 }
 
 #[delete("/administrality")]
@@ -757,16 +732,14 @@ pub async fn remove_administrality(
 ) -> HttpResponse {
   if let Some(ref mut usr) = orc.admin_by_session(&req) {
     if orc.revoke_admin(&usr.id) {
-      return HttpResponse::Accepted().json(json!({
-        "ok": true,
-        "data": format!("Sorry {}, you've lost your adminstrality.", usr.username).as_str()
-      }));
+      return crate::responses::Accepted(
+        format!("Sorry {}, you've lost your adminstrality.", usr.username)
+      );
     }
   }
-  HttpResponse::Forbidden().json(json!({
-    "ok": false,
-    "data": "To lose your administrality you need to have some in the first place!"
-  }))
+  crate::responses::Forbidden(
+    "To lose administrality one needs to have some in the first place!"
+  )
 }
 
 #[get("/administrality")]
@@ -775,13 +748,7 @@ pub async fn check_administrality(
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   if orc.is_valid_admin_session(&req) {
-    return HttpResponse::Accepted().json(json!({
-      "ok": true,
-      "data": "Genuine admin"
-    }));
+    return crate::responses::Accepted("Genuine admin");
   }
-  HttpResponse::Forbidden().json(json!({
-    "ok": false,
-    "data": "Silly impostor, you are not admin"
-  }))
+  crate::responses::Forbidden("Silly impostor, you are not admin")
 }

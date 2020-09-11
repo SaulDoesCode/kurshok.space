@@ -1,6 +1,5 @@
 use chrono::{offset::Utc, prelude::*, Duration};
 use serde::{Deserialize, Serialize};
-use simd_json::json;
 use sled::{Transactional, transaction::*};
 use thiserror::Error;
 
@@ -977,10 +976,10 @@ pub async fn writ_query(
   if let Some(writs) = orc.public_writ_query(query.into_inner(), o_usr) {
     return HttpResponse::Ok().json(writs);
   }
-  HttpResponse::NotFound().json(json!({
-    "ok": false,
-    "status": "writ query didn't match anything, perhaps reformulate"
-  }))
+
+  crate::responses::NotFound(
+    "writ query didn't match anything, perhaps reformulate"
+  )
 }
 
 #[put("/writ")]
@@ -991,20 +990,12 @@ pub async fn push_raw_writ(
 ) -> HttpResponse {
   if let Some(usr) = orc.admin_by_session(&req) {
     return match rw.commit(&usr, orc.as_ref()) {
-      Ok(w) => HttpResponse::Ok().json(json!({
-        "ok": true,
-        "data": w
-      })),
-      Err(e) => HttpResponse::BadRequest().json(json!({
-        "ok": false,
-        "status": &format!("error: {}", e)
-      })),
+      Ok(w) => crate::responses::Ok(w),
+      Err(e) => crate::responses::BadRequest(format!("error: {}", e)),
     };
   }
-  HttpResponse::Forbidden().json(json!({
-    "ok": false,
-    "status": "only users may post writs"
-  }))
+
+  crate::responses::Forbidden("only admins may post writs")
 }
 
 #[get("/writ/{wrid_id}/upvote")]
@@ -1016,23 +1007,18 @@ pub async fn upvote_writ(
   if let Some(usr) = orc.user_by_session(&req) {
     if let Some(writ) = orc.writ_by_id(&writ_id) {
       if writ.upvote(orc.as_ref(), &usr.id) {
-        return HttpResponse::Ok().json(json!({
-          "ok": true,
-          "status": "vote went through"
-        }))
+        return crate::responses::Accepted("vote went through")
       }
     }
   } else {
-    return HttpResponse::Forbidden().json(json!({
-      "ok": false,
-      "status": "only users may vote on writs"
-    }));
+    return crate::responses::Forbidden(
+      "only users may vote on writs"
+    );
   }
 
-  HttpResponse::InternalServerError().json(json!({
-    "ok": false,
-    "status": "failed to register vote"
-  }))
+  crate::responses::InternalServerError(
+    "failed to register vote"
+  )
 }
 
 #[get("/writ/{wrid_id}/downvote")]
@@ -1044,21 +1030,12 @@ pub async fn downvote_writ(
   if let Some(usr) = orc.user_by_session(&req) {
     if let Some(writ) = orc.writ_by_id(&writ_id) {
       if writ.downvote(orc.as_ref(), &usr.id) {
-        return HttpResponse::Ok().json(json!({
-          "ok": true,
-          "status": "vote went through"
-        }))
+        return crate::responses::Accepted("vote went through");
       }
     }
   } else {
-    return HttpResponse::Forbidden().json(json!({
-      "ok": false,
-      "status": "only users may vote on writs"
-    }));
+    return crate::responses::Forbidden("only users may vote on writs");
   }
 
-  HttpResponse::InternalServerError().json(json!({
-    "ok": false,
-    "status": "failed to register vote"
-  }))
+  crate::responses::InternalServerError("failed to register vote")
 }
