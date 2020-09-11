@@ -194,6 +194,8 @@ impl Orchestrator {
         }
       }
 
+      // todo handle this upfront because these are unique indexes
+      // possibly also allow some kind of fuzzing or partial completeness
       if let Some(title) = &query.title {
         if writ.title != *title {
           return false;
