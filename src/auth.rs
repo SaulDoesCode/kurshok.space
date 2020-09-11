@@ -429,7 +429,7 @@ impl Orchestrator {
   }
 
   pub fn user_attributes(&self, usr_id: &str) -> Vec<String> {
-    get_struct(&self.user_attributes, usr_id.as_bytes()).unwrap_or(vec!())
+    get_struct(&self.user_attributes, usr_id.as_bytes()).unwrap()
   }
 
   pub fn bestow_attributes(&self, usr_id: &str, attrs: Vec<String>) -> bool {
