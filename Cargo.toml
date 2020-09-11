@@ -31,7 +31,7 @@ slug = "0.1.4"
 sthash = { git = "https://github.com/SaulDoesCode/rust-sthash" }
 tera = "^1.5.0"
 thiserror = "^1.0.20"
-time = { version = "0.2.16", features = ["serde", "rand"] }
+time = { version = "^0.2.18", features = ["serde", "rand"] }
 tokio = { version = "^0.2.22", features = ["full"] }
 toml = "^0.5.6"
 notify = "5.0.0-pre.3"
