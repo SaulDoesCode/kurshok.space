@@ -29,7 +29,7 @@ use rustls::{NoClientAuth, ServerConfig};
 
 use orchestrator::Orchestrator;
 
-#[actix_rt::main]
+#[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let matches = clap::App::new("Grimstack")
         .version("0.0.1")
