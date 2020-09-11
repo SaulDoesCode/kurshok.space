@@ -17,4 +17,6 @@ app.writQuery = async (query = {}) => {
     return await res.json()
 }
 
+window.app = app
+
 export default app

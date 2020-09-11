@@ -25,17 +25,17 @@
         <button class="profile-launcher" title="click to see or build your profile">{{ username }}</button>
         <script type="module" defer>
             import d from '/js/domlib.min.js'
-                d.once.click('.profile-launcher', () => import('/js/profile.min.js'))
-            </script>
+            d.once.click('.profile-launcher', () => import('/js/profile.min.js'))
+        </script>
         {% else %}
         <button class="auth-launcher" title="click for a login or signup modal">Auth</button>
         <script type="module" defer>
             import d from '/js/domlib.min.js'
                 d.once.click('.auth-launcher', async e => {
-                    e.preventDefault()
-                    import('/js/auth.min.js')
-                })
-            </script>
+                e.preventDefault()
+                import('/js/auth.min.js')
+            })
+        </script>
         {% endif %}
     </nav>
 
