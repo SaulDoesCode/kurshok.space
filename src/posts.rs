@@ -51,16 +51,14 @@ pub async fn render_post(
                 .body(s),
             None => HttpResponse::Ok().content_type("text/html").body(s),
         },
-        Err(err) => {
-            if orc.dev_mode {
-                HttpResponse::InternalServerError()
-                    .content_type("text/plain")
-                    .body(&format!("post.html template is broken - error : {}", err))
-            } else {
-                HttpResponse::InternalServerError()
-                    .content_type("text/plain")
-                    .body("The post page template is broken! :( We have failed you.")
-            }
+        Err(err) => if orc.dev_mode {
+            HttpResponse::InternalServerError()
+                .content_type("text/plain")
+                .body(&format!("post.html template is broken - error : {}", err))
+        } else {
+            HttpResponse::InternalServerError()
+                .content_type("text/plain")
+                .body("The post page template is broken! :( We have failed you.")
         }
     }
 }
@@ -112,16 +110,14 @@ pub async fn render_post_by_slug(
                 .body(s),
             None => HttpResponse::Ok().content_type("text/html").body(s),
         },
-        Err(err) => {
-            if orc.dev_mode {
-                HttpResponse::InternalServerError()
-                    .content_type("text/plain")
-                    .body(&format!("post.html template is broken - error : {}", err))
-            } else {
-                HttpResponse::InternalServerError()
-                    .content_type("text/plain")
-                    .body("The post page template is broken! :( We have failed you.")
-            }
+        Err(err) => if orc.dev_mode {
+            HttpResponse::InternalServerError()
+                .content_type("text/plain")
+                .body(&format!("post.html template is broken - error : {}", err))
+        } else {
+            HttpResponse::InternalServerError()
+                .content_type("text/plain")
+                .body("The post page template is broken! :( We have failed you.")
         }
     }
 }
