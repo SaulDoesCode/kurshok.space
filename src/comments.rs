@@ -16,7 +16,6 @@ use crate::utils::{
   get_struct,
   i64_is_zero,
   render_md,
-  trim_newline,
   FancyBool,
   FancyIVec,
   IntoBin,
@@ -747,7 +746,7 @@ pub async fn comment_query(
   mut query: CommentQuery,
   orc: &Orchestrator,
 ) -> Option<Vec<CommentTree>> {
-  query.path = trim_newline(query.path);
+  query.path = query.path.trim_end_matches("/").to_string();
   if query.path.is_empty() {
     return None;
   }

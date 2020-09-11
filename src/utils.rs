@@ -135,12 +135,6 @@ pub fn random_string(len: usize) -> String {
 }
 
 #[inline]
-pub fn trim_newline(mut s: String) -> String {
-  while s.ends_with('/') { s.pop(); }
-  s
-}
-
-#[inline]
 pub fn word_count_bytes(text: &[u8]) -> usize {
   text.split(is_whitespace).count()
 }
@@ -178,7 +172,10 @@ pub fn is_email_ok(email: &str) -> bool {
   EMAIL_REGEX.is_match(email)
 }
 
-pub fn get_struct<T: serde::de::DeserializeOwned>(tree: &Tree, key: &[u8]) -> Option<T> {
+pub fn get_struct<T: serde::de::DeserializeOwned>(
+  tree: &Tree,
+  key: &[u8]
+) -> Option<T> {
   if let Ok(Some(val)) = tree.get(key) {
     return Some(BINCODE_BIGENDIAN.deserialize(&val).unwrap());
   }
@@ -226,11 +223,19 @@ pub fn binbe_deserialize<T: serde::de::DeserializeOwned>(data: &[u8]) -> T {
   BINCODE_BIGENDIAN.deserialize(data).unwrap()
 }
 
-pub fn insert_struct<T: serde::Serialize + serde::de::DeserializeOwned>(tree: &Tree, key: &[u8], val: &T) -> bool {
+pub fn insert_struct<T: serde::Serialize + serde::de::DeserializeOwned>(
+  tree: &Tree,
+  key: &[u8],
+  val: &T
+) -> bool {
   tree.insert(key, BINCODE_BIGENDIAN.serialize(val).unwrap()).is_ok()
 }
 
-pub fn insert_struct_return_old<T: serde::Serialize + serde::de::DeserializeOwned>(tree: &Tree, key: &[u8], val: T) -> Option<T> {
+pub fn insert_struct_return_old<T: serde::Serialize + serde::de::DeserializeOwned>(
+  tree: &Tree,
+  key: &[u8],
+  val: T
+) -> Option<T> {
   if let Ok(Some(old)) = tree.insert(key, BINCODE_BIGENDIAN.serialize(&val).unwrap()) {
     return Some(BINCODE_BIGENDIAN.deserialize(&old).unwrap());
   }
