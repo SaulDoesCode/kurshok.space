@@ -119,6 +119,7 @@ async fn main() -> std::io::Result<()> {
         .service(comments::make_comment)
 
         .service(posts::render_post)
+        .service(posts::render_post_by_slug)
         
         .service(admin_functions::remote_http)
         
