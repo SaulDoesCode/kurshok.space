@@ -1,6 +1,6 @@
 use chrono::{offset::Utc, prelude::*, Duration};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use simd_json::json;
 use sled::{Transactional, transaction::*};
 use thiserror::Error;
 

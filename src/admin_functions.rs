@@ -1,7 +1,7 @@
 use actix_web::{client, post, web, http::{Cookie, HeaderName, HeaderValue}, HttpRequest, HttpResponse};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use simd_json::json;
 
 use std::{
     collections::HashMap, 

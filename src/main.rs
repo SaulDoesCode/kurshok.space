@@ -18,6 +18,7 @@ mod comments;
 mod posts;
 
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_files::{NamedFile};
 use chrono::Duration;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -269,7 +270,7 @@ async fn serve_files_and_templates(
     if path.contains("admin") {
         if let Some(usr) = orc.admin_by_session(&req) {
             let asset_dir = format!("./assets{}", path);
-            if let Ok(file) = actix_files::NamedFile::open(&asset_dir) {
+            if let Ok(file) = NamedFile::open(&asset_dir) {
                 if let Ok(file_response) = file.into_response(&req) {
                     return file_response;
                 }
@@ -306,7 +307,7 @@ async fn serve_files_and_templates(
         }
     } else {
         let asset_dir = format!("./assets{}", req.path());
-        if let Ok(file) = actix_files::NamedFile::open(&asset_dir) {
+        if let Ok(file) = NamedFile::open(&asset_dir) {
             if let Ok(file_response) = file.into_response(&req) {
                 return file_response;
             }
