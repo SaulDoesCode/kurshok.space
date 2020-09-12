@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Grimstack</title>
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+    {% if not dev_mode or dev_mode is undefined  %}
+    <link href="https://fonts.googleapis.com/css2?family=Cantarell:wght@400;700&display=swap" rel="stylesheet">
+    {% endif %}
+    <link rel="stylesheet" href="/css/marx.min.css">
+    <link rel="stylesheet" href="/css/site.min.css">
+</head>
+
+<body>
+    <nav class="hero">
+        <header onclick="window.location = '/'">Grimstack</header>
+    </nav>
+
+    <main class="content-display">
+        <h2 style="text-align: center;">404 - Sorry honey,<br/> we couldn't find what you were looking for.</h2>
+        <br/>
+         {% if message is defined %} <p> {{ message }} </p> {% endif %}
+    </main>
+</body>
+
+</html>
