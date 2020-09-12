@@ -102,11 +102,7 @@ impl Orchestrator {
       }
     }
 
-    let user_attributes: Option<Vec<String>> = if let Some(usr) = &o_usr {
-      Some(self.user_attributes(&usr.id))
-    } else {
-      None
-    };
+    let user_attributes = o_usr.as_ref().map_or(None, |usr| Some(self.user_attributes(&usr.id)));
 
     let check_writ_against_query = |writ: &Writ, date_scan: bool| {
       if let Some(posted_before) = &query.posted_before {
@@ -159,7 +155,7 @@ impl Orchestrator {
 
         if let Some(viewable_by) = &query.viewable_by {
           if let Some(attrs) = &user_attributes {  
-            if !viewable_by.iter().all(|a| attrs.contains(&a)) {
+            if !viewable_by.iter().all(|a| attrs.contains(a)) {
               return false;
             }
           } else {
