@@ -21,7 +21,7 @@ use crate::utils::{
   binbe_serialize,
   binbe_deserialize,
   FancyBool,
-  FancyIVec
+  FancyIVec,
 };
 
 impl Orchestrator {
@@ -55,16 +55,18 @@ impl Orchestrator {
       username: ar.username.clone(),
       handle: ar.handle.unwrap_or(slugify(ar.username.to_lowercase())),
       registered: Utc::now(),
-      email,
     };
 
-    if (&self.users, &self.usernames, &self.user_secrets, &self.handles).transaction(|(users, usernames, user_secrets, handles)| {
+    if (&self.users, &self.usernames, &self.user_secrets, &self.user_emails, &self.handles).transaction(|(users, usernames, usr_secrets, usr_emails, handles)| {
       if usernames.get(usr.username.as_bytes())?.is_some() || handles.get(usr.handle.as_bytes())?.is_some() {
         return Err(sled::transaction::ConflictableTransactionError::Abort(()));
       }
 
       users.insert(user_id.as_bytes(), usr.to_bin())?;
-      user_secrets.insert(user_id.as_bytes(), pwd.as_bytes())?;
+      usr_secrets.insert(user_id.as_bytes(), pwd.as_bytes())?;
+      if let Some(email) = &email {
+        usr_emails.insert(user_id.as_bytes(), email.as_bytes())?;
+      }
       usernames.insert(usr.username.as_bytes(), user_id.as_bytes())?;
       handles.insert(usr.handle.as_bytes(), user_id.as_bytes())?;
       Ok(())
@@ -369,18 +371,12 @@ impl Orchestrator {
     })
   }
 
-  pub fn make_admin(&self, usr_id: &str, level: u8) -> bool {
+  pub fn make_admin(&self, usr_id: &str, level: u8, reason: Option<String>) -> bool {
+    let attr = UserAttribute{aquired: Utc::now(), reason};
     let res: TransactionResult<(), ()> = (&self.user_attributes, &self.admins)
       .transaction(|(usr_attrs, admins)| {
-        let attributes = if let Some(raw_attrs) = usr_attrs.get(usr_id.as_bytes())? {
-          let mut attributes: Vec<String> = binbe_deserialize(&raw_attrs);
-          attributes.push("admin".to_string());
-          attributes.dedup();
-          attributes
-        } else {
-          vec!("admin".to_string())
-        };
-        usr_attrs.insert(usr_id.as_bytes(), binbe_serialize(&attributes))?;
+        let key = format!("{}:admin", usr_id);
+        usr_attrs.insert(key.as_bytes(), binbe_serialize(&attr))?;
         admins.insert(usr_id.as_bytes(), &[level])?;
         Ok(())
       });
@@ -390,15 +386,12 @@ impl Orchestrator {
   pub fn change_admin_level(&self, usr_id: &str, level: u8) -> bool {
     let res: TransactionResult<(), ()> = (&self.user_attributes, &self.admins)
       .transaction(|(usr_attrs, admins)| {
-        if let Some(raw_attrs) = usr_attrs.get(usr_id.as_bytes())? {
-          let attributes: Vec<String> = binbe_deserialize(&raw_attrs);
-          if attributes.contains(&"admin".to_string()) {
-            admins.insert(usr_id.as_bytes(), &[level])?;
-          }
-        } else {
-          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+        let key = format!("{}:admin", usr_id);
+        if let Some(_) = usr_attrs.get(key.as_bytes())? {
+          admins.insert(usr_id.as_bytes(), &[level])?;
+          return Ok(());
         }
-        Ok(())
+        Err(sled::transaction::ConflictableTransactionError::Abort(()))
       });
     res.is_ok()
   }
@@ -413,40 +406,48 @@ impl Orchestrator {
   pub fn revoke_admin(&self, usr_id: &str) -> bool {
     let res: TransactionResult<(), ()> =
       (&self.user_attributes, &self.admins).transaction(|(usr_attrs, admins)| {
-        if let Some(raw_attrs) = usr_attrs.get(usr_id.as_bytes())? {
-          let attributes: Vec<String> = binbe_deserialize::<Vec<String>>(&raw_attrs)
-          .iter().filter(|t| *t != "admin")
-          .cloned().collect();
-          
-          usr_attrs.insert(usr_id.as_bytes(), binbe_serialize(&attributes))?;
-        } else {
-          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-        }
+        let key = format!("{}:admin", usr_id);
+        usr_attrs.remove(key.as_bytes())?;
         admins.remove(usr_id.as_bytes())?;
         Ok(())
       });
     res.is_ok()
   }
 
-  pub fn user_attributes(&self, usr_id: &str) -> Vec<String> {
-    get_struct(&self.user_attributes, usr_id.as_bytes()).unwrap()
+  pub fn bestow_mere_attributes(&self, usr_id: &str, attrs: Vec<String>) -> bool {
+    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.user_attributes_data)
+      .transaction(|(usr_attrs, usr_attrs_data)| {
+        for attr in &attrs {
+          let key = format!("{}:{}", usr_id, attr);
+          usr_attrs.insert(key.as_bytes(), binbe_serialize(&UserAttribute::default()))?;
+          usr_attrs_data.remove(key.as_bytes())?;
+        }
+        // return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+        Ok(())
+      });
+    res.is_ok()
   }
 
-  pub fn bestow_attributes(&self, usr_id: &str, attrs: Vec<String>) -> bool {
-    let res: TransactionResult<(), ()> = self.user_attributes.transaction(|usr_attrs| {
-      if let Some(raw_attrs) = usr_attrs.get(usr_id.as_bytes())? {
-        let mut attributes = binbe_deserialize::<Vec<String>>(&raw_attrs);
-        for attr in &attrs {
-          attributes.push(attr.clone());
+  pub fn bestow_attributes(&self, usr_id: &str, attrs: Vec<(String, UserAttribute, Option<Vec<u8>>)>) -> bool {
+    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.user_attributes_data).transaction(|(usr_attrs, usr_attrs_data)| {
+      for (name, attr, data) in &attrs {
+        let key = format!("{}:{}", usr_id, name);
+        usr_attrs.insert(key.as_bytes(), binbe_serialize(attr))?;
+        if let Some(data) = data {
+          usr_attrs_data.insert(key.as_bytes(), data.as_slice())?;
         }
-        attributes.dedup();
+      }
+      Ok(())
+    });
+    res.is_ok()
+  }
 
-        usr_attrs.insert(
-          usr_id.as_bytes(),
-          binbe_serialize(&attributes)
-        )?;
-      } else {
-        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+  pub fn bestow_attribute(&self, usr_id: &str, name: String, attr: UserAttribute, attr_data: Option<Vec<u8>>) -> bool {
+    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.user_attributes_data).transaction(|(usr_attrs, usr_attrs_data)| {
+      let key = format!("{}:{}", usr_id, name);
+      usr_attrs.insert(key.as_bytes(), binbe_serialize(&attr))?;
+      if let Some(data) = &attr_data {
+        usr_attrs_data.insert(key.as_bytes(), data.as_slice())?;
       }
       Ok(())
     });
@@ -455,23 +456,24 @@ impl Orchestrator {
 
   pub fn strip_attributes(&self, usr_id: &str, attrs: Vec<String>) -> bool {
     let res: TransactionResult<(), ()> = self.user_attributes.transaction(|usr_attrs| {
-      if let Some(raw_attrs) = usr_attrs.get(usr_id.as_bytes())? {
-        let attributes: Vec<String> = binbe_deserialize::<Vec<String>>(&raw_attrs)
-          .iter()
-          .filter(|t| !attrs.contains(t))
-          .cloned()
-          .collect();
-
-        usr_attrs.insert(
-          usr_id.as_bytes(),
-          binbe_serialize(&attributes)
-        )?;
-      } else {
-        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+      for attr in &attrs {
+        let key = format!("{}:{}", usr_id, attr);
+        usr_attrs.remove(key.as_bytes())?;
       }
       Ok(())
     });
     res.is_ok()
+  }
+
+  pub fn user_attributes(&self, usr_id: &str) -> Vec<String> {
+    let prefix = format!("{}:", usr_id);
+    self.user_attributes.scan_prefix(usr_id.as_bytes()).keys()
+      .filter_map(|res| res.map_or(None, |key| {
+        let raw_attr = key.to_string();
+        let attr = raw_attr.trim_start_matches(&prefix);
+        Some(attr.to_string())
+      }))
+      .collect()
   }
 
   pub fn hash_pwd(&self, pwd: &str) -> Option<String> {
@@ -512,7 +514,22 @@ pub struct User {
   pub username: String,
   pub handle: String,
   pub registered: DateTime<Utc>,
-  pub email: Option<String>,
+  // pub email: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+pub struct UserAttribute {
+  pub aquired: DateTime<Utc>,
+  pub reason: Option<String>,
+}
+
+impl Default for UserAttribute {
+  fn default() -> Self {
+    Self{
+      aquired: Utc::now(),
+      reason: None,
+    }
+  }
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -684,7 +701,7 @@ pub async fn administer_administrality(
 ) -> impl Responder {
   if CONF.read().admin_key == ar.key {
     if let Some(ref mut usr) = orc.user_by_session(&req) {
-      if orc.make_admin(&usr.id, 0) {
+      if orc.make_admin(&usr.id, 0, Some("passed administrality".to_string())) {
         return crate::responses::Accepted(
           "Congratulations, you are now an admin."
         );

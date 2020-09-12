@@ -13,6 +13,8 @@ pub struct Orchestrator {
   pub usernames: Tree,
   pub user_descriptions: Tree,
   pub user_attributes: Tree,
+  pub user_attributes_data: Tree,
+  pub user_emails: Tree,
   pub user_secrets: Tree,
   pub handles: Tree,
   pub sessions: Tree,
@@ -65,8 +67,10 @@ impl Orchestrator {
     let users = db.open_tree(b"users").unwrap();
     let usernames = db.open_tree(b"usernames").unwrap();
     let user_descriptions = db.open_tree(b"user_descriptions").unwrap();
+    let user_emails = db.open_tree(b"user_emails").unwrap();
     let user_secrets = db.open_tree(b"user_secrets").unwrap();
     let user_attributes = db.open_tree(b"user_attributes").unwrap();
+    let user_attributes_data = db.open_tree(b"user_attributes_data").unwrap();
     let handles = db.open_tree(b"handles").unwrap();
     let admins = db.open_tree(b"admins").unwrap();
     let sessions = db.open_tree(b"sessions").unwrap();
@@ -136,8 +140,10 @@ impl Orchestrator {
       users,
       usernames,
       user_descriptions,
+      user_emails,
       user_secrets,
       user_attributes,
+      user_attributes_data,
       sessions,
       session_data,
       handles,
