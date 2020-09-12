@@ -443,14 +443,15 @@ impl Orchestrator {
   }
 
   pub fn bestow_attribute(&self, usr_id: &str, name: String, attr: UserAttribute, attr_data: Option<Vec<u8>>) -> bool {
-    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.user_attributes_data).transaction(|(usr_attrs, usr_attrs_data)| {
-      let key = format!("{}:{}", usr_id, name);
-      usr_attrs.insert(key.as_bytes(), binbe_serialize(&attr))?;
-      if let Some(data) = &attr_data {
-        usr_attrs_data.insert(key.as_bytes(), data.as_slice())?;
-      }
-      Ok(())
-    });
+    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.user_attributes_data)
+      .transaction(|(usr_attrs, usr_attrs_data)| {
+        let key = format!("{}:{}", usr_id, name);
+        usr_attrs.insert(key.as_bytes(), binbe_serialize(&attr))?;
+        if let Some(data) = &attr_data {
+          usr_attrs_data.insert(key.as_bytes(), data.as_slice())?;
+        }
+        Ok(())
+      });
     res.is_ok()
   }
 
@@ -474,6 +475,24 @@ impl Orchestrator {
         Some(attr.to_string())
       }))
       .collect()
+  }
+
+  pub fn user_attribute(&self, usr_id: &str, attr: &str) -> Option<UserAttribute> {
+    let key = format!("{}:{}", usr_id, attr);
+    if let Ok(Some(raw)) = self.user_attributes.get(key.as_bytes()) {
+      return Some(raw.to_type());
+    }
+    None
+  }
+
+  pub fn user_attribute_with_data(&self, usr_id: &str, attr: &str) -> Option<(UserAttribute, sled::IVec)> {
+    let key = format!("{}:{}", usr_id, attr);
+    if let Ok(Some(raw_attr)) = self.user_attributes.get(key.as_bytes()) {
+      if let Ok(Some(raw_data)) = self.user_attributes_data.get(key.as_bytes()) {
+        return Some((raw_attr.to_type(), raw_data));
+      }
+    }
+    None
   }
 
   pub fn hash_pwd(&self, pwd: &str) -> Option<String> {
