@@ -9,6 +9,7 @@ use crate::utils::{generate_random_bytes};
 pub struct Orchestrator {
   // auth
   pub db: Db,
+  pub id_counter: Tree,
   pub users: Tree,
   pub usernames: Tree,
   pub user_descriptions: Tree,
@@ -64,6 +65,7 @@ impl Orchestrator {
       .open()
       .expect("failed to open main.db");
 
+    let id_counter = db.open_tree(b"id_counter").unwrap();
     let users = db.open_tree(b"users").unwrap();
     let usernames = db.open_tree(b"usernames").unwrap();
     let user_descriptions = db.open_tree(b"user_descriptions").unwrap();
@@ -137,6 +139,7 @@ impl Orchestrator {
 
     Orchestrator {
       db,
+      id_counter,
       users,
       usernames,
       user_descriptions,
