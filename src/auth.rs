@@ -544,10 +544,7 @@ pub struct UserAttribute {
 
 impl Default for UserAttribute {
   fn default() -> Self {
-    Self{
-      aquired: Utc::now(),
-      reason: None,
-    }
+    Self{aquired: Utc::now(), reason: None}
   }
 }
 

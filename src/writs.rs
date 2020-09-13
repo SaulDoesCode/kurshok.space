@@ -61,7 +61,7 @@ impl Orchestrator {
     }).is_ok()
   }
 
-  pub fn writ_query(&self, mut query: WritQuery, o_usr: Option<User>) -> Option<Vec<Writ>> {
+  pub fn writ_query(&self, mut query: WritQuery, o_usr: Option<&User>) -> Option<Vec<Writ>> {
     let is_admin = if let Some(usr) = &o_usr {
       self.is_admin(&usr.id)
     } else {
@@ -347,7 +347,7 @@ impl Orchestrator {
   ) -> Option<Vec<PublicWrit>> {
     let usr_id = match &o_usr { Some(usr) => Some(usr.id.clone()), None => None, };
     let with_content = query.with_content.unwrap_or(true);
-    if let Some(writs) = self.writ_query(query, o_usr) {
+    if let Some(writs) = self.writ_query(query, o_usr.as_ref()) {
       let mut public_writs = vec!();
       for w in writs {
         // if !w.public {continue;}
@@ -358,6 +358,29 @@ impl Orchestrator {
 
       if public_writs.len() > 0 {
         return Some(public_writs);
+      }
+    }
+    None
+  }
+
+  pub fn editable_writ_query(
+    &self,
+    query: WritQuery,
+    usr: User,
+  ) -> Option<Vec<EditableWrit>> {
+    let with_content = query.with_content.unwrap_or(false);
+    let with_raw_content = query.with_content.unwrap_or(false);
+    if let Some(writs) = self.writ_query(query, Some(&usr)) {
+      let mut editable_writs = vec!();
+      for w in writs {
+        // if !w.public {continue;}
+        if let Some(pw) = w.editable(self, &usr, with_content, with_raw_content) {
+          editable_writs.push(pw);
+        }
+      }
+
+      if editable_writs.len() > 0 {
+        return Some(editable_writs);
       }
     }
     None
@@ -416,6 +439,7 @@ pub struct WritQuery {
     pub page: u64,
 
     pub with_content: Option<bool>,
+    pub with_raw_content: Option<bool>,
 
     pub kind: String,
 }
@@ -442,6 +466,7 @@ impl std::default::Default for WritQuery {
       day: None,
       hour: None,
       with_content: None,
+      with_raw_content: None,
       amount: None,
       page: 0,
       kind: "post".to_string(),
@@ -602,6 +627,50 @@ impl Writ {
     }
   }
 
+  pub fn editable(
+    &self,
+    orc: &Orchestrator,
+    author: &User,
+    with_content: bool,
+    with_raw_content: bool,
+  ) -> Option<EditableWrit> {
+    let author_id = self.author_id();
+    if author_id != author.id {
+      return None;
+    }
+
+    return Some(EditableWrit{
+      id: self.id.clone(),
+      title: self.title.clone(),
+      slug: self.slug.clone(),
+      tags: self.tags.clone(),
+      posted: self.posted.clone(),
+      content: if with_content {
+        if let Ok(Some(raw)) = orc.content.get(self.id.as_bytes()) {
+          Some(raw.to_string())
+        } else {
+          return None;
+        }
+      } else {
+        return None;
+      },
+      raw_content: if with_raw_content {
+        if let Ok(Some(raw)) = orc.raw_content.get(self.id.as_bytes()) {
+          Some(raw.to_string())
+        } else {
+          return None;
+        }
+      } else {
+        return None;
+      },
+      kind: self.kind.clone(),
+      public: self.public,
+      viewable_by: self.viewable_by.clone(),
+      commentable: self.commentable,
+      is_md: self.is_md,
+    });
+  }
+
   pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: bool) -> bool {
     let res: TransactionResult<(), ()> = (&orc.votes, &orc.writ_voters).transaction(|(votes, writ_voters)| {
       let wv = WritVote{id: self.vote_id(usr_id), when: Utc::now(), up};
@@ -651,6 +720,22 @@ impl Writ {
       self.unique_id()
     )
   }
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+pub struct EditableWrit {
+  pub id: String, // {kind}:{author_id}:{writ_id}
+  pub title: String,
+  pub slug: String,
+  pub kind: String,
+  pub tags: Vec<String>,
+  pub posted: DateTime<Utc>,
+  pub raw_content: Option<String>,
+  pub content: Option<String>,
+  pub public: bool,
+  pub viewable_by: Vec<String>,
+  pub commentable: bool,
+  pub is_md: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -971,6 +1056,27 @@ pub async fn writ_query(
   let o_usr = orc.user_by_session(&req);
   if let Some(writs) = orc.public_writ_query(query.into_inner(), o_usr) {
     return HttpResponse::Ok().json(writs);
+  }
+
+  crate::responses::NotFound(
+    "writ query didn't match anything, perhaps reformulate"
+  )
+}
+
+#[post("/editable-writs")]
+pub async fn editable_writ_query(
+  req: HttpRequest,
+  query: web::Json<WritQuery>,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
+  if let Some(usr) = orc.user_by_session(&req) {
+    if let Some(writs) = orc.editable_writ_query(query.into_inner(), usr) {
+      return HttpResponse::Ok().json(writs);
+    }
+  } else {
+    return crate::responses::Forbidden(
+      "You can't edit things that aren't yours to edit"
+    );
   }
 
   crate::responses::NotFound(
