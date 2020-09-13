@@ -363,17 +363,15 @@ impl Orchestrator {
     None
   }
 
-  pub fn editable_writ_query(
-    &self,
-    query: WritQuery,
-    usr: User,
-  ) -> Option<Vec<EditableWrit>> {
+  pub fn editable_writ_query(&self, mut query: WritQuery, usr: User) -> Option<Vec<EditableWrit>> {
+    query.author_id = Some(usr.id.clone());
+
     let with_content = query.with_content.unwrap_or(false);
-    let with_raw_content = query.with_content.unwrap_or(false);
+    let with_raw_content = query.with_raw_content.unwrap_or(true);
+
     if let Some(writs) = self.writ_query(query, Some(&usr)) {
       let mut editable_writs = vec!();
       for w in writs {
-        // if !w.public {continue;}
         if let Some(pw) = w.editable(self, &usr, with_content, with_raw_content) {
           editable_writs.push(pw);
         }
@@ -639,7 +637,7 @@ impl Writ {
       return None;
     }
 
-    return Some(EditableWrit{
+    Some(EditableWrit{
       id: self.id.clone(),
       title: self.title.clone(),
       slug: self.slug.clone(),
@@ -652,7 +650,7 @@ impl Writ {
           return None;
         }
       } else {
-        return None;
+        None
       },
       raw_content: if with_raw_content {
         if let Ok(Some(raw)) = orc.raw_content.get(self.id.as_bytes()) {
@@ -661,14 +659,14 @@ impl Writ {
           return None;
         }
       } else {
-        return None;
+        None
       },
       kind: self.kind.clone(),
       public: self.public,
       viewable_by: self.viewable_by.clone(),
       commentable: self.commentable,
       is_md: self.is_md,
-    });
+    })
   }
 
   pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: bool) -> bool {

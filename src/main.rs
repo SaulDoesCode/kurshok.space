@@ -112,8 +112,8 @@ async fn main() -> std::io::Result<()> {
         .service(auth::remove_administrality)
         .service(auth::check_administrality)
         
-        .service(writs::writ_query)
         .service(writs::editable_writ_query)
+        .service(writs::writ_query)
         .service(writs::push_raw_writ)
         .service(writs::upvote_writ)
         .service(writs::downvote_writ)
