@@ -21,36 +21,7 @@ const {
   </div>
 </section>`.collect()
 
-app.authView = authView
-
-app.authViewToggle = (state = !df.hasClass(authView, 'open')) => {
-  df.class(authView,'open', state)
-  df.class(authLauncher,'active', state)
-  if (state) {
-    d.render(authView)
-    clickOutHandler.on()
-  } else {
-    df.remove(authView)
-  }
-}
-
-const clickOutHandler = d.on.pointerdown(document.body, e => {
-  if (
-    e.target != authView &&
-    !authView.contains(e.target) &&
-    df.hasClass(authView, 'open') &&
-    e.target != authLauncher
-  ) {
-    e.preventDefault()
-    app.authViewToggle(false)
-    clickOutHandler.off()
-  }
-}).off()
-
-d.on.pointerdown(authLauncher, app.clickAuthLauncher = e => {
-  e.preventDefault()
-  app.authViewToggle()
-})
+app.authViewToggle = app.setupToggleSituation(authLauncher, app.authView = authView)
 
 app.authenticate = async (
   username = usernameInput.value.trim(),
@@ -74,4 +45,4 @@ const authClickHandle = d.once.click(authBtn, async e => {
   }
 })
 
-app.authViewToggle()
+app.authViewToggle.toggleView()

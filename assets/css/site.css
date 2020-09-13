@@ -44,6 +44,7 @@ body > * > header {
   margin: 0;
   font-size: 1.5em;
 }
+.hero > .ww-launcher,
 .hero > .auth-launcher,
 .hero > .profile-launcher {
   display: inline-block;
