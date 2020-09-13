@@ -753,11 +753,7 @@ pub struct RawWrit {
 }
 
 impl RawWrit {
-  pub fn commit(
-    &self,
-    author: &User,
-    orc: &Orchestrator,
-  ) -> Result<Writ, WritError> {
+  pub fn commit(&self, author: &User, orc: &Orchestrator) -> Result<Writ, WritError> {
     let is_md = self.is_md.unwrap_or(true);
     if is_md && !orc.is_admin(&author.id) {
       return Err(WritError::NoPermNoMD);
@@ -765,9 +761,16 @@ impl RawWrit {
 
     let (writ_id, is_new_writ) = match &self.id {
       Some(wi) => {
-        if !orc.writs.contains_key(wi.as_bytes()).unwrap() {
+        if let Ok(author_id) = wi.split(":").nth(1) {
+          if author_id != author.id {
+            return Err(WritError::InauthenticAuthor);  
+          }
+        }
+
+        if !orc.writs.contains_key(wi.as_bytes()).unwrap_or(true) {
           return Err(WritError::BadID);
         }
+
         (wi.clone(), false)
       },
       None => (orc.new_writ_id(&author.id, &self.kind), true)
@@ -1033,6 +1036,8 @@ impl CommentSettings {
 pub enum WritError {
     #[error("id does not match any currently existing writ")]
     BadID,
+    #[error("author's id mismatches writ's author_id")]
+    InauthenticAuthor,
     #[error("duplicate writ, please don't copy")]
     DuplicateWrit,
     #[error("writ made viewable_only with attributes the author user lacks")]
