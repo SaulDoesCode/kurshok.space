@@ -2,7 +2,7 @@ use argon2::Config;
 use chrono::{offset::Utc, prelude::*, Duration};
 use serde::{Deserialize, Serialize};
 use simd_json::json;
-use sled::{Transactional, transaction::*};
+use sled::{IVec, Transactional, transaction::*};
 use slug::slugify;
 
 use std::sync::Arc;
@@ -24,9 +24,21 @@ use crate::utils::{
   FancyIVec,
 };
 
+
 impl Orchestrator {
   pub fn hash(&self, data: &[u8]) -> Vec<u8> {
     self.hasher.hash(data)
+  }
+
+  pub fn generate_id(&self, key: &[u8]) -> TransactionResult<u64, ()> {
+    self.id_counter.transaction(|idc| {
+      let id = match idc.get(key)? {
+        Some(count) => count.to_u64() + 1,
+        None => 0
+      };
+      idc.insert(key, IVec::from_u64(id))?;
+      Ok(id)
+    })
   }
 
   pub fn create_user(&self, ar: AuthRequest) -> Option<User> {
@@ -43,7 +55,7 @@ impl Orchestrator {
       None => return None,
     };    
 
-    let user_id = match self.db.generate_id() {
+    let user_id = match self.generate_id("usr".as_bytes()) {
       Ok(id) => format!("{}", id),
       Err(_) => return None,
     };

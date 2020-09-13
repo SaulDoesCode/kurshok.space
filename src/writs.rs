@@ -20,8 +20,11 @@ use crate::utils::{
 };
 
 impl Orchestrator {
-  pub fn new_writ_id(&self, author_id: &str, kind: &str) -> String {
-    format!("{}:{}:{}", kind, author_id, self.writ_db.generate_id().unwrap())
+  pub fn new_writ_id(&self, author_id: &str, kind: &str) -> Option<String> {
+    if let Ok(id) = self.generate_id("writ".as_bytes()) {
+      return Some(format!("{}:{}:{}", kind, author_id, id));
+    }
+    None
   }
 
   pub fn index_writ_tags(&self, writ_id: String, tags: Vec<String>) -> bool {
@@ -772,7 +775,11 @@ impl RawWrit {
 
         (wi.clone(), false)
       },
-      None => (orc.new_writ_id(&author.id, &self.kind), true)
+      None => if let Some(writ_id) = orc.new_writ_id(&author.id, &self.kind) {
+        (writ_id, true)
+      } else {
+        return Err(WritError::IDGenErr);
+      }
     };
 
     let writ = Writ{
@@ -1036,6 +1043,8 @@ impl CommentSettings {
 pub enum WritError {
     #[error("id does not match any currently existing writ")]
     BadID,
+    #[error("id generation failed for some reason, maybe try again later")]
+    IDGenErr,
     #[error("author's id mismatches writ's author_id")]
     InauthenticAuthor,
     #[error("duplicate writ, please don't copy")]

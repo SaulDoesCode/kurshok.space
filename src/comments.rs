@@ -10,7 +10,6 @@ use rayon::prelude::*;
 use crate::orchestrator::Orchestrator;
 use crate::auth::{User};
 use crate::utils::{
-  binbe_deserialize,
   binbe_serialize,
   get_struct,
   i64_is_zero,
@@ -78,19 +77,30 @@ impl Comment {
     None
   }
 
-  pub fn new_own_id(orc: &Orchestrator, usr_id: &str) -> Option<String> {
-    if let Ok(uid) = orc.db.generate_id() {
+  pub fn new_first_level_id(
+    orc: &Orchestrator,
+    writ_id: &str,
+    usr_id: &str,
+  ) -> Option<(String, String)> {
+    if let Ok(uid) = orc.generate_id(writ_id.as_bytes()) {
       let own_id = format!("{}:{}", usr_id, uid);
-      return Some(own_id);
+      return Some((
+        format!("{}/{}", writ_id, own_id),
+        own_id
+      ));
     }
     None
   }
-
-  pub fn new_id(orc: &Orchestrator, id: &str, usr_id: &str) -> Option<(String, String)> {
-    if let Ok(uid) = orc.db.generate_id() {
+  pub fn new_subcomment_id(
+    orc: &Orchestrator,
+    writ_id: &str,
+    parent_id: &str,
+    usr_id: &str,
+  ) -> Option<(String, String)> {
+    if let Ok(uid) = orc.generate_id(writ_id.as_bytes()) {
       let own_id = format!("{}:{}", usr_id, uid);
       return Some((
-        format!("{}/{}", id, own_id),
+        format!("{}/{}", parent_id, own_id),
         own_id
       ));
     }
@@ -140,10 +150,6 @@ impl Comment {
       id: self.id,
       content: self.content,
     })
-  }
-
-  pub fn id_tree(&self, orc: Arc<Orchestrator>) -> Option<CommentIDTree> {
-    get_struct(&orc.comment_trees, self.id.as_bytes())
   }
 
   pub fn default_deleted(&self) -> Self {
@@ -197,12 +203,7 @@ impl Comment {
   ) -> Option<(String, Vec<String>)> {
     if self.id.matches(":").count() > 1 {
       return Some((self.id.clone(), {
-        let mut path = vec!();
-        let mut iter = self.id.split('/').filter(|&c| c != "");
-        while let Some(part) = iter.next() {
-          path.push(part.to_string());
-        }
-        path
+        self.id.split('/').filter(|&c| c != "").map(|part| part.to_string()).collect()
       }));
     }
 
@@ -337,7 +338,7 @@ pub fn comment_on_writ(
 
       let content = render_md(&raw_content);
 
-      let (id, _own_id) = match Comment::new_id(orc, &writ.id, &usr.id) {
+      let (id, _own_id) = match Comment::new_first_level_id(orc, &writ.id, &usr.id) {
         Some(i) => i,
         None => return None,
       };
@@ -375,6 +376,7 @@ pub fn comment_on_comment(
   settings: &CommentSettings,
   parent_comment: &Comment,
   usr: &User,
+  writ_id: String,
   raw_content: String,
   author_only: bool,
 ) -> Option<Comment> {
@@ -407,7 +409,12 @@ pub fn comment_on_comment(
 
   let content = render_md(&raw_content);
 
-  let (id, own_id) = match Comment::new_id(orc, &parent_id, &usr.id) {
+  let (id, own_id) = match Comment::new_subcomment_id(
+    orc,
+    &writ_id,
+    &parent_id,
+    &usr.id
+  ) {
     Some(i) => i,
     None => return None,
   };
@@ -610,22 +617,21 @@ impl CommentIDTree {
       }
     }
 
-    if let Ok(res) = orc.comments.get(self.comment.as_bytes()) {
-      if let Some(val) = res {
-        let comment: Comment = val.to_type();
-        if check_query_conditions(query, &comment, &author_id) {
-          return Some(CommentTree{
-            comment,
-            children: self.children.par_iter()
-              .filter_map(|(_, child)| child.to_comment_tree(orc, query))
-              .collect()
-          });
-        }
+    if let Ok(Some(val)) = orc.comments.get(self.comment.as_bytes()) {
+      let comment: Comment = val.to_type();
+      if check_query_conditions(query, &comment, &author_id) {
+        return Some(CommentTree{
+          comment,
+          children: self.children.par_iter()
+            .filter_map(|(_, child)| child.to_comment_tree(orc, query))
+            .collect()
+        });
       }
     }
 
     None
   }
+
   pub fn to_comment_tree_sans_query(&self, orc: &Orchestrator) -> Option<CommentTree> {
     if let Ok(res) = orc.comments.get(self.comment.as_bytes()) {
       if let Some(val) = res {
@@ -864,7 +870,7 @@ pub async fn comment_query(
         count += 1;
         continue;
     }
-    let id_tree: CommentIDTree = binbe_deserialize(&value);
+    let id_tree: CommentIDTree = value.to_type();
 
     if let Some(dp) = depth_path {
       if let Some(st) = id_tree.subtree(dp) {
@@ -877,7 +883,7 @@ pub async fn comment_query(
     count += 1;
   }
 
-  let comments: Vec<CommentTree> = cidtrees.par_iter()
+  let comments: Vec<CommentTree> = cidtrees.into_par_iter()
     .filter_map(|cidt| cidt.to_comment_tree(orc, &query))
     .collect();
 
@@ -1003,7 +1009,7 @@ pub async fn make_comment_on_writ(usr: User, rc: RawComment, orc: &Orchestrator)
       rc.raw_content,
       rc.author_only.unwrap_or(false)
     ) {
-      return crate::responses::Accepted(comment);
+      return crate::responses::AcceptedData(comment);
     }
     return crate::responses::BadRequest(
       "Can't comment on non-existing post"
@@ -1028,6 +1034,7 @@ pub async fn make_comment_on_comment(
         &settings, 
         &parent_comment,
         &usr,
+        rc.writ_id,
         rc.raw_content,
         rc.author_only.unwrap_or(false)
       ) {
