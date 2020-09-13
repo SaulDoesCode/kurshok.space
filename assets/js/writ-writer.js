@@ -51,7 +51,7 @@ const writListEntry = (title, id) => d('div', {
 app.user.writs = {}
 app.ww = {}
 
-app.writQuery({
+app.editableWritQuery({
     author_name: app.user.username,
 }).then(async writs => {
     console.log(writs)
