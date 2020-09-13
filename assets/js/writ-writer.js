@@ -51,8 +51,25 @@ const writListEntry = (title, id) => d('div', {
 app.user.writs = {}
 app.ww = {}
 
+app.pushWrit = async (title, raw_content, tags, opts = {}) => {
+    const raw_writ = {
+        title,
+        raw_content: raw_content.trim(),
+        tags,
+        kind: 'post',
+        public: true,
+        viewable_by: []
+    }
+    Object.assign(raw_writ, opts)
+    const res = await jsonPut('/writ', raw_writ)
+    const data = await res.json()
+
+    return data.ok ? Promise.resolve(data.data) : Promise.reject(data)
+}
+
 app.editableWritQuery({
     author_name: app.user.username,
+    with_raw_content: true,
 }).then(async writs => {
     console.log(writs)
     writs.forEach(w => {
