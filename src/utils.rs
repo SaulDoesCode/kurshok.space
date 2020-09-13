@@ -91,6 +91,9 @@ pub trait FancyIVec {
   fn to_i64(&self) -> i64;
   fn to_type<T: serde::de::DeserializeOwned>(&self) -> T;
   fn to_type_from_json<T: serde::de::DeserializeOwned>(&self) -> T;
+
+  fn from_u64(i: u64) -> IVec;
+  fn from_i64(i: i64) -> IVec;
 }
 
 impl FancyIVec for IVec {
@@ -123,6 +126,14 @@ impl FancyIVec for IVec {
   fn to_type_from_json<T: serde::de::DeserializeOwned>(&self) -> T {
     let mut input = self.to_vec();
     simd_json::from_slice(&mut input).unwrap()
+  }
+
+  fn from_u64(i: u64) -> IVec {
+    IVec::from(&i.to_be_bytes())
+  }
+
+  fn from_i64(i: i64) -> IVec {
+    IVec::from(&i.to_be_bytes())
   }
 }
 
