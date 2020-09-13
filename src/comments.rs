@@ -1,7 +1,7 @@
-use actix_web::{post, delete, put, web, HttpRequest, HttpResponse};
+use actix_web::{delete, post, put, web, HttpRequest, HttpResponse};
 use chrono::{offset::Utc, prelude::*, Duration};
 use serde::{Deserialize, Serialize};
-use sled::{Transactional, transaction::*};
+use sled::{IVec, transaction::*, Transactional};
 use std::{cell::Cell, collections::HashMap, sync::Arc};
 
 use itertools::Itertools;
@@ -132,9 +132,10 @@ impl Comment {
         ).and_then(|cv| cv.up.wrap()),
         None => None,
       },
-      votes: match get_struct(&orc.comment_votes, self.id.as_bytes()) {
-        Some(v) => v,
-        None => return None,
+      votes: if let Ok(Some(raw)) = orc.comment_votes.get(self.id.as_bytes()) {
+        raw.to_i64()
+      } else {
+        return None;
       },
       id: self.id,
       content: self.content,
@@ -358,7 +359,7 @@ pub fn comment_on_writ(
           comment_trees.insert(comment.id.as_bytes(), cidtree.to_bin())?;
           comments.insert(comment.id.as_bytes(), comment.to_bin())?;
           comment_raw_content.insert(comment.id.as_bytes(), raw_content.as_bytes())?;
-          votes.insert(comment.id.as_bytes(), binbe_serialize(&0i64))?;
+          votes.insert(comment.id.as_bytes(), IVec::from_i64(0))?;
           Ok(())
       });
 
@@ -446,7 +447,7 @@ pub fn comment_on_comment(
     kpi.insert(comment.id.as_bytes(), id.as_bytes())?;
     comments.insert(comment.id.as_bytes(), comment.to_bin())?;
     comment_raw_content.insert(comment.id.as_bytes(), raw_content.as_bytes())?;
-    votes.insert(comment.id.as_bytes(), binbe_serialize(&0i64))?;
+    votes.insert(comment.id.as_bytes(), IVec::from_i64(0))?;
     Ok(())
   }).is_ok() {
     return Some(comment);
