@@ -71,7 +71,8 @@ app.editableWritQuery({
             app.ww.selectedWLE.classList.add('selected')
 
             titleInput.value = writ.title
-            writingPad.value = writ.content
+            writingPad.value = writ.raw_content
+            tagInput.value = writ.tags.join(', ')
             console.log('got one:' , writ)
         }
     })

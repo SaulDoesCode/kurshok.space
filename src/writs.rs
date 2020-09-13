@@ -728,7 +728,9 @@ pub struct EditableWrit {
   pub kind: String,
   pub tags: Vec<String>,
   pub posted: DateTime<Utc>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub raw_content: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub content: Option<String>,
   pub public: bool,
   pub viewable_by: Vec<String>,
