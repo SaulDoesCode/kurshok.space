@@ -1,6 +1,6 @@
 use chrono::{offset::Utc, prelude::*, Duration};
 use serde::{Deserialize, Serialize};
-use sled::{Transactional, transaction::*};
+use sled::{IVec, Transactional, transaction::*};
 use thiserror::Error;
 
 use std::sync::Arc;
@@ -14,7 +14,6 @@ use crate::comments::Comment;
 use crate::utils::{
   binbe_serialize,
   get_struct,
-  read_be_u64_from_ivec,
   render_md,
   FancyIVec,
   IntoBin,
@@ -54,7 +53,7 @@ impl Orchestrator {
         if count <= 1 {
           tag_counter.remove(tag.as_bytes())?;
         } else {
-          tag_counter.insert(tag.as_bytes(), &(count - 1).to_be_bytes())?;
+          tag_counter.insert(tag.as_bytes(), IVec::from_u64(count - 1))?;
         }
       }
       Ok(())
@@ -761,7 +760,7 @@ impl RawWrit {
 
     let (writ_id, is_new_writ) = match &self.id {
       Some(wi) => {
-        if let Ok(author_id) = wi.split(":").nth(1) {
+        if let Some(author_id) = wi.split(":").nth(1) {
           if author_id != author.id {
             return Err(WritError::InauthenticAuthor);  
           }
@@ -844,9 +843,10 @@ impl RawWrit {
         for tag in writ.tags.iter() {
           let id = format!("{}:{}", tag.as_str(), writ.id);
           tags_index.insert(id.as_bytes(), binbe_serialize(&tag))?;
+
           let count: u64 = tag_counter.get(tag.as_bytes())?
-            .map_or(0, read_be_u64_from_ivec);
-          tag_counter.insert(tag.as_bytes(), binbe_serialize(&(count + 1)))?;
+            .map_or(0, |raw| raw.to_u64());
+          tag_counter.insert(tag.as_bytes(), IVec::from_u64(count + 1))?;
         }
 
         titles.insert(writ.title_key().as_bytes(), writ_id)?;
