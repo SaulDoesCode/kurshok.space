@@ -22,12 +22,19 @@ const {
         <div>
             <textarea class="writing-pad" ref="writingPad" title="writ content" spellcheck="true" wrap="off" minlength="10" required placeholder="content of your writ (it can be markdown)"></textarea>
         </div>
-        <div>
-            <input type="text" name="tags" title="tag input" id="tag-input" placeholder="comma,separated,tags" autocomplete="off" ref="tagInput">
-            <div class="is-public-checkbox">
+        <div class="tags-and-toggles">
+            <input type="text" name="tags" title="tag input" id="tag-input" placeholder="comma, separated, tags" autocomplete="off" ref="tagInput">
+            <div>
                 <label for="is-public">public</label>
                 <div class="togglebox"> 
                     <input type="checkbox" name="public" id="is-public" ref="isPublicCheckbox" checked>
+                    <span></span>
+                </div>
+            </div>
+            <div>
+                <label for="is-commentable">commentable</label>
+                <div class="togglebox"> 
+                    <input type="checkbox" name="commentable" id="is-commentable" ref="isCommentableCheckbox" checked>
                     <span></span>
                 </div>
             </div>
@@ -45,7 +52,10 @@ const {
 
 writingPad.value = ''
 
-;(app.wwTS = app.setupToggleSituation(wwLauncher, wwView)).toggleView()
+;(app.wwTS = app.setupToggleSituation(wwLauncher, wwView, 'body', {
+    viewOutAnimation: 'fade-out 220ms ease-out',
+    delayRemoveMS: 220,
+})).toggleView()
 
 
 const writListEntry = (title, id) => d('div', {

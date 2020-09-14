@@ -23,7 +23,9 @@ app.editableWritQuery = async (query = {}) => {
     return await res.json()
 }
 
-app.setupToggleSituation = (launcher, view, renderTo = 'body') => {
+app.toggleSituations = {list: [], active: null}
+
+app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation, delayRemoveMS} = {}) => {
     const ts = {}
 
     ts.clickOutHandler = d.on.pointerdown(document.body, e => {
@@ -50,21 +52,29 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body') => {
         if (state) {
             d.render(view, renderTo)
             ts.clickOutHandler.on()
+            if (app.toggleSituations.active) {
+                app.toggleSituations.active.toggleView(false)
+            }
+            app.toggleSituations.active = ts
         } else {
-            df.remove(view)
+            if (app.toggleSituations.active == ts) {
+                app.toggleSituations.active = null
+            }
+            if (delayRemoveMS != null) {
+                view.style.animation = viewOutAnimation
+                ts.launchEventHandler.off()
+                setTimeout(() => {
+                    df.remove(view)
+                    view.style.animation = ''
+                    ts.launchEventHandler.on()
+                }, delayRemoveMS)
+            } else {
+                df.remove(view)
+            }
         }
     }
 
-    ts.on = true
-    ts.toggle = (state = !ts.on) => {
-        ts.toggleView(state)
-        if (!state) {
-            ts.launchEventHandler.off()
-            ts.clickOutHandler.off()
-            df.remove(view)
-        }
-        return ts.on = state
-    }
+    app.toggleSituations.list.push(ts)
 
     return ts
 }
