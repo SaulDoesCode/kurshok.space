@@ -11,6 +11,7 @@ const {
     pushWritBtn,
     deleteWritBtn,
     writSelector,
+    isPublicCheckbox,
     writList
 } = d.h `
 <article class="writ-writer-view" ref="wwView">
@@ -23,6 +24,13 @@ const {
         </div>
         <div>
             <input type="text" name="tags" title="tag input" id="tag-input" placeholder="comma,separated,tags" autocomplete="off" ref="tagInput">
+            <div class="is-public-checkbox">
+                <label for="is-public">public</label>
+                <div class="togglebox"> 
+                    <input type="checkbox" name="public" id="is-public" ref="isPublicCheckbox" checked>
+                    <span></span>
+                </div>
+            </div>
         </div>
         <section class="ribbon">
             <button class="submit" ref="pushWritBtn">Push</button>
