@@ -1085,6 +1085,30 @@ pub enum WritError {
     Unknown,
 }
 
+#[get("/writ-raw-content/{id}")]
+pub async fn writ_raw_content(
+  req: HttpRequest,
+  wid: web::Path<String>,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
+  // TODO: ratelimiting
+  if let Some(usr) = orc.user_by_session(&req) {
+    if let Some(author_id) = wid.split(":").nth(1) {
+      if author_id == usr.id {
+        if let Ok(Some(raw_rw)) = orc.raw_content.get(wid.as_bytes()) {
+          return crate::responses::Ok(raw_rw.to_string());
+        } else {
+          return crate::responses::NotFound("writ id either didn't match anything of yours");
+        }
+      }
+    }
+  }
+
+  crate::responses::Forbidden(
+    "You can't load the raw_contents of writs if you aren't logged in or if the contents in question aren't yours"
+  )
+}
+
 #[post("/writs")]
 pub async fn writ_query(
   req: HttpRequest,
