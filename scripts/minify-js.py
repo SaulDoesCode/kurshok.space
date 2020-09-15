@@ -7,7 +7,7 @@ os.getcwd()
 
 if len(sys.argv) > 1 and ".js" in sys.argv[1]:
     print("\ntrying to minify " + sys.argv[1] + " ...")
-    os.system("exec ../../scripts/node_modules/.bin/terser " + sys.argv[1] + " -c -m --source-map -o " + sys.argv[1][:-3] + ".min.js")
+    os.system("exec ../../scripts/node_modules/.bin/terser " + sys.argv[1] + " -c -m --source-map \"root='https://grimstack.io/js/',url='" + sys.argv[1][:-3] + ".min.js.map'\" -o " + sys.argv[1][:-3] + ".min.js")
     
     print("done minifying, did it work? ")
 else:
