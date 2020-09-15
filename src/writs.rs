@@ -63,6 +63,82 @@ impl Orchestrator {
     }).is_ok()
   }
 
+  pub fn remove_writ(&self, author: &User, writ_id: String) -> bool {
+    if writ_id.split(":").nth(1).map_or(true, |author_id| author_id != author.id) {
+      return false;
+    }
+
+    let res: TransactionResult<(), ()> = (
+      &self.content,
+      &self.raw_content,
+      &self.titles,
+      &self.slugs,
+      &self.dates,
+      &self.votes,
+      &self.writs,
+      &self.tags_index,
+      &self.tag_counter,
+      &self.comment_settings,
+    )
+      .transaction(
+        |(
+          ctn,
+          raw_ctn,
+          titles,
+          slugs,
+          dates,
+          votes,
+          writs,
+          tags_index,
+          tag_counter,
+          comment_settings,
+        )| {
+          let writ_id = writ_id.as_bytes();
+          let writ: Writ = match writs.get(writ_id)? {
+            Some(w) => w.to_type(),
+            None => return Err(sled::transaction::ConflictableTransactionError::Abort(())),
+          };
+
+          writs.remove(writ_id)?;
+          votes.remove(writ_id)?;
+          ctn.remove(writ_id)?;
+          if raw_ctn.get(writ_id)?.is_some() {
+            raw_ctn.remove(writ_id)?;
+          }
+          comment_settings.remove(writ_id)?;
+
+          for tag in writ.tags.iter() {
+            let id = format!("{}:{}", tag, writ.id);
+            tags_index.remove(id.as_bytes())?;
+            let count: u64 = tag_counter.get(tag.as_bytes())?.unwrap().to_u64();
+            if count <= 1 {
+              tag_counter.remove(tag.as_bytes())?;
+            } else {
+              tag_counter.insert(tag.as_bytes(), &(count - 1).to_be_bytes())?;
+            }
+          }
+
+          titles.remove(writ.title_key().as_bytes())?;
+          slugs.remove(writ.slug_key().as_bytes())?;
+          dates.remove(writ.date_key().as_bytes())?;
+
+          Ok(())
+        },
+      );
+
+    if res.is_ok() {
+      let mut iter = self.comments.scan_prefix(writ_id.as_bytes());
+      while let Some(Ok(res)) = iter.next() {
+        let comment = res.1.to_type::<Comment>();
+        // TODO: handle this in a safer way
+        comment.remove(self);
+      }
+
+      return true;
+    }
+    false
+  }
+
   pub fn writ_query(&self, mut query: WritQuery, o_usr: Option<&User>) -> Option<Vec<Writ>> {
     let is_admin = if let Some(usr) = &o_usr {
       self.is_admin(&usr.id)
@@ -946,77 +1022,6 @@ impl RawWrit {
     Err(WritError::DBIssue)
   }
 
-  pub fn remove(&self, orc: &Orchestrator, author: &User) -> Option<Writ> {
-    if let Some(writ) = self.writ(orc) {
-      if writ.author_id() != author.id {
-        return None;
-      }
-
-      let res: TransactionResult<(), ()> = (
-        &orc.content,
-        &orc.raw_content,
-        &orc.titles,
-        &orc.slugs,
-        &orc.dates,
-        &orc.votes,
-        &orc.writs,
-        &orc.tags_index,
-        &orc.tag_counter,
-        &orc.comment_settings
-      ).transaction(|(
-        ctn,
-        raw_ctn,
-        titles,
-        slugs,
-        dates,
-        votes,
-        writs,
-        tags_index,
-        tag_counter,
-        comment_settings
-      )| {
-        let writ_id = writ.id.as_bytes();
-        writs.remove(writ_id)?;
-        votes.remove(writ_id)?;
-        ctn.remove(writ_id)?;
-        if raw_ctn.get(writ_id)?.is_some() {
-          raw_ctn.remove(writ_id)?;
-        }
-        comment_settings.remove(writ_id)?;
-
-        for tag in writ.tags.iter() {
-          let id = format!("{}:{}", tag, writ.id);
-          tags_index.remove(id.as_bytes())?;
-          let count: u64 = tag_counter.get(tag.as_bytes())?.unwrap().to_u64();
-          if count <= 1 {
-            tag_counter.remove(tag.as_bytes())?;
-          } else {
-            tag_counter.insert(tag.as_bytes(), &(count - 1).to_be_bytes())?;
-          }
-        }
-
-        titles.remove(writ.title_key().as_bytes())?;
-        slugs.remove(writ.slug_key().as_bytes())?;
-        dates.remove(writ.date_key().as_bytes())?;
-
-        Ok(())
-      });
-
-      if res.is_ok() {
-
-        let mut iter = orc.comments.scan_prefix(writ.id.as_bytes());
-        while let Some(Ok(res)) = iter.next() {
-          let comment = res.1.to_type::<Comment>();
-          // TODO: handle this in a safer way
-          comment.remove(&orc);
-        }
-
-        return Some(writ);
-      }
-    }
-    None
-  }
-
   pub fn writ(&self, orc: &Orchestrator) -> Option<Writ> {
     if let Some(id) = &self.id {
       return get_struct(&orc.writs, id.as_bytes());
@@ -1165,17 +1170,19 @@ pub async fn push_raw_writ(
 #[delete("/writ")]
 pub async fn delete_writ(
   req: HttpRequest,
-  rw: web::Json<RawWrit>,
+  body: web::Bytes,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(usr) = orc.admin_by_session(&req) {
-    return match rw.remove(orc.as_ref(), &usr) {
-      Some(_) => crate::responses::Accepted("writ has been removed"),
-      None => crate::responses::BadRequest("invalid data, could not remove writ"),
-    };
+  if let Ok(writ_id) = String::from_utf8(body.to_vec()) {
+    if let Some(usr) = orc.user_by_session(&req) {
+      return match orc.remove_writ(&usr, writ_id) {
+        true => crate::responses::Accepted("writ has been removed"),
+        false => crate::responses::BadRequest("invalid data, could not remove writ"),
+      };
+    }
   }
 
-  crate::responses::Forbidden("only admins may post writs")
+  crate::responses::Forbidden("only authorized users may remove writs")
 }
 
 #[get("/writ/{wrid_id}/upvote")]
