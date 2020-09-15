@@ -83,7 +83,7 @@ app.pushWrit = async (title, raw_content, tags, opts = {}) => {
         viewable_by: []
     }
     Object.assign(raw_writ, opts)
-    const res = await jsonPut('/writ', raw_writ)
+    const res = await app.jsonPut('/writ', raw_writ)
     const data = await res.json()
 
     return data.ok ? Promise.resolve(data.data) : Promise.reject(data)
@@ -130,4 +130,30 @@ d.on.click(clearEditorBtn, e => {
         app.ww.selectedWLE.classList.remove('selected')
         app.ww.selectedWLE = null
     }
+})
+
+d.on.click(pushWritBtn, async e => {
+    try {
+        console.log('trying to push writ...')
+        let res
+
+        const title = titleInput.value.trim()
+        const raw_content = writingPad.value.trim()
+        const public = isPublicCheckbox.checked
+        const commentable = isCommentableCheckbox.checked
+        const tags = tagInput.value.split(',').map(t => t.trim())
+        const ops = {is_md: true, public, commentable}
+        if (app.ww.active) ops.id = app.ww.active.id
+        res = await app.pushWrit(title, raw_content, tags, ops)
+        
+        if (res != null) {
+            console.log(res)
+        }
+    } catch(e) {
+        console.error(e)
+    }
+})
+
+d.on.click(deleteWritBtn, e => {
+
 })
