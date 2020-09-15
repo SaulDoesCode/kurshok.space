@@ -10,24 +10,19 @@ const jsonHTTPMethod = method => (url, body) => fetch(url, {
 app.jsonPost = jsonHTTPMethod('POST')
 app.jsonPut = jsonHTTPMethod('PUT')
 
-app.writQuery = async (query = {}) => {
+const wq = endpoint => async (query = {}) => {
     if (isNaN(query.page)) query.page = 1
     if (!query.kind) query.kind = 'post'
-    const res = await app.jsonPost('/writs', query)
+    const res = await app.jsonPost(endpoint, query)
     return await res.json()
 }
-app.editableWritQuery = async (query = {}) => {
-    if (isNaN(query.page)) query.page = 1
-    if (!query.kind) query.kind = 'post'
-    const res = await app.jsonPost('/editable-writs', query)
-    return await res.json()
-}
+app.writQuery = wq('/writs')
+app.editableWritQuery = wq('/editable-writs')
 
 app.toggleSituations = {list: [], active: null}
 
 app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation, delayRemoveMS} = {}) => {
     const ts = {}
-
     ts.clickOutHandler = d.on.pointerdown(document.body, e => {
         if (
             e.target != view &&
@@ -75,7 +70,6 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation
     }
 
     app.toggleSituations.list.push(ts)
-
     return ts
 }
 
