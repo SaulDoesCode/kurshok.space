@@ -1,5 +1,6 @@
 import app from '/js/site.min.js'
 const d = app.d, df = d.domfn
+const {div, span} = df
 
 const wwLauncher = d.query('.ww-launcher')
 
@@ -10,8 +11,10 @@ const {
     tagInput,
     pushWritBtn,
     deleteWritBtn,
+    clearEditorBtn,
     writSelector,
     isPublicCheckbox,
+    isCommentableCheckbox,
     writList
 } = d.h `
 <article class="writ-writer-view" ref="wwView">
@@ -42,6 +45,7 @@ const {
         <section class="ribbon">
             <button class="submit" ref="pushWritBtn">Push</button>
             <button class="submit" ref="deleteWritBtn">Delete</button>
+            <button class="submit" ref="clearEditorBtn">Clear Editor</button>
         </section>
     </section>
     <aside class="writ-selector" ref="writSelector">
@@ -58,12 +62,12 @@ writingPad.value = ''
 })).toggleView()
 
 
-const writListEntry = (title, id) => d('div', {
+const writListEntry = (title, id) => div({
     class: 'wl-entry',
     $: writList,
     attr: {wid: id}
 },
-    d('span', title)
+    span(title)
 )
 
 app.user.writs = {}
@@ -101,10 +105,10 @@ app.editableWritQuery({
 })
 
 d.on.click(writList, e => {
-    if (e.target.classList.contains('selected')) return
+    if (e.target.classList.contains('selected') || e.target.parentElement.classList.contains('selected')) return
     let wid = e.target.getAttribute('wid') || e.target.parentElement.getAttribute('wid')
     if (wid != null) {
-        const writ = app.user.writs[wid]
+        const writ = app.ww.active = app.user.writs[wid]
         if (app.ww.selectedWLE) app.ww.selectedWLE.classList.remove('selected')
         app.ww.selectedWLE = d.query(`[wid="${wid}"]`)
         app.ww.selectedWLE.classList.add('selected')
@@ -112,6 +116,18 @@ d.on.click(writList, e => {
         titleInput.value = writ.title
         writingPad.value = writ.raw_content
         tagInput.value = writ.tags.join(', ')
+        isPublicCheckbox.checked = writ.commentable
+        isCommentableCheckbox.checked = writ.public
         console.log('got one:', writ)
+    }
+})
+
+d.on.click(clearEditorBtn, e => {
+    if (app.ww.active) app.ww.active = null
+    titleInput.value = writingPad.value = tagInput.value = ''
+    isPublicCheckbox.checked = isCommentableCheckbox.checked = true
+    if (app.ww.selectedWLE) {
+        app.ww.selectedWLE.classList.remove('selected')
+        app.ww.selectedWLE = null
     }
 })
