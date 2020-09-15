@@ -15,7 +15,7 @@ const {
     isPublicCheckbox,
     isCommentableCheckbox,
     writList
-} = d.h `
+} = d.h/* html */`
 <article class="writ-writer-view" ref="wwView">
     <section class="writer">
         <div>
@@ -59,7 +59,6 @@ writingPad.value = ''
     delayRemoveMS: 220,
 })).toggleView()
 
-
 const writListEntry = (title, id) => div({
     class: 'wl-entry',
     $: writList,
@@ -67,23 +66,36 @@ const writListEntry = (title, id) => div({
 },
     span(title),
     div(
-        span({
-            class: 'delete-writ',
-            once: {
-                async pointerup() {
-                    try {
-                        const res = await app.deleteWrit(app.ww.writs[id])
-                        if (res.ok) {
-                            df.remove(d.query(`[wid="${id}"]`))
-                            if (app.ww.active && app.ww.active.id == id) app.clearEditor()
-                            delete app.ww[id]
-                        }
-                    } catch(e) {
-                        console.error(`Well, that didn't work: ${e}`)
-                    }
+        () => {
+            const delBtn = span({class: 'delete-writ', attr: {title: 'Double click/tap to delete writ'}}, 'Del')
+            // manually jigging double click/tap
+            let timeout, clicks = 0
+            const clickHandler = d.on.pointerup(delBtn, async e => {
+                clearTimeout(timeout)
+                if (clicks++ == 2) {
+                    clicks = 0
+                } else {
+                    timeout = setTimeout(() => {
+                        clicks = 0
+                    }, 900)
+                    return
                 }
-            }
-        }, 'Del')
+                try {
+                    clickHandler.off()
+                    const res = await app.deleteWritRequest(id)
+                    if (res.ok) {
+                        df.remove(d.query(`[wid="${id}"]`))
+                        if (app.ww.active && app.ww.active.id == id) app.clearEditor()
+                        delete app.ww.writs[id]
+                    }
+                } catch (e) {
+                    clickHandler.on()
+                    console.error(`Well, that didn't work: ${e}`)
+                }
+            })
+
+            return delBtn
+        }
     )
 )
 
@@ -105,7 +117,7 @@ app.pushWrit = async (title, raw_content, tags, ops = {}) => {
     return data.ok ? Promise.resolve(data.data) : Promise.reject(data)
 }
 
-app.deleteWrit = rawWrit => app.jsonDelete('/writ', rawWrit)
+app.deleteWritRequest = writID => app.txtDelete('/writ', writID)
 
 app.editableWritQuery({
     author_name: app.user.username,
@@ -184,6 +196,7 @@ app.clearEditor = () => {
         pushWritBtn.textContent = 'Push'
     }
 }
+
 app.editorPushWrit = async () => {
     console.log('trying to push writ...')
     let res

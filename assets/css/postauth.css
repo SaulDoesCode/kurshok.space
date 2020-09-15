@@ -167,6 +167,7 @@
     transform: translateX(.25em);
     border-radius: 4px;
     background: hsla(0, 0%, 80%, 0.6);
+    user-select: none;
 }
 
 .writ-writer-view .wl-entry:hover,
