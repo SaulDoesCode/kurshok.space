@@ -108,9 +108,9 @@ d.html = (input, ...args) => {
     else return d.h(input, ...args)
     if (input instanceof Function) input = input(host)
     if (input instanceof Node) return input
-    if (isNum(input)) input = String(input)
+    if (d.isNum(input)) input = String(input)
     if (typeof input === 'string') return Array.from(document.createRange().createContextualFragment(input).childNodes)
-    if (isArr(input)) return input.map(i => html(i, host))
+    if (d.isArr(input)) return input.map(i => d.html(i, host))
     throw new Error('.html: unrenderable input')
 }
 
