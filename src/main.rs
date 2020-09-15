@@ -115,6 +115,7 @@ async fn main() -> std::io::Result<()> {
         .service(writs::editable_writ_query)
         .service(writs::writ_query)
         .service(writs::push_raw_writ)
+        .service(writs::delete_writ)
         .service(writs::upvote_writ)
         .service(writs::downvote_writ)
         

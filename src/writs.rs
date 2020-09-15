@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use std::sync::Arc;
 
-use actix_web::{get, post, put, web, HttpRequest, HttpResponse};
+use actix_web::{get, post, put, delete, web, HttpRequest, HttpResponse};
 
 // use super::CONF;
 use crate::orchestrator::Orchestrator;
@@ -743,7 +743,6 @@ pub struct EditableWrit {
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct RawWrit {
   pub id: Option<String>,
-  pub posted: Option<DateTime<Utc>>,
   pub title: String,
   pub raw_content: String,
   pub kind: String,
@@ -785,7 +784,7 @@ impl RawWrit {
     let writ = Writ{
       id: writ_id,
       slug: slug::slugify(&self.title),
-      posted: self.posted.unwrap_or(Utc::now()),
+      posted: Utc::now(),
       title: self.title.clone(),
       kind: self.kind.clone(),
       tags: self.tags.clone(),
@@ -839,6 +838,9 @@ impl RawWrit {
       comment_settings
     )| {
       let writ_id = writ.id.as_bytes();
+      
+      let mut new_writ = writ.clone();
+
       if writ.is_md {
         raw_ctn.insert(writ_id, raw_content.as_bytes())?;
         ctn.insert(writ_id, render_md(raw_content).as_bytes())?;
@@ -847,8 +849,8 @@ impl RawWrit {
       }
 
       if is_new_writ {
-        for tag in writ.tags.iter() {
-          let id = format!("{}:{}", tag.as_str(), writ.id);
+        for tag in new_writ.tags.iter() {
+          let id = format!("{}:{}", tag.as_str(), new_writ.id);
           tags_index.insert(id.as_bytes(), binbe_serialize(&tag))?;
 
           let count: u64 = tag_counter.get(tag.as_bytes())?
@@ -856,36 +858,36 @@ impl RawWrit {
           tag_counter.insert(tag.as_bytes(), IVec::from_u64(count + 1))?;
         }
 
-        titles.insert(writ.title_key().as_bytes(), writ_id)?;
-        slugs.insert(writ.slug_key().as_bytes(), writ_id)?;
+        titles.insert(new_writ.title_key().as_bytes(), writ_id)?;
+        slugs.insert(new_writ.slug_key().as_bytes(), writ_id)?;
 
-        dates.insert(writ.date_key().as_bytes(), writ_id)?;
+        dates.insert(new_writ.date_key().as_bytes(), writ_id)?;
 
         votes.insert(writ_id, &0i64.to_be_bytes())?;
 
         comment_settings.insert(
           writ_id,
-          binbe_serialize(&CommentSettings::default(writ.id.clone(), writ.public))
+          binbe_serialize(&CommentSettings::default(new_writ.id.clone(), new_writ.public))
         )?;
       } else {
         let old_writ: Writ = writs.get(writ_id)?.unwrap().to_type();
         
-        if writ.kind != old_writ.kind || writ.id != old_writ.id || writ.title != old_writ.title  || writ.slug != old_writ.slug {
+        if new_writ.kind != old_writ.kind || new_writ.id != old_writ.id || new_writ.title != old_writ.title  || new_writ.slug != old_writ.slug {
           writs.remove(old_writ.id.as_bytes())?;
           titles.remove(old_writ.title_key().as_bytes())?;
-          titles.insert(writ.title_key().as_bytes(), writ_id)?;
+          titles.insert(new_writ.title_key().as_bytes(), writ_id)?;
 
           slugs.remove(old_writ.slug_key().as_bytes())?;
-          slugs.insert(writ.slug_key().as_bytes(), writ_id)?;
+          slugs.insert(new_writ.slug_key().as_bytes(), writ_id)?;
 
           let mut settings: CommentSettings = comment_settings.get(old_writ.id.as_bytes())?.unwrap().to_type();
-          settings.id = writ.id.clone();
+          settings.id = new_writ.id.clone();
           comment_settings.insert(writ_id, binbe_serialize(&settings))?;
         }
 
-        if writ.tags != old_writ.tags {
+        if new_writ.tags != old_writ.tags {
           for tag in old_writ.tags.iter() {
-            let id = format!("{}:{}", tag, writ.id);
+            let id = format!("{}:{}", tag, new_writ.id);
             tags_index.remove(id.as_bytes())?;
             let count: u64 = tag_counter.get(tag.as_bytes())?.unwrap().to_u64();
             if count <= 1 {
@@ -894,8 +896,8 @@ impl RawWrit {
               tag_counter.insert(tag.as_bytes(), &(count - 1).to_be_bytes())?;
             }
           }
-          for tag in writ.tags.iter() {
-            let id = format!("{}:{}", tag, writ.id);
+          for tag in new_writ.tags.iter() {
+            let id = format!("{}:{}", tag, new_writ.id);
             tags_index.remove(id.as_bytes())?;
             let count: u64 = tag_counter.get(tag.as_bytes())?.unwrap().to_u64();
             if count <= 1 {
@@ -906,17 +908,18 @@ impl RawWrit {
           }
         }
 
-        if old_writ.is_md && !writ.is_md {
+        if old_writ.is_md && !new_writ.is_md {
           raw_ctn.remove(writ_id)?;
         }
 
-        if writ.posted != old_writ.posted {
-          dates.remove(old_writ.date_key().as_bytes())?;
-          dates.insert(writ.date_key().as_bytes(), writ_id)?;
+        if new_writ.posted != old_writ.posted {
+          new_writ.posted = old_writ.posted.clone();
+          // dates.remove(old_writ.date_key().as_bytes())?;
+          // dates.insert(writ.date_key().as_bytes(), writ_id)?;
         }
       }
 
-      writs.insert(writ_id, writ.to_bin())?;
+      writs.insert(writ_id, new_writ.to_bin())?;
 
       Ok(())
     });
@@ -928,8 +931,12 @@ impl RawWrit {
     Err(WritError::DBIssue)
   }
 
-  pub fn remove(&self, orc: &Orchestrator) -> Option<Writ> {
+  pub fn remove(&self, orc: &Orchestrator, author: &User) -> Option<Writ> {
     if let Some(writ) = self.writ(orc) {
+      if writ.author_id() != author.id {
+        return None;
+      }
+
       if (
         &orc.content,
         &orc.raw_content,
@@ -1108,6 +1115,22 @@ pub async fn push_raw_writ(
     return match rw.commit(&usr, orc.as_ref()) {
       Ok(w) => crate::responses::Ok(w),
       Err(e) => crate::responses::BadRequest(format!("error: {}", e)),
+    };
+  }
+
+  crate::responses::Forbidden("only admins may post writs")
+}
+
+#[delete("/writ")]
+pub async fn delete_writ(
+  req: HttpRequest,
+  rw: web::Json<RawWrit>,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
+  if let Some(usr) = orc.admin_by_session(&req) {
+    return match rw.remove(orc.as_ref(), &usr) {
+      Some(_) => crate::responses::Accepted("writ has been removed"),
+      None => crate::responses::BadRequest("invalid data, could not remove writ"),
     };
   }
 
