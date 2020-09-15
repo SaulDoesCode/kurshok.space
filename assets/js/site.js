@@ -2,13 +2,15 @@ import domlib from '/js/domlib.min.js'
 
 const app = domlib.emitter()
 const d = app.d = domlib, df = domlib.domfn
-const jsonHTTPMethod = method => (url, body) => fetch(url, {
+const jsonHTTPMethod = method => (url, body, ops = {}) => fetch(url, {
     method,
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    ...ops,
 })
 app.jsonPost = jsonHTTPMethod('POST')
 app.jsonPut = jsonHTTPMethod('PUT')
+app.jsonDelete = jsonHTTPMethod('DELETE')
 
 const wq = endpoint => async (query = {}) => {
     if (isNaN(query.page)) query.page = 1
