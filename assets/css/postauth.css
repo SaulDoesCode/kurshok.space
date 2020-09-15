@@ -143,7 +143,11 @@
 
 .writ-writer-view .wl-entry {
     box-sizing: border-box;
-    display: block;
+    display: flex;
+    justify-content: space-between;
+    align-content: center;
+    align-items: center;
+    flex-flow: row nowrap;
     width: calc(100% - 1.25em);
     padding: .25em .5em;
     margin: .25em auto;
@@ -153,6 +157,16 @@
     transition: all 140ms ease-in;
     text-align: center;
     font-size: .96em;
+}
+
+.writ-writer-view .wl-entry .delete-writ {
+    display: inline-block;
+    height: 100%;
+    min-width: 22px;
+    padding: .2em .5em;
+    transform: translateX(.25em);
+    border-radius: 4px;
+    background: hsla(0, 0%, 80%, 0.6);
 }
 
 .writ-writer-view .wl-entry:hover,

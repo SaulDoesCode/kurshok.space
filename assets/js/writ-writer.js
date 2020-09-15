@@ -10,7 +10,6 @@ const {
     writingPad,
     tagInput,
     pushWritBtn,
-    deleteWritBtn,
     clearEditorBtn,
     writSelector,
     isPublicCheckbox,
@@ -44,7 +43,6 @@ const {
         </div>
         <section class="ribbon">
             <button class="submit" ref="pushWritBtn">Push</button>
-            <button class="submit" ref="deleteWritBtn">Delete</button>
             <button class="submit" ref="clearEditorBtn">Clear Editor</button>
         </section>
     </section>
@@ -67,48 +65,68 @@ const writListEntry = (title, id) => div({
     $: writList,
     attr: {wid: id}
 },
-    span(title)
+    span(title),
+    div(
+        span({
+            class: 'delete-writ',
+            once: {
+                async pointerup() {
+                    try {
+                        const res = await app.deleteWrit(app.ww.writs[id])
+                        if (res.ok) {
+                            df.remove(d.query(`[wid="${id}"]`))
+                            if (app.ww.active && app.ww.active.id == id) app.clearEditor()
+                            delete app.ww[id]
+                        }
+                    } catch(e) {
+                        console.error(`Well, that didn't work: ${e}`)
+                    }
+                }
+            }
+        }, 'Del')
+    )
 )
 
-app.user.writs = {}
-app.ww = {}
+app.ww = {writs: {}}
 
-app.pushWrit = async (title, raw_content, tags, opts = {}) => {
+app.pushWrit = async (title, raw_content, tags, ops = {}) => {
     const raw_writ = {
         title,
         raw_content: raw_content.trim(),
         tags,
         kind: 'post',
         public: true,
-        viewable_by: []
+        viewable_by: [],
+        ...ops,
     }
-    Object.assign(raw_writ, opts)
     const res = await app.jsonPut('/writ', raw_writ)
     const data = await res.json()
 
     return data.ok ? Promise.resolve(data.data) : Promise.reject(data)
 }
 
+app.deleteWrit = rawWrit => app.jsonDelete('/writ', rawWrit)
+
 app.editableWritQuery({
     author_name: app.user.username,
     with_raw_content: true,
 }).then(async writs => {
-    console.log(writs)
     if (!d.isArr(writs)) {
         console.error("failed to fetch user's editable writs")
     }
+    console.log(writs)
 
-    writs.forEach(w => {
-        app.user.writs[w.id] = w
+    for (const w of writs) {
+        app.ww.writs[w.id] = w
         writListEntry(w.title, w.id)
-    })
+    }
 })
 
-d.on.click(writList, e => {
+d.on.pointerup(writList, e => {
     if (e.target.classList.contains('selected') || e.target.parentElement.classList.contains('selected')) return
     let wid = e.target.getAttribute('wid') || e.target.parentElement.getAttribute('wid')
     if (wid != null) {
-        const writ = app.ww.active = app.user.writs[wid]
+        const writ = app.ww.active = app.ww.writs[wid]
         if (app.ww.selectedWLE) app.ww.selectedWLE.classList.remove('selected')
         app.ww.selectedWLE = d.query(`[wid="${wid}"]`)
         app.ww.selectedWLE.classList.add('selected')
@@ -118,42 +136,45 @@ d.on.click(writList, e => {
         tagInput.value = writ.tags.join(', ')
         isPublicCheckbox.checked = writ.commentable
         isCommentableCheckbox.checked = writ.public
-        console.log('got one:', writ)
+        pushWritBtn.textContent = 'Update'
     }
 })
 
-d.on.click(clearEditorBtn, e => {
+app.clearEditor = () => {
     if (app.ww.active) app.ww.active = null
     titleInput.value = writingPad.value = tagInput.value = ''
     isPublicCheckbox.checked = isCommentableCheckbox.checked = true
     if (app.ww.selectedWLE) {
         app.ww.selectedWLE.classList.remove('selected')
         app.ww.selectedWLE = null
+        pushWritBtn.textContent = 'Push'
     }
-})
+}
+app.editorPushWrit = async () => {
+    console.log('trying to push writ...')
+    let res
 
-d.on.click(pushWritBtn, async e => {
-    try {
-        console.log('trying to push writ...')
-        let res
-
-        const title = titleInput.value.trim()
-        const raw_content = writingPad.value.trim()
-        const public = isPublicCheckbox.checked
-        const commentable = isCommentableCheckbox.checked
-        const tags = tagInput.value.split(',').map(t => t.trim())
-        const ops = {is_md: true, public, commentable}
-        if (app.ww.active) ops.id = app.ww.active.id
-        res = await app.pushWrit(title, raw_content, tags, ops)
-        
-        if (res != null) {
-            console.log(res)
-        }
-    } catch(e) {
-        console.error(e)
+    const title = titleInput.value.trim()
+    const raw_content = writingPad.value.trim()
+    const public = isPublicCheckbox.checked
+    const commentable = isCommentableCheckbox.checked
+    const tags = tagInput.value.split(',').map(t => t.trim())
+    const ops = {
+        is_md: true,
+        public,
+        commentable
     }
-})
+    if (app.ww.active) ops.id = app.ww.active.id
+    res = await app.pushWrit(title, raw_content, tags, ops)
 
-d.on.click(deleteWritBtn, e => {
+    if (res != null && res.ok) {
+        console.log(res)
+        return res
+    }
+}
 
+d.on.pointerup(clearEditorBtn, app.clearEditor)
+
+d.on.pointerup(pushWritBtn, e => {
+    app.editorPushWrit()
 })
