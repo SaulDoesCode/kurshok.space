@@ -58,11 +58,10 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation
             if (delayRemoveMS != null) {
                 view.style.animation = viewOutAnimation
                 ts.launchEventHandler.off()
-                setTimeout(() => {
-                    df.remove(view)
+                df.remove(view, delayRemoveMS).then(() => {
                     view.style.animation = ''
                     ts.launchEventHandler.on()
-                }, delayRemoveMS)
+                })
             } else {
                 df.remove(view)
             }
