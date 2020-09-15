@@ -109,7 +109,7 @@ app.deleteWrit = rawWrit => app.jsonDelete('/writ', rawWrit)
 
 app.editableWritQuery({
     author_name: app.user.username,
-    with_raw_content: true,
+    with_raw_content: false,
 }).then(async writs => {
     if (!d.isArr(writs)) {
         console.error("failed to fetch user's editable writs")
@@ -122,6 +122,11 @@ app.editableWritQuery({
     }
 })
 
+app.rawContentRequest = async wid => {
+    const res = await fetch('/writ-raw-content/' + wid)
+    return await res.json()
+}
+
 d.on.pointerup(writList, e => {
     if (e.target.classList.contains('selected') || e.target.parentElement.classList.contains('selected')) return
     let wid = e.target.getAttribute('wid') || e.target.parentElement.getAttribute('wid')
@@ -131,8 +136,37 @@ d.on.pointerup(writList, e => {
         app.ww.selectedWLE = d.query(`[wid="${wid}"]`)
         app.ww.selectedWLE.classList.add('selected')
 
+        let noContent = writ.raw_content == null
+        if (writ.raw_content == null) {
+            app.rawContentRequest(writ.id).then(data => {
+                if (!data.ok) {
+                    writingPad.value = 'Ok, so loading failed for some reason, you should reload or something, it\'s probably a client side error, or less likely, a database issue - ' + (data.status || '')
+                }
+                writingPad.value = writ.raw_content = data.data
+                noContent = false
+            })
+        }
+
         titleInput.value = writ.title
-        writingPad.value = writ.raw_content
+        writingPad.value = writ.raw_content || 'Hang tight, the content is loading...'
+        setTimeout(() => {
+            if (noContent) {
+                let tick = 0
+                const baseMsg = 'Hang tight, the content is loading'
+                let interval = setInterval(() => {
+                    if (noContent) {
+                        let dots = ''
+                        d.each(tick++, () => dots += '.')
+                        writingPad.value = baseMsg + dots
+                        if (tick == 4) tick = 0
+                    } else {
+                        clearInterval(interval)
+                        tick = 0
+                        writingPad.value = writ.raw_content
+                    }
+                }, 220);
+            }
+        }, 220)
         tagInput.value = writ.tags.join(', ')
         isPublicCheckbox.checked = writ.commentable
         isCommentableCheckbox.checked = writ.public
