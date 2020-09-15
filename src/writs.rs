@@ -90,16 +90,34 @@ impl Orchestrator {
       author_ids = Some(ids);
     } else if query.author_id.is_none() {
       if let Some(name) = &query.author_name {
-        if let Ok(Some(id)) = self.usernames.get(name.as_bytes()) {
-          query.author_id = Some(id.to_string());
-        } else {
-          return None;
+        let mut found = false;
+        if let Some(usr) = &o_usr {
+          if usr.username == *name {
+            found = true;
+            query.author_id = Some(usr.id.clone());
+          }
+        }
+        if !found {
+          if let Ok(Some(id)) = self.usernames.get(name.as_bytes()) {
+            query.author_id = Some(id.to_string());
+          } else {
+            return None;
+          }
         }
       } else if let Some(handle) = &query.author_handle {
-        if let Ok(Some(id)) = self.handles.get(handle.as_bytes()) {
-          query.author_id = Some(id.to_string());
-        } else {
-          return None;
+        let mut found = false;
+        if let Some(usr) = &o_usr {
+          if usr.handle == *handle {
+            found = true;
+            query.author_id = Some(usr.id.clone());
+          }
+        }
+        if !found {
+          if let Ok(Some(id)) = self.handles.get(handle.as_bytes()) {
+            query.author_id = Some(id.to_string());
+          } else {
+            return None;
+          }
         }
       }
     }
@@ -150,12 +168,8 @@ impl Orchestrator {
             if writ.public != *public {
               return false;
             }
-          } else if !writ.public {
-            return false;
           }
-        }
-
-        if let Some(viewable_by) = &query.viewable_by {
+        } else if let Some(viewable_by) = &query.viewable_by {
           if let Some(attrs) = &user_attributes {  
             if !viewable_by.iter().all(|a| attrs.contains(a)) {
               return false;
@@ -227,10 +241,9 @@ impl Orchestrator {
           }
         }
 
-        let writ: Writ = if let Some(w) = get_struct(&self.writs, id.as_bytes()) {
-          w
-        } else {
-          continue;
+        let writ: Writ = match get_struct(&self.writs, id.as_bytes()) {
+          Some(w) => w,
+          None => continue,
         };
 
         if check_writ_against_query(&writ, false) {
@@ -756,7 +769,7 @@ pub struct RawWrit {
 impl RawWrit {
   pub fn commit(&self, author: &User, orc: &Orchestrator) -> Result<Writ, WritError> {
     let is_md = self.is_md.unwrap_or(true);
-    if is_md && !orc.is_admin(&author.id) {
+    if !is_md && !orc.is_admin(&author.id) {
       return Err(WritError::NoPermNoMD);
     }
 
@@ -805,13 +818,15 @@ impl RawWrit {
 
     let raw_content = self.raw_content.trim();
 
-    // hash contents and ratelimit with it to prevent spam
-    let rc_hash = orc.hash(raw_content.as_bytes());
-    let mut hitter = Vec::from("wr".as_bytes());
-    hitter.extend_from_slice(&rc_hash);
-    let rl = orc.ratelimiter.hit(&hitter, 1, Duration::hours(8760));
-    if rl.is_timing_out() {
-      return Err(WritError::DuplicateWrit);
+    if !orc.dev_mode && is_new_writ {
+      // hash contents and ratelimit with it to prevent spam
+      let rc_hash = orc.hash(raw_content.as_bytes());
+      let mut hitter = Vec::from("wr".as_bytes());
+      hitter.extend_from_slice(&rc_hash);
+      let rl = orc.ratelimiter.hit(&hitter, 1, Duration::minutes(360));
+      if rl.is_timing_out() {
+        return Err(WritError::DuplicateWrit);
+      }
     }
 
     let res: TransactionResult<(), ()> = (
@@ -937,7 +952,7 @@ impl RawWrit {
         return None;
       }
 
-      if (
+      let res: TransactionResult<(), ()> = (
         &orc.content,
         &orc.raw_content,
         &orc.titles,
@@ -984,16 +999,18 @@ impl RawWrit {
         slugs.remove(writ.slug_key().as_bytes())?;
         dates.remove(writ.date_key().as_bytes())?;
 
-        let mut iter = orc.comments.scan_prefix(writ_id);
-        while let Some(res) = iter.next() {
-          let comment = res?.1.to_type::<Comment>();
-          if !comment.remove(orc.clone()) {
-            return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-          }
+        Ok(())
+      });
+
+      if res.is_ok() {
+
+        let mut iter = orc.comments.scan_prefix(writ.id.as_bytes());
+        while let Some(Ok(res)) = iter.next() {
+          let comment = res.1.to_type::<Comment>();
+          // TODO: handle this in a safer way
+          comment.remove(&orc);
         }
 
-        Ok(())
-      }).is_ok() {
         return Some(writ);
       }
     }
