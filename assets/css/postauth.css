@@ -1,6 +1,6 @@
 .writ-writer-view {
     position: fixed;
-    top: calc(4% + 54px);
+    top: 65px;
     margin: .5em auto;
     width: 95vw;
     max-width: 1080px;
