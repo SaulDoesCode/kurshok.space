@@ -90,25 +90,28 @@ app.editableWritQuery({
     with_raw_content: true,
 }).then(async writs => {
     console.log(writs)
+    if (!d.isArr(writs)) {
+        console.error("failed to fetch user's editable writs")
+    }
+
     writs.forEach(w => {
         app.user.writs[w.id] = w
         writListEntry(w.title, w.id)
     })
+})
 
-    d.on.click(writList, e => {
-        let wid = e.target.getAttribute('wid') || e.target.parentElement.getAttribute('wid')
-        if (wid != null) {
-            const writ = app.user.writs[wid]
-            if (app.ww.selectedWLE) {
-                app.ww.selectedWLE.classList.remove('selected')
-            }
-            app.ww.selectedWLE = d.query(`[wid="${wid}"]`)
-            app.ww.selectedWLE.classList.add('selected')
+d.on.click(writList, e => {
+    if (e.target.classList.contains('selected')) return
+    let wid = e.target.getAttribute('wid') || e.target.parentElement.getAttribute('wid')
+    if (wid != null) {
+        const writ = app.user.writs[wid]
+        if (app.ww.selectedWLE) app.ww.selectedWLE.classList.remove('selected')
+        app.ww.selectedWLE = d.query(`[wid="${wid}"]`)
+        app.ww.selectedWLE.classList.add('selected')
 
-            titleInput.value = writ.title
-            writingPad.value = writ.raw_content
-            tagInput.value = writ.tags.join(', ')
-            console.log('got one:' , writ)
-        }
-    })
+        titleInput.value = writ.title
+        writingPad.value = writ.raw_content
+        tagInput.value = writ.tags.join(', ')
+        console.log('got one:', writ)
+    }
 })
