@@ -160,14 +160,20 @@
 }
 
 .writ-writer-view .wl-entry .delete-writ {
+    font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", Times, Symbola, Aegyptus, Code2000, Code2001, Code2002, Musica, serif, LastResort;
+    font-size: 1.15em;
     display: inline-block;
     height: 100%;
     min-width: 22px;
-    padding: .2em .5em;
+    padding: .1em .2em;
     transform: translateX(.25em);
     border-radius: 4px;
-    background: hsla(0, 0%, 80%, 0.6);
+    background: hsla(0, 0%, 85%, 0.5);
     user-select: none;
+}
+
+.writ-writer-view .wl-entry .delete-writ.prep {
+    background: hsla(0, 84%, 73%, 0.5);
 }
 
 .writ-writer-view .wl-entry:hover,
