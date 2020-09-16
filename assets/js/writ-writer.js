@@ -67,15 +67,23 @@ const writListEntry = (title, id) => div({
     span(title),
     div(
         () => {
-            const delBtn = span({class: 'delete-writ', attr: {title: 'Double click/tap to delete writ'}}, 'Del')
+            const delBtn = span({
+                class: 'delete-writ',
+                attr: {
+                    title: 'Double click/tap to delete writ'
+                }
+            }, '🗑')
+
             // manually jigging double click/tap
             let timeout, clicks = 0
             const clickHandler = d.on.pointerup(delBtn, async e => {
                 clearTimeout(timeout)
-                if (clicks++ == 2) {
+                if (++clicks == 2) {
                     clicks = 0
                 } else {
+                    if (clicks == 1) delBtn.classList.add('prep')
                     timeout = setTimeout(() => {
+                        delBtn.classList.remove('prep')
                         clicks = 0
                     }, 900)
                     return
