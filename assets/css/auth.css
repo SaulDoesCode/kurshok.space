@@ -24,3 +24,7 @@
 .auth-view > div > * {
     margin: .5em;
 }
+
+.auth-view label {
+    color: hsl(0, 0%, 30%);
+}

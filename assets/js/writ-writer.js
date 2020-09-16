@@ -21,7 +21,7 @@ const {
         <div>
             <input type="text" name="post-title" title="writ title" id="title-input" placeholder="writ title" autocomplete="off" ref="titleInput">
         </div>
-        <div>
+        <div class="writing-pad-container">
             <textarea class="writing-pad" ref="writingPad" title="writ content" spellcheck="true" wrap="off" minlength="10" required placeholder="content of your writ (it can be markdown)"></textarea>
         </div>
         <div class="tags-and-toggles">
@@ -64,7 +64,7 @@ const writListEntry = (title, id) => div({
     $: writList,
     attr: {wid: id}
 },
-    span(title),
+    parent => parent.titleSpan = span(title),
     div(
         () => {
             const delBtn = span({
@@ -232,4 +232,10 @@ d.on.pointerup(clearEditorBtn, app.clearEditor)
 
 d.on.pointerup(pushWritBtn, e => {
     app.editorPushWrit()
+})
+
+d.on.input(titleInput, e => {
+    if (app.ww.active && app.ww.selectedWLE) {
+        app.ww.selectedWLE.titleSpan.textContent = titleInput.value
+    }
 })
