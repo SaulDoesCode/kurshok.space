@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="/css/postauth.min.css">
     {% endif %}
     <script src="/js/site.min.js" type="module"></script>
+    <script src="/js/view.min.js" type="module" defer></script>
 </head>
 <body>
     <nav class="hero">
@@ -28,12 +29,11 @@
 
             <button class="profile-launcher" title="click to see or build your profile">{{ username }}</button>
             <script type="module" defer>
-                import d from '/js/domlib.min.js'
                 import app from '/js/site.min.js'
                 import '/js/profile.min.js'
                 app.user = { username: "{{ username }}".trim() }
                 // d.once.click('.profile-launcher', () => {})
-                d.once.click('.ww-launcher', () => import('/js/writ-writer.min.js'))
+                app.d.once.click('.ww-launcher', () => import('/js/writ-writer.min.js'))
             </script>
         {% else %}
             <button class="auth-launcher" title="click for a login or signup modal">Auth</button>
