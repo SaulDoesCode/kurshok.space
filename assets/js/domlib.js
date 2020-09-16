@@ -684,8 +684,10 @@ export default (d => {
         }
       }
 
-      const host = ops.$ || ops.render
-      if (host) d.attach(host, 'appendChild', el)
+      const host = ops.$ || ops.render || ops.$pre
+      if (host) {
+        d.attach(host, host == ops.$pre ? 'prepend' : 'appendChild', el)
+      }
     }
 
     if (el.nodeType !== 3) {
