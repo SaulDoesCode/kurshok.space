@@ -107,7 +107,7 @@ export default (d => {
 
   d.html = (input, ...args) => {
     if (args.length == 1) host = args[0]
-    else return d.h(input, ...args)
+    else if (args.length) return d.h(input, ...args)
     if (input instanceof Function) input = input(host)
     if (input instanceof Node) return input
     if (d.isNum(input)) input = String(input)
@@ -495,11 +495,16 @@ export default (d => {
       if (d.isArr(node))
         for (const n of node) domfn.class(n, c, state)
       else if (c.constructor === Object)
-        for (const name in c) domfn.class(node, name, c[name])
+        for (const name in c) {
+          if (c[name] === true) node.classList.add(name)
+          else if (c[name] === false) node.classList.remove(name)
+          else for (const cl of c) node.classList.toggle(name)
+        }
       if (typeof c === 'string') c = c.split(' ')
       if (d.isArr(c)) {
-        const method = state instanceof Boolean ? state ? 'add' : 'remove' : 'toggle'
-        for (const cl of c) node.classList[method](cl)
+        if (state === true) node.classList.add(...c)
+        else if (state === false) node.classList.remove(...c)
+        else for (const cl of c) node.classList.toggle(c)
       }
     }
     return node
