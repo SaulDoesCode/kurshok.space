@@ -11,10 +11,10 @@ const reqWithBody = (contentType = 'application/json', bodyMorpher = JSON.string
     ...ops,
 })
 const jsonHTTPMethod = reqWithBody()
+const textHTTPMethod = reqWithBody('text/plain', b => b)
 app.jsonPost = jsonHTTPMethod('POST')
 app.jsonPut = jsonHTTPMethod('PUT')
 app.jsonDelete = jsonHTTPMethod('DELETE')
-const textHTTPMethod = reqWithBody('text/plain', b => b)
 app.txtPost = textHTTPMethod('POST')
 app.txtPut = textHTTPMethod('PUT')
 app.txtDelete = textHTTPMethod('DELETE')
