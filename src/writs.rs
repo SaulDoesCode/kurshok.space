@@ -1114,6 +1114,28 @@ pub async fn writ_raw_content(
   )
 }
 
+#[get("/post-content/{id}")]
+pub async fn post_content(
+  req: HttpRequest,
+  pid: web::Path<String>,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
+  // TODO: ratelimiting
+  if let Some(usr) = orc.user_by_session(&req) {
+    if pid.starts_with(&format!("post:{}:", usr.id)) {
+      if let Ok(Some(raw_c)) = orc.content.get(pid.as_bytes()) {
+        return crate::responses::Ok(raw_c.to_string());
+      } else {
+        return crate::responses::NotFound("writ id either didn't match anything of yours");
+      }
+    }
+  }
+
+  crate::responses::Forbidden(
+    "You can't load the raw_contents of writs if you aren't logged in or if the contents in question aren't yours"
+  )
+}
+
 #[post("/writs")]
 pub async fn writ_query(
   req: HttpRequest,

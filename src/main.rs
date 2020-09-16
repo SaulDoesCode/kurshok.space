@@ -118,6 +118,7 @@ async fn main() -> std::io::Result<()> {
         .service(writs::delete_writ)
         .service(writs::upvote_writ)
         .service(writs::downvote_writ)
+        .service(writs::post_content)
         .service(writs::writ_raw_content)
         
         .service(comments::post_comment_query)
