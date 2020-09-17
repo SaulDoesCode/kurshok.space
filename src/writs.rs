@@ -980,7 +980,10 @@ impl RawWrit {
           for tag in old_writ.tags.iter() {
             let id = format!("{}:{}", tag, new_writ.id);
             tags_index.remove(id.as_bytes())?;
-            let count: u64 = tag_counter.get(tag.as_bytes())?.unwrap().to_u64();
+            let count: u64 = match tag_counter.get(tag.as_bytes())? {
+                Some(c) => c.to_u64(),
+                None => 0,
+            };
             if count <= 1 {
               tag_counter.remove(tag.as_bytes())?;
             } else {
@@ -990,7 +993,10 @@ impl RawWrit {
           for tag in new_writ.tags.iter() {
             let id = format!("{}:{}", tag, new_writ.id);
             tags_index.remove(id.as_bytes())?;
-            let count: u64 = tag_counter.get(tag.as_bytes())?.unwrap().to_u64();
+            let count: u64 = match tag_counter.get(tag.as_bytes())? {
+              Some(c) => c.to_u64(),
+              None => 0,
+            };
             if count <= 1 {
               tag_counter.remove(tag.as_bytes())?;
             } else {
@@ -1121,19 +1127,31 @@ pub async fn post_content(
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   // TODO: ratelimiting
-  if let Some(usr) = orc.user_by_session(&req) {
-    if pid.starts_with(&format!("post:{}:", usr.id)) {
-      if let Ok(Some(raw_c)) = orc.content.get(pid.as_bytes()) {
-        return crate::responses::Ok(raw_c.to_string());
+  if !pid.starts_with("post:") && pid.len() < 100 && pid.len() > 8 {
+    return crate::responses::BadRequest("invalid post id");
+  }
+
+  if let Some(writ) = orc.writ_by_id(&pid) {
+    if !writ.public {
+      if let Some(usr) = orc.user_by_session(&req) {
+        if !writ.id.starts_with(&format!("post:{}", usr.id)) {
+          return crate::responses::Forbidden(
+            "You can't load the contents of private writs that aren't yours"
+          );
+        }
       } else {
-        return crate::responses::NotFound("writ id either didn't match anything of yours");
+        return crate::responses::Forbidden(
+          "You can't load the contents of private writs"
+        );
       }
+    }
+
+    if let Ok(Some(raw_c)) = orc.content.get(writ.id.as_bytes()) {
+      return crate::responses::Ok(raw_c.to_string());
     }
   }
 
-  crate::responses::Forbidden(
-    "You can't load the raw_contents of writs if you aren't logged in or if the contents in question aren't yours"
-  )
+  crate::responses::NotFound("writ id either didn't match anything of yours")
 }
 
 #[post("/writs")]
