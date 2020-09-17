@@ -17,7 +17,10 @@ const publicPost = (w) => div({
     attr: {pid: w.id}
 },
     header(
-        h4(w.title),
+        div(
+            h4(w.title),
+            div({class: 'author-name'}, `By ${w.author_name}`)
+        ),
         div(
             div({class: 'posted'}, new Date(w.posted).toDateString()),
             div({class: 'tags'},

@@ -81,12 +81,21 @@ body > * > header {
 
 .post {
   background: hsl(0, 0%, 30%);
-  margin: 1em auto 2em auto;
+  margin: 1em auto 1.5em auto;
   filter: drop-shadow(0 2px 1em rgba(0,0,0,.1));
 }
 
-.post > header > h4 {
+.post > header {
   margin: .25em .25em;
+}
+
+.post>header h4 {
+  margin: 0 0;
+}
+
+.post>header .author-name {
+  font-style: italic;
+  font-size: .92em;
 }
 
 .post > .content {
