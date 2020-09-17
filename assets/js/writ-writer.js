@@ -22,7 +22,7 @@ const {
             <input type="text" name="post-title" title="writ title" id="title-input" placeholder="writ title" autocomplete="off" ref="titleInput">
         </div>
         <div class="writing-pad-container">
-            <textarea class="writing-pad" ref="writingPad" title="writ content" spellcheck="true" wrap="off" minlength="10" required placeholder="content of your writ (it can be markdown)"></textarea>
+            <textarea class="writing-pad" ref="writingPad" title="writ content" spellcheck="true" minlength="10" required placeholder="content of your writ (it can be markdown)"></textarea>
         </div>
         <div class="tags-and-toggles">
             <input type="text" name="tags" title="tag input" id="tag-input" placeholder="comma, separated, tags" autocomplete="off" ref="tagInput">
@@ -47,7 +47,7 @@ const {
         </section>
     </section>
     <aside class="writ-selector" ref="writSelector">
-        <header>Writs</header>
+        <header>Your Writs</header>
         <section class="writ-list" ref="writList"></section>
     </aside>
 </article>`.collect()

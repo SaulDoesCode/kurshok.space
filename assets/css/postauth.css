@@ -1,11 +1,10 @@
 .writ-writer-view {
-    position: fixed;
-    top: 65px;
+    position: absolute;
+    top: 6vh;
     margin: .5em auto;
-    width: 96vw;
+    width: 98vw;
     max-width: 1380px;
-    height: 90vh;
-    max-height: 90vh;
+    min-height: 85vh;
     background: hsl(0, 0%, 100%);
     color: hsl(0, 0%, 25%);
     padding: .5em .25em;
@@ -106,7 +105,7 @@
 }
 
 .writ-writer-view textarea.writing-pad {
-    min-height: 260px;
+    min-height: 520px;
     height: 100%;
 }
 
@@ -199,6 +198,7 @@
     box-shadow: 0 2px 3px rgba(0, 0, 0, .2);
     transition: all 140ms ease-in;
     text-align: center;
+    user-select: none;
     font-size: .9em;
 }
 
@@ -314,4 +314,29 @@
     left: calc(100% - 20px);
     background: var(--primary-color);
     filter: brightness(1.1);
+}
+
+
+@media all and (max-width: 500px) {
+    .writ-writer-view {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        align-content: center;
+        flex-flow: column nowrap;
+    }
+
+    .writ-writer-view > .writ-selector {
+        border: none;
+        border-top: 1px solid rgba(0, 0, 0, .15);
+        margin: 0;
+        margin-top: .5em;
+        height: auto;
+        border-radius: 6px;
+        box-shadow: 0 -2px 4px -2px rgba(0, 0, 0, .12);
+    }
+
+    .writ-writer-view > .writer {
+        height: 100%;
+    }
 }
