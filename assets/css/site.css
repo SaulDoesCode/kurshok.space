@@ -29,8 +29,8 @@ body > * > header {
   display: flex;
   align-content: center;
   align-items: center;
-  justify-content: space-between;
-  flex-flow: row;
+  justify-content: space-around;
+  flex-flow: row wrap;
   color: #fff;
   padding: .25em .75em;
   margin: 0;
@@ -43,10 +43,17 @@ body > * > header {
   display: inline-block;
   margin: 0;
   font-size: 1.5em;
+  width: auto;
 }
-.hero > .ww-launcher,
-.hero > .auth-launcher,
-.hero > .profile-launcher {
+
+.hero .launchers {
+  width: auto;
+  margin: .25em;
+}
+
+.hero .ww-launcher,
+.hero .auth-launcher,
+.hero .profile-launcher {
   display: inline-block;
   text-align: center;
   margin: .4em;
@@ -59,16 +66,33 @@ body > * > header {
 
 /* .content-display {} */
 
-.post {
-  margin: 1em auto 1.5em auto;
-}
-
-.post, .post > header {
+.post, .post > *:not(hr) {
   display: flex;
-  justify-content: space-evenly;
+  justify-content: space-between;
   align-content: center;
   align-items: center;
   flex-flow: row wrap;
+  margin: 0;
+  padding: .5em;
+  background: #fff;
+  border-radius: 4px;
+  color: hsl(0, 0%, 35%);
+}
+
+.post {
+  background: hsl(0, 0%, 30%);
+  margin: 1em auto 2em auto;
+  filter: drop-shadow(0 2px 1em rgba(0,0,0,.1));
+}
+
+.post > header > h4 {
+  margin: .25em .25em;
+}
+
+.post > .content {
+  background: #fff;
+  justify-content: flex-start;
+  flex-flow: column;
 }
 
 .tag {
@@ -80,5 +104,6 @@ body > * > header {
   border-radius: .1em;
   color: hsl(0, 0%, 25%);
   text-shadow: 0 1px 2px rgb(0,0,0,.12);
+  box-shadow: 0 2px 3px rgb(0,0,0,.12);
   background: var(--primary-color);
 }

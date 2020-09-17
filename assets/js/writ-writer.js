@@ -69,9 +69,7 @@ const writListEntry = (title, id) => div({
         () => {
             const delBtn = span({
                 class: 'delete-writ',
-                attr: {
-                    title: 'Double click/tap to delete writ'
-                }
+                attr: {title: 'Double click/tap to delete writ'}
             }, '🗑')
 
             // manually jigging double click/tap

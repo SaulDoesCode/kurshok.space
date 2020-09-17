@@ -22,6 +22,7 @@
 <body>
     <nav class="hero">
         <header>Grimstack</header>
+        <section class="launchers">
         {% if username is defined %}
             <button class="ww-launcher" title="open up the writ writer and post something">
                 WritWriter
@@ -30,8 +31,8 @@
             <button class="profile-launcher" title="click to see or build your profile">{{ username }}</button>
             <script type="module" defer>
                 import app from '/js/site.min.js'
-                import '/js/profile.min.js'
                 app.user = { username: "{{ username }}".trim() }
+                import('/js/profile.min.js')
                 // d.once.click('.profile-launcher', () => {})
                 app.d.once.click('.ww-launcher', () => import('/js/writ-writer.min.js'))
             </script>
@@ -45,6 +46,7 @@
                 })
             </script>
         {% endif %}
+        </section>
     </nav>
 
     <main class="content-display"></main>

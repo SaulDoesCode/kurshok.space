@@ -26,7 +26,7 @@ const publicPost = (w) => div({
         )
     ),
 
-    w.content != null && section({class: 'content'}, d.html(w.content))
+    w.content != null && [df.hr(), section({class: 'content'}, d.html(w.content))]
 );
 
 app.fetchPostContent = async id => {
@@ -36,10 +36,9 @@ app.fetchPostContent = async id => {
     throw new Error(data.status)
 }
 
-
-app.writQuery({
-    with_content: false
-}).then(writs => {
+app.writQuery({with_content: false}).then(writs => {
     if(!d.isArr(writs)) return console.error(writs)
-    writs.forEach(w => publicPost(w))
+    writs.forEach(w => {
+        publicPost(w)
+    })
 })
