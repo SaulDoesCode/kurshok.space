@@ -79,15 +79,15 @@ impl Orchestrator {
     let session_data = db.open_tree(b"session_data").unwrap();
     let secrets = db.open_tree(b"secrets").unwrap();
 
-    let scrt_res: TransactionResult<Vec<u8>, ()> = secrets.transaction(|s| {
-      if let Some(scrt) = s.get(b"pwd_secret")? {
-        return Ok(scrt.to_vec());
-      }
-      let scrt = generate_random_bytes(64);
-      s.insert(b"pwd_secret", scrt.clone())?;
-      Ok(scrt)
-    });
-
+    let scrt_res: TransactionResult<Vec<u8>, ()> = secrets
+      .transaction(|s| Ok(match s.get(b"pwd_secret")? {
+        Some(scrt) => scrt.to_vec(),
+        None => {
+          let scrt = generate_random_bytes(64);
+          s.insert(b"pwd_secret", scrt.clone())?;
+          scrt
+        }
+      }));
     let pwd_secret = scrt_res.unwrap();
 
     let hasher = if secrets.contains_key(b"hasher_seed").unwrap() {

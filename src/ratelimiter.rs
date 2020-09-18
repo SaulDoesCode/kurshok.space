@@ -1,11 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use time::{OffsetDateTime, Duration};
 use sled::{Db, Tree};
 use std::sync::{atomic::{AtomicU64, Ordering::{SeqCst}}, Arc};
+use time::{OffsetDateTime, Duration};
 
-fn now() -> i64 {
-  OffsetDateTime::now_utc().timestamp()
-}
+fn now() -> i64 { OffsetDateTime::now_utc().timestamp() }
 
 pub struct RateLimiter {
   pub db: Db,
@@ -31,8 +29,7 @@ impl RateLimiter {
 
   pub fn hit(&self, data: &[u8], threshhold: u32, dur: Duration) -> Option<RateLimited> {
     if let Some(mut rl) = self.get(data) {
-      rl.hit(1, threshhold, dur);
-      if self.store.insert(data, rl.to_bin()).is_ok() {
+      if self.store.insert(data, rl.hit(1, threshhold, dur).to_bin()).is_ok() {
         return Some(rl);
       }
     }
@@ -44,21 +41,19 @@ impl RateLimiter {
   }
 
   pub fn forget(&self, data: &[u8]) -> bool {
-    if self.store.remove(data).is_ok() {
-      self.count.fetch_sub(1, SeqCst);
-      return true;
-    }
-    false
+    if self.store.remove(data).is_err() { return false; }
+    self.count.fetch_sub(1, SeqCst);
+    true
   }
   
   pub fn insert(&self, data: &[u8], entry: Vec<u8>) -> bool {
-    if self.store.insert(data, entry).is_ok() {
-      if self.count.fetch_add(1, SeqCst) == self.limit {
-        if self.store.pop_min().is_ok() {
-          self.count.fetch_sub(1, SeqCst);
-          return true;
-        }
-      }
+    if 
+      self.store.insert(data, entry).is_ok() &&
+      self.count.fetch_add(1, SeqCst) == self.limit &&
+      self.store.pop_min().is_ok()
+    {
+      self.count.fetch_sub(1, SeqCst);
+      return true;
     }
     false
   }

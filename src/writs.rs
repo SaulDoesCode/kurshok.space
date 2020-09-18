@@ -691,19 +691,10 @@ impl Writ {
         None
       };
   
-      let you_voted = if let Some(req_id) = &requestor_id {
-        writ_voters.get(self.vote_id(req_id.as_str()).as_bytes())?.map(|raw| {
-          WritVote::try_from_slice(&raw).unwrap().up
-        })
-
-        /* if let Some(raw) = writ_voters.get(self.vote_id(req_id.as_str()).as_bytes())? {
-          let wv = WritVote::try_from_slice(&raw).unwrap();
-          Some(wv.up)
-        } else {
-          None
-        } */
-      } else {
-        None
+      let you_voted = match &requestor_id {
+        Some(req_id) => writ_voters.get(self.vote_id(req_id.as_str()).as_bytes())?
+          .map(|raw| WritVote::try_from_slice(&raw).unwrap().up),
+        None => None,
       };
 
       Ok(PublicWrit{
@@ -750,8 +741,8 @@ impl Writ {
       tags: self.tags.clone(),
       posted: self.posted,
       content: if with_content {
-        if let Ok(Some(raw)) = orc.content.get(self.id.as_bytes()) {
-          Some(raw.to_string())
+        if let Ok(raw) = orc.content.get(self.id.as_bytes()) {
+          raw.map(|v| v.to_string())
         } else {
           return None;
         }
@@ -759,8 +750,8 @@ impl Writ {
         None
       },
       raw_content: if with_raw_content {
-        if let Ok(Some(raw)) = orc.raw_content.get(self.id.as_bytes()) {
-          Some(raw.to_string())
+        if let Ok(raw) = orc.raw_content.get(self.id.as_bytes()) {
+          raw.map(|v| v.to_string())
         } else {
           return None;
         }
