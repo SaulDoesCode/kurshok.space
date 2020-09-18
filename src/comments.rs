@@ -187,6 +187,10 @@ impl Comment {
     res.is_ok()
   }
 
+  pub fn is_root_comment(&self) -> bool {
+    self.id.matches(":").count() > 1 
+  }
+
   pub fn get_root_comment_id(&self, orc: &Orchestrator) -> Option<String> {
     if self.id.matches(":").count() > 1 {
       return Some(self.id.clone())
@@ -251,7 +255,8 @@ impl Comment {
     voters: &TransactionalTree,
     votes: &TransactionalTree,
   ) -> ConflictableTransactionResult<(), ()> {
-    let (root_id, path) = if self.id.matches(":").count() > 1 {
+    let is_root_comment = self.is_root_comment();
+    let (root_id, path) = if is_root_comment {
       let path: Vec<String> = self.id.split('/')
         .filter(|&c| c != "")
         .map(|c| c.to_string())
@@ -290,7 +295,11 @@ impl Comment {
         } else {
           return Err(sled::transaction::ConflictableTransactionError::Abort(()));
         }
-        ctrees.insert(root_id.as_bytes(), bincode::serialize(&parent_id_tree).unwrap())?;
+        if is_root_comment {
+          ctrees.remove(root_id.as_bytes())?;
+        } else {
+          ctrees.insert(root_id.as_bytes(), bincode::serialize(&parent_id_tree).unwrap())?;
+        }
       } else {
         return Err(sled::transaction::ConflictableTransactionError::Abort(()));
       }
@@ -304,6 +313,7 @@ impl Comment {
 
       return Ok(());
     }
+
     Err(sled::transaction::ConflictableTransactionError::Abort(()))
   }
 
