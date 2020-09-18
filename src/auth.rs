@@ -144,10 +144,7 @@ impl Orchestrator {
   }
 
   pub fn is_admin(&self, usr_id: &str) -> bool {
-    if let Ok(is_admin) = self.admins.contains_key(usr_id.as_bytes()) {
-      return is_admin;
-    }
-    false
+    self.admins.contains_key(usr_id.as_bytes()).unwrap_or(false)
   }
 
   pub fn user_by_session(&self, req: &HttpRequest) -> Option<User> {
@@ -302,13 +299,16 @@ impl Orchestrator {
   }
 
   pub fn user_by_id(&self, id: &str) -> Option<User> {
-    get_struct(&self.users, id.as_bytes())
+    if let Ok(val) = self.users.get(id.as_bytes()) {
+      return val.map(|raw| raw.to_type());
+    }
+    None
   }
 
   pub fn admin_by_id(&self, id: &str) -> Option<User> {
     if self.is_admin(id) {
-      if let Some(usr) = get_struct::<User>(&self.users, id.as_bytes()) {
-        return Some(usr);
+      if let Ok(val) = self.users.get(id.as_bytes()) {
+        return val.map(|raw| raw.to_type());
       }
     }
     None
