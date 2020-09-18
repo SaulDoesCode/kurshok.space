@@ -1,15 +1,11 @@
-use bincode::Options;
 use comrak::{markdown_to_html, ComrakOptions};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use sled::{IVec};
 use regex::Regex;
-use serde::Serialize;
-use sled::{IVec, Tree};
+use time::OffsetDateTime;
 
 use std::convert::TryInto;
 
-use crate::auth::{User, UserSession};
-use crate::writs::{Writ, PublicWrit, RawWrit, WritVote, WritQuery};
-use crate::comments::{PublicComment, Comment, CommentVote, CommentIDTree, CommentTree};
 // use crate::files::{MetaData};
 
 lazy_static! {
@@ -31,36 +27,18 @@ lazy_static! {
         md_opts
   };
 
-  pub static ref BINCODE_BIGENDIAN: bincode::config::WithOtherEndian<bincode::DefaultOptions, bincode::config::BigEndian> = bincode::DefaultOptions::new().with_big_endian();
-
   static ref EMAIL_REGEX: Regex = Regex::new(
     r"^([a-z0-9_+]([a-z0-9_+.]*[a-z0-9_+])?)@([a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6})"
   ).unwrap();
 }
 
-pub trait IntoBin: Serialize {
-  fn to_bin(&self) -> Vec<u8> {
-    BINCODE_BIGENDIAN.serialize(self).unwrap()
-  }
-
-  fn to_json(&self) -> String {
-    serde_json::to_string(self).unwrap()
-  }
+pub fn unix_timestamp() -> i64 {
+  OffsetDateTime::now_utc().timestamp()
 }
 
-impl IntoBin for User {}
-impl IntoBin for UserSession {}
-impl IntoBin for Writ {}
-impl IntoBin for PublicWrit {}
-impl IntoBin for RawWrit {}
-impl IntoBin for WritVote {}
-impl IntoBin for WritQuery {}
-impl IntoBin for Comment {}
-impl IntoBin for PublicComment {}
-impl IntoBin for CommentVote {}
-impl IntoBin for CommentIDTree {}
-impl IntoBin for CommentTree {}
-// impl IntoBin for MetaData {}
+pub fn datetime_from_unix_timestamp(timestamp: i64) -> OffsetDateTime {
+  OffsetDateTime::from_unix_timestamp(timestamp)
+}
 
 pub trait FancyBool {
   fn qualify<T>(&self, data: T) -> Option<T>;
@@ -89,7 +67,6 @@ pub trait FancyIVec {
   fn to_str(&self) -> &str;
   fn to_u64(&self) -> u64;
   fn to_i64(&self) -> i64;
-  fn to_type<T: serde::de::DeserializeOwned>(&self) -> T;
   fn to_type_from_json<T: serde::de::DeserializeOwned>(&self) -> T;
 
   fn from_u64(i: u64) -> IVec;
@@ -117,10 +94,6 @@ impl FancyIVec for IVec {
     let (int_bytes, rest) = input.split_at(std::mem::size_of::<i64>());
     *input = rest;
     i64::from_be_bytes(int_bytes.try_into().unwrap())
-  }
-
-  fn to_type<T: serde::de::DeserializeOwned>(&self) -> T {
-    BINCODE_BIGENDIAN.deserialize(&self).unwrap()
   }
 
   fn to_type_from_json<T: serde::de::DeserializeOwned>(&self) -> T {
@@ -183,16 +156,6 @@ pub fn is_email_ok(email: &str) -> bool {
   EMAIL_REGEX.is_match(email)
 }
 
-pub fn get_struct<T: serde::de::DeserializeOwned>(
-  tree: &Tree,
-  key: &[u8]
-) -> Option<T> {
-  if let Ok(Some(val)) = tree.get(key) {
-    return Some(BINCODE_BIGENDIAN.deserialize(&val).unwrap());
-  }
-  None
-}
-
 pub fn i64_is_zero(i: &i64) -> bool {
   *i == 0
 }
@@ -225,39 +188,6 @@ pub fn read_be_i64_from_ivec(ivec: IVec) -> i64 {
 
 pub fn string_from_ivec(ivec: IVec) -> String {
   std::str::from_utf8(&ivec).unwrap().to_owned()
-}
-
-pub fn binbe_serialize<T: serde::Serialize>(data: &T) -> Vec<u8> {
-  BINCODE_BIGENDIAN.serialize(data).unwrap()
-}
-pub fn binbe_deserialize<T: serde::de::DeserializeOwned>(data: &[u8]) -> T {
-  BINCODE_BIGENDIAN.deserialize(data).unwrap()
-}
-
-pub fn insert_struct<T: serde::Serialize + serde::de::DeserializeOwned>(
-  tree: &Tree,
-  key: &[u8],
-  val: &T
-) -> bool {
-  tree.insert(key, BINCODE_BIGENDIAN.serialize(val).unwrap()).is_ok()
-}
-
-pub fn insert_struct_return_old<T: serde::Serialize + serde::de::DeserializeOwned>(
-  tree: &Tree,
-  key: &[u8],
-  val: T
-) -> Option<T> {
-  if let Ok(Some(old)) = tree.insert(key, BINCODE_BIGENDIAN.serialize(&val).unwrap()) {
-    return Some(BINCODE_BIGENDIAN.deserialize(&old).unwrap());
-  }
-  None
-}
-
-pub fn remove_struct<T: serde::de::DeserializeOwned>(tree: &Tree, key: &[u8]) -> Option<T> {
-  if let Ok(Some(old)) = tree.remove(key) {
-    return Some(BINCODE_BIGENDIAN.deserialize(&old).unwrap());
-  }
-  None
 }
 
 pub fn render_md(html: &str) -> String {

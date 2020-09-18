@@ -1,3 +1,5 @@
+#![feature(trivial_bounds)]
+
 #![allow(dead_code)]
 
 #[macro_use(lazy_static)]extern crate lazy_static;
@@ -20,11 +22,11 @@ mod posts;
 
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_files::{NamedFile};
-use chrono::Duration;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io::BufReader, sync::Arc};
 use tera::{Context, Tera};
+use time::Duration;
 
 use rustls::internal::pemfile::{certs, pkcs8_private_keys};
 use rustls::{NoClientAuth, ServerConfig};

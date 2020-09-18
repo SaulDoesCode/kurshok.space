@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use actix_web::{get, web, HttpRequest, HttpResponse};
-use chrono::Duration;
 use tera::Context;
+use time::Duration;
 
 use super::TEMPLATES;
 

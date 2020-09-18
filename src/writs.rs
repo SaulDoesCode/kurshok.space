@@ -1,7 +1,8 @@
-use chrono::{offset::Utc, prelude::*, Duration};
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sled::{IVec, Transactional, transaction::*};
+use sled::{transaction::*, IVec, Transactional};
 use thiserror::Error;
+use time::{Duration, OffsetDateTime};
 
 use std::sync::Arc;
 
@@ -12,11 +13,10 @@ use crate::orchestrator::Orchestrator;
 use crate::auth::{User};
 use crate::comments::Comment;
 use crate::utils::{
-  binbe_serialize,
-  get_struct,
+  unix_timestamp,
+  datetime_from_unix_timestamp,
   render_md,
-  FancyIVec,
-  IntoBin,
+  FancyIVec
 };
 
 impl Orchestrator {
@@ -31,7 +31,7 @@ impl Orchestrator {
     let res: TransactionResult<(), ()> = (&self.tags_index, &self.tag_counter).transaction(|(tags_index, tag_counter)| {
       for tag in tags.iter() {
         let id = format!("{}:{}", tag.as_str(), writ_id);
-        tags_index.insert(id.as_bytes(), binbe_serialize(&tags))?;
+        tags_index.insert(id.as_bytes(), tags.try_to_vec().unwrap())?;
         let count: u64 = match tag_counter.get(tag.as_bytes())? {
           Some(raw_count) => raw_count.to_u64(),
           None => 0,
@@ -95,7 +95,7 @@ impl Orchestrator {
         )| {
           let writ_id = writ_id.as_bytes();
           let writ: Writ = match writs.get(writ_id)? {
-            Some(w) => w.to_type(),
+            Some(w) => Writ::try_from_slice(&w).unwrap(),
             None => return Err(sled::transaction::ConflictableTransactionError::Abort(())),
           };
 
@@ -129,7 +129,7 @@ impl Orchestrator {
     if res.is_ok() {
       let mut iter = self.comments.scan_prefix(writ_id.as_bytes());
       while let Some(Ok(res)) = iter.next() {
-        let comment = res.1.to_type::<Comment>();
+        let comment = Comment::try_from_slice(&res.1).unwrap();
         // TODO: handle this in a safer way
         comment.remove(self);
       }
@@ -214,23 +214,24 @@ impl Orchestrator {
       }
 
       if !date_scan {
+        let posted = datetime_from_unix_timestamp(writ.posted);
         if let Some(y) = &query.year {
-          if writ.posted.year() != *y {
+          if posted.year() != *y {
             return false;
           }
         }
         if let Some(m) = &query.month {
-          if writ.posted.month() != *m {
+          if posted.month() != *m {
             return false;
           }
         }
         if let Some(d) = &query.day {
-          if writ.posted.day() != *d {
+          if posted.day() != *d {
             return false;
           }
         }
         if let Some(h) = &query.hour {
-          if writ.posted.hour() != *h {
+          if posted.hour() != *h {
             return false;
           }
         }
@@ -317,9 +318,9 @@ impl Orchestrator {
           }
         }
 
-        let writ: Writ = match get_struct(&self.writs, id.as_bytes()) {
-          Some(w) => w,
-          None => continue,
+        let writ = match self.writs.get(id.as_bytes()) {
+          Ok(raw) => Writ::try_from_slice(&raw.unwrap()).unwrap(),
+          Err(_) => continue,
         };
 
         if check_writ_against_query(&writ, false) {
@@ -329,7 +330,7 @@ impl Orchestrator {
       }
     } else {
       let mut date = String::new();
-      let now = Utc::now();
+      let now = OffsetDateTime::now_utc();
       if let Some(y) = &query.year {
         date.push_str(&format!("{}", y));
       }
@@ -403,13 +404,13 @@ impl Orchestrator {
               continue;
             }
           }
-          if let Some(w) = get_struct(&self.writs, &res.1) {
-            w
+          if let Ok(Some(w)) = self.writs.get(res.1) {
+            Writ::try_from_slice(&w).unwrap()
           } else {
             continue;
           }
         } else {
-          let w: Writ = res.1.to_type();
+          let w = Writ::try_from_slice(&res.1).unwrap();
           if let Some(skip_ids) = &query.skip_ids {
             if skip_ids.contains(&w.id) {
                 continue;
@@ -476,21 +477,28 @@ impl Orchestrator {
   }
 
   pub fn writ_by_id(&self, id: &str) -> Option<Writ> {
-    get_struct(&self.writs, id.as_bytes())
+    self.writ_by_id_bytes(id.as_bytes())
+  }
+
+  pub fn writ_by_id_bytes(&self, id: &[u8]) -> Option<Writ> {
+    match self.writs.get(id) {
+      Ok(w) => w.map(|raw| Writ::try_from_slice(&raw).unwrap()),
+      Err(_) => None,
+    }
   }
 
   pub fn writ_by_title(&self, kind: &str, title: &str) -> Option<Writ> {
     let key = format!("{}:{}", kind, title);
-    if let Some(w) = self.titles.get(key.as_bytes()).unwrap() {
-      return get_struct(&self.writs, &w);
+    if let Ok(Some(w)) = self.titles.get(key.as_bytes()) {
+      return self.writ_by_id_bytes(&w);
     }
     None
   }
 
   pub fn writ_by_slug(&self, kind: &str, slug: &str) -> Option<Writ> {
     let key = format!("{}:{}", kind, slug);
-    if let Some(w) = self.slugs.get(key.as_bytes()).unwrap() {
-      return get_struct(&self.writs, &w);
+    if let Ok(Some(w)) = self.slugs.get(key.as_bytes()) {
+      return self.writ_by_id_bytes(&w);
     }
     None
   }
@@ -516,13 +524,13 @@ pub struct WritQuery {
     pub author_handle: Option<String>,
     pub author_id: Option<String>,
     
-    pub posted_before: Option<DateTime<Utc>>,
-    pub posted_after: Option<DateTime<Utc>>,
+    pub posted_before: Option<i64>,
+    pub posted_after: Option<i64>,
     
     pub year: Option<i32>,
-    pub month: Option<u32>,
-    pub day: Option<u32>,
-    pub hour: Option<u32>,
+    pub month: Option<u8>,
+    pub day: Option<u8>,
+    pub hour: Option<u8>,
     
     pub amount: Option<u64>,
     pub page: u64,
@@ -572,19 +580,19 @@ pub struct PublicWrit {
   kind: String,
   content: Option<String>,
   tags: Vec<String>,
-  posted: DateTime<Utc>,
+  posted: i64,
   you_voted: Option<bool>,
   vote: i64,
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Writ {
   pub id: String, // {kind}:{author_id}:{writ_id}
   pub title: String,
   pub slug: String,
   pub kind: String,
   pub tags: Vec<String>,
-  pub posted: DateTime<Utc>,
+  pub posted: i64,
   pub public: bool,
   pub viewable_by: Vec<String>,
   pub commentable: bool,
@@ -610,15 +618,17 @@ impl Writ {
   }
 
   pub fn raw_content(&self, orc: &Orchestrator) -> Option<String> {
-    if let Ok(Some(c)) = orc.raw_content.get(self.id.as_bytes()) {
-      return Some(c.to_string());
+    if let Ok(c) = orc.raw_content.get(self.id.as_bytes()) {
+      return c.map(|c| c.to_string());
     }
     None
   }
 
   pub fn comment_settings(&self, orc: &Orchestrator) -> Option<CommentSettings> {
     if self.commentable {
-      return get_struct(&orc.comment_settings, self.id.as_bytes());
+      if let Ok(cs) = orc.comment_settings.get(self.id.as_bytes()) {
+        return cs.map(|raw| CommentSettings::try_from_slice(&raw).unwrap());
+      }
     }
     None
   }
@@ -682,11 +692,16 @@ impl Writ {
       };
   
       let you_voted = if let Some(req_id) = &requestor_id {
-        if let Some(raw) = writ_voters.get(self.vote_id(req_id.as_str()).as_bytes())? {
-          Some(raw.to_type::<WritVote>().up)
+        writ_voters.get(self.vote_id(req_id.as_str()).as_bytes())?.map(|raw| {
+          WritVote::try_from_slice(&raw).unwrap().up
+        })
+
+        /* if let Some(raw) = writ_voters.get(self.vote_id(req_id.as_str()).as_bytes())? {
+          let wv = WritVote::try_from_slice(&raw).unwrap();
+          Some(wv.up)
         } else {
           None
-        }
+        } */
       } else {
         None
       };
@@ -733,7 +748,7 @@ impl Writ {
       title: self.title.clone(),
       slug: self.slug.clone(),
       tags: self.tags.clone(),
-      posted: self.posted.clone(),
+      posted: self.posted,
       content: if with_content {
         if let Ok(Some(raw)) = orc.content.get(self.id.as_bytes()) {
           Some(raw.to_string())
@@ -762,8 +777,8 @@ impl Writ {
 
   pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: bool) -> bool {
     let res: TransactionResult<(), ()> = (&orc.votes, &orc.writ_voters).transaction(|(votes, writ_voters)| {
-      let wv = WritVote{id: self.vote_id(usr_id), when: Utc::now(), up};
-      writ_voters.insert(self.vote_id(usr_id).as_bytes(), wv.to_bin())?;
+      let wv = WritVote{id: self.vote_id(usr_id), when: unix_timestamp(), up};
+      writ_voters.insert(self.vote_id(usr_id).as_bytes(), wv.try_to_vec().unwrap())?;
       let count: i64 = votes.get(self.id.as_bytes())?.unwrap().to_i64();
       votes.insert(self.id.as_bytes(), &(count + 1).to_be_bytes())?;
       Ok(())
@@ -780,7 +795,10 @@ impl Writ {
   }
 
   pub fn usr_vote(&self, orc: &Orchestrator, usr_id: &str) -> Option<WritVote> {
-    get_struct(&orc.writ_voters, self.vote_id(usr_id).as_bytes())
+    match orc.writ_voters.get(self.vote_id(usr_id).as_bytes()) {
+      Ok(wv) => wv.map(|raw| WritVote::try_from_slice(&raw).unwrap()),
+      Err(_) => None
+    }
   }
 
   #[inline]
@@ -800,12 +818,13 @@ impl Writ {
 
   #[inline]
   pub fn date_key(&self) -> String {
+    let posted = datetime_from_unix_timestamp(self.posted);
     format!("{}:{}{}{}{}:{}",
       self.kind,
-      self.posted.year(),
-      self.posted.month(),
-      self.posted.day(),
-      self.posted.hour(),
+      posted.year(),
+      posted.month(),
+      posted.day(),
+      posted.hour(),
       self.unique_id()
     )
   }
@@ -818,7 +837,7 @@ pub struct EditableWrit {
   pub slug: String,
   pub kind: String,
   pub tags: Vec<String>,
-  pub posted: DateTime<Utc>,
+  pub posted: i64,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub raw_content: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -873,7 +892,7 @@ impl RawWrit {
     let writ = Writ{
       id: writ_id,
       slug: slug::slugify(&self.title),
-      posted: Utc::now(),
+      posted: unix_timestamp(),
       title: self.title.clone(),
       kind: self.kind.clone(),
       tags: self.tags.clone(),
@@ -899,9 +918,12 @@ impl RawWrit {
       let rc_hash = orc.hash(raw_content.as_bytes());
       let mut hitter = Vec::from("wr".as_bytes());
       hitter.extend_from_slice(&rc_hash);
-      let rl = orc.ratelimiter.hit(&hitter, 1, Duration::minutes(360));
-      if rl.is_timing_out() {
-        return Err(WritError::DuplicateWrit);
+      if let Some(rl) = orc.ratelimiter.hit(&hitter, 1, Duration::minutes(360)) {
+        if rl.is_timing_out() {
+          return Err(WritError::DuplicateWrit);
+        }
+      } else {
+        return Err(WritError::DBIssue);
       }
     }
 
@@ -942,7 +964,7 @@ impl RawWrit {
       if is_new_writ {
         for tag in new_writ.tags.iter() {
           let id = format!("{}:{}", tag.as_str(), new_writ.id);
-          tags_index.insert(id.as_bytes(), binbe_serialize(&tag))?;
+          tags_index.insert(id.as_bytes(), tag.try_to_vec().unwrap())?;
 
           let count: u64 = tag_counter.get(tag.as_bytes())?
             .map_or(0, |raw| raw.to_u64());
@@ -958,10 +980,10 @@ impl RawWrit {
 
         comment_settings.insert(
           writ_id,
-          binbe_serialize(&CommentSettings::default(new_writ.id.clone(), new_writ.public))
+          CommentSettings::default(new_writ.id.clone(), new_writ.public).try_to_vec().unwrap()
         )?;
       } else {
-        let old_writ: Writ = writs.get(writ_id)?.unwrap().to_type();
+        let old_writ = Writ::try_from_slice(&writs.get(writ_id)?.unwrap()).unwrap();
         
         if new_writ.kind != old_writ.kind || new_writ.id != old_writ.id || new_writ.title != old_writ.title  || new_writ.slug != old_writ.slug {
           writs.remove(old_writ.id.as_bytes())?;
@@ -971,9 +993,9 @@ impl RawWrit {
           slugs.remove(old_writ.slug_key().as_bytes())?;
           slugs.insert(new_writ.slug_key().as_bytes(), writ_id)?;
 
-          let mut settings: CommentSettings = comment_settings.get(old_writ.id.as_bytes())?.unwrap().to_type();
+          let mut settings = CommentSettings::try_from_slice(&comment_settings.get(old_writ.id.as_bytes())?.unwrap()).unwrap();
           settings.id = new_writ.id.clone();
-          comment_settings.insert(writ_id, binbe_serialize(&settings))?;
+          comment_settings.insert(writ_id, settings.try_to_vec().unwrap())?;
         }
 
         if new_writ.tags != old_writ.tags {
@@ -1010,13 +1032,13 @@ impl RawWrit {
         }
 
         if new_writ.posted != old_writ.posted {
-          new_writ.posted = old_writ.posted.clone();
+          new_writ.posted = old_writ.posted;
           // dates.remove(old_writ.date_key().as_bytes())?;
           // dates.insert(writ.date_key().as_bytes(), writ_id)?;
         }
       }
 
-      writs.insert(writ_id, new_writ.to_bin())?;
+      writs.insert(writ_id, new_writ.try_to_vec().unwrap())?;
 
       Ok(())
     });
@@ -1030,31 +1052,33 @@ impl RawWrit {
 
   pub fn writ(&self, orc: &Orchestrator) -> Option<Writ> {
     if let Some(id) = &self.id {
-      return get_struct(&orc.writs, id.as_bytes());
+      if let Ok(w) = orc.writs.get(id.as_bytes()) {
+        return w.map(|raw| Writ::try_from_slice(&raw).unwrap());
+      }
     }
     None
   }
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
 pub struct WritVote {
   pub id: String,
   pub up: bool,
-  pub when: DateTime<Utc>,
+  pub when: i64,
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
 pub struct CommentSettings {
   pub id: String, // writ_id
   pub public: bool,
   pub visible_to: Option<Vec<String>>,
-  pub min_comment_length: Option<usize>,
-  pub max_comment_length: Option<usize>,
+  pub min_comment_length: Option<u64>,
+  pub max_comment_length: Option<u64>,
   pub disqualified_strs: Option<Vec<String>>,
   pub hide_when_vote_below: Option<i64>,
-  pub max_level: Option<usize>,
+  pub max_level: Option<u64>,
   pub notify_author: bool,
-  pub notifying_stops_beyond_level: Option<usize>,
+  pub notifying_stops_beyond_level: Option<u64>,
 }
 
 impl CommentSettings {

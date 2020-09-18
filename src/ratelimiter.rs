@@ -1,11 +1,10 @@
-use bincode::{Options};
-use chrono::{prelude::*, Duration, offset::{Utc}};
-use serde::{Serialize, Deserialize};
+use borsh::{BorshDeserialize, BorshSerialize};
+use time::{OffsetDateTime, Duration};
 use sled::{Db, Tree};
 use std::sync::{atomic::{AtomicU64, Ordering::{SeqCst}}, Arc};
 
-lazy_static!{
-  pub static ref BINCODE_BIGENDIAN: bincode::config::WithOtherEndian<bincode::DefaultOptions, bincode::config::BigEndian> = bincode::DefaultOptions::new().with_big_endian();
+fn now() -> i64 {
+  OffsetDateTime::now_utc().timestamp()
 }
 
 pub struct RateLimiter {
@@ -30,81 +29,90 @@ impl RateLimiter {
     Self{db, store, limit, count}
   }
 
-  pub fn hit(&self, data: &[u8], threshhold: u64, dur: Duration) -> RateLimited {
+  pub fn hit(&self, data: &[u8], threshhold: u32, dur: Duration) -> Option<RateLimited> {
     if let Some(mut rl) = self.get(data) {
       rl.hit(1, threshhold, dur);
-      self.store.insert(data, rl.to_bin()).unwrap();
-      return rl;
-    }
-    let rl = RateLimited::new();
-    self.insert(data, rl.to_bin());
-    return rl;
-  }
-
-  pub fn forget(&self, data: &[u8]) {
-    if let Some(_) = self.store.remove(data).unwrap() {
-      self.count.fetch_sub(1, SeqCst);
-    }
-  }
-  
-  pub fn insert(&self, data: &[u8], entry: Vec<u8>) {
-    self.store.insert(data, entry).unwrap();
-    if self.count.fetch_add(1, SeqCst) == self.limit {
-      if self.store.pop_min().is_ok() {
-        self.count.fetch_sub(1, SeqCst);
+      if self.store.insert(data, rl.to_bin()).is_ok() {
+        return Some(rl);
       }
     }
-  }
-  
-  pub fn get(&self, data: &[u8]) -> Option<RateLimited> {
-    if let Some(v) = self.store.get(data).unwrap() {
-      return Some(BINCODE_BIGENDIAN.deserialize(&v).unwrap());
+    let rl = RateLimited::new();
+    if self.insert(data, rl.to_bin()) {
+      return Some(rl);
     }
     None
   }
 
+  pub fn forget(&self, data: &[u8]) -> bool {
+    if self.store.remove(data).is_ok() {
+      self.count.fetch_sub(1, SeqCst);
+      return true;
+    }
+    false
+  }
+  
+  pub fn insert(&self, data: &[u8], entry: Vec<u8>) -> bool {
+    if self.store.insert(data, entry).is_ok() {
+      if self.count.fetch_add(1, SeqCst) == self.limit {
+        if self.store.pop_min().is_ok() {
+          self.count.fetch_sub(1, SeqCst);
+          return true;
+        }
+      }
+    }
+    false
+  }
+  
+  pub fn get(&self, data: &[u8]) -> Option<RateLimited> {
+    match self.store.get(data) {
+      Ok(rl) => rl.map(|raw| RateLimited::try_from_slice(&raw).unwrap()),
+      Err(_) => None,
+    }
+  }
+
   pub fn has(&self, data: &str) -> bool {
-    self.store.contains_key(data.clone().as_bytes()).unwrap()
+    self.store.contains_key(data.as_bytes()).unwrap_or(false)
   }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct RateLimited {
-  hits: u64,
-  lasthit: DateTime<Utc>,
-  timeout: DateTime<Utc>,
+  hits: u32,
+  lasthit: i64,
+  timeout: i64,
 }
 
 impl RateLimited {
   pub fn new() -> Self {
-    let now = Utc::now();
+    let now = now();
     Self{hits: 1, lasthit: now, timeout: now}
   }
 
   pub fn to_bin(&self) -> Vec<u8> {
-    BINCODE_BIGENDIAN.serialize(self).unwrap()
+    self.try_to_vec().unwrap()
   }
 
   pub fn is_timing_out(&self) -> bool {
-    Utc::now() < self.timeout
+    now() < self.timeout
   }
 
   pub fn minutes_left(&self) -> i64 {
-    self.duration_left().num_minutes()
+    self.duration_left().whole_minutes()
   }
 
   pub fn duration_left(&self) -> Duration {
-    self.timeout - Utc::now()
+    Duration::seconds(self.timeout - now())
   }
 
-  pub fn hit(&mut self, hits: u64, threshhold: u64, dur: Duration) -> &mut RateLimited {
-    let now = Utc::now();
+  pub fn hit(&mut self, hits: u32, threshhold: u32, dur: Duration) -> &mut RateLimited {
+    let now = now();
+    let dur_secs = dur.whole_seconds();
     self.hits += hits;
-    if self.hits > 1 && now > self.timeout && (now - self.lasthit) > dur {
+    if self.hits > 1 && now > self.timeout && (now - self.lasthit) > dur_secs {
       self.hits = 1;
       self.timeout = now;
     } else if self.hits > threshhold {
-      self.timeout = now + (dur * ((self.hits - threshhold) as i32));
+      self.timeout = now + (dur_secs * (self.hits - threshhold) as i64);
     }
     self.lasthit = now;
     self

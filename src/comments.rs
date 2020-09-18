@@ -1,8 +1,9 @@
 use actix_web::{delete, post, put, web, HttpRequest, HttpResponse};
-use chrono::{offset::Utc, prelude::*, Duration};
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sled::{IVec, transaction::*, Transactional};
+use sled::{transaction::*, IVec, Transactional};
 use std::{cell::Cell, collections::HashMap, sync::Arc};
+use time::Duration;
 
 use itertools::Itertools;
 use rayon::prelude::*;
@@ -10,28 +11,27 @@ use rayon::prelude::*;
 use crate::orchestrator::Orchestrator;
 use crate::auth::{User};
 use crate::utils::{
-  binbe_serialize,
-  get_struct,
+  unix_timestamp,
+  datetime_from_unix_timestamp,
   i64_is_zero,
   render_md,
   FancyBool,
   FancyIVec,
-  IntoBin,
 };
 use crate::writs::{CommentSettings, Writ};
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
 pub struct CommentVote {
   pub id: String,
   pub up: bool,
-  pub when: DateTime<Utc>,
+  pub when: i64,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct PublicComment {
   pub id: String,
   pub content: String,
-  pub posted: DateTime<Utc>,
+  pub posted: i64,
   #[serde(skip_serializing_if = "i64_is_zero")]
   pub votes: i64,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -42,12 +42,12 @@ pub struct PublicComment {
   pub author_only: Option<bool>,
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Comment {
   pub id: String, // {meta_id}/{author_id}:{unique}/...
   pub author_name: String,
   pub content: String,
-  pub posted: DateTime<Utc>,
+  pub posted: i64,
   pub edited: bool,
   pub public: bool,
   pub author_only: bool,
@@ -59,7 +59,7 @@ impl Comment {
       id,
       author_name,
       content,
-      posted: Utc::now(),
+      posted: unix_timestamp(),
       edited: false,
       public: false,
       author_only: false,
@@ -67,7 +67,10 @@ impl Comment {
   }
 
   pub fn from_id(orc: &Orchestrator, id: &[u8]) -> Option<Comment> {
-    get_struct(&orc.comments, id)
+    match orc.comments.get(id) {
+      Ok(c) => c.map(|raw| Comment::try_from_slice(&raw).unwrap()),
+      Err(_) => None,
+    }
   }
 
   pub fn key_path(&self, orc: &Orchestrator) -> Option<String> {
@@ -136,10 +139,10 @@ impl Comment {
       edited: self.edited.wrap(), 
       author_only: self.author_only.wrap(),
       you_voted: match usr_id {
-        Some(id) => get_struct::<CommentVote>(
-          &orc.comment_voters,
-          self.vote_id(id).as_bytes()
-        ).and_then(|cv| cv.up.wrap()),
+        Some(id) => match orc.comment_voters.get(self.vote_id(id).as_bytes()) {
+          Ok(cv) => cv.map(|raw| CommentVote::try_from_slice(&raw).unwrap().up),
+          Err(_) => None,
+        },
         None => None,
       },
       votes: if let Ok(Some(raw)) = orc.comment_votes.get(self.id.as_bytes()) {
@@ -172,7 +175,7 @@ impl Comment {
       &orc.comment_raw_content,
       &orc.comment_votes
     ).transaction(|(voters, comments, comment_raw_content, votes)| {
-      comments.insert(self.id.as_bytes(), deleted_comment.to_bin())?;
+      comments.insert(self.id.as_bytes(), deleted_comment.try_to_vec().unwrap())?;
       comment_raw_content.remove(self.id.as_bytes())?;
       votes.remove(self.id.as_bytes())?;
       let mut iter = orc.comment_voters.scan_prefix(self.id.as_bytes());
@@ -231,7 +234,9 @@ impl Comment {
       let full_id = raw_key.to_string();
       let mut parts: Vec<&str> = full_id.split('/').filter(|&c| c != "").collect();
       let root_id = parts.drain(..2).join("/");
-      return get_struct(&orc.comments, root_id.as_bytes());
+      if let Ok(c) = orc.comments.get(root_id.as_bytes()) {
+        return c.map(|raw| Comment::try_from_slice(&raw).unwrap());
+      }
     }
     None
   }
@@ -268,24 +273,24 @@ impl Comment {
     raw_contents.remove(self.id.as_bytes())?;
     votes.remove(self.id.as_bytes())?;
 
-    if let Some(raw) = ctrees.get(root_id.as_bytes())? {
-      let mut parent_id_tree: CommentIDTree = raw.to_type();
+    if let Some(mut raw_json) = ctrees.get(root_id.as_bytes())?.map(|raw| raw.to_string()) {
+      let mut parent_id_tree: CommentIDTree = simd_json::from_str(&mut raw_json).unwrap();
       if let Some(child_cidtree) = parent_id_tree.remove_child(path) {
         for cidtree in child_cidtree.children.values() {
           if let Some(raw_child_comment) = comments.get(cidtree.comment.as_bytes())? {
-            let child_comment: Comment = raw_child_comment.to_type();
+            let child_comment: Comment = Comment::try_from_slice(&raw_child_comment).unwrap();
             child_comment.remove_in_transaction(orc, kpi, ctrees, comments, raw_contents, voters, votes)?;
           } else {
             return Err(sled::transaction::ConflictableTransactionError::Abort(()));
           }
         }
         if let Some(raw_child_comment) = comments.get(child_cidtree.comment.as_bytes())? {
-          let child_comment: Comment = raw_child_comment.to_type();
+          let child_comment = Comment::try_from_slice(&raw_child_comment).unwrap();
           child_comment.remove_in_transaction(orc, kpi, ctrees, comments, raw_contents, voters, votes)?;
         } else {
           return Err(sled::transaction::ConflictableTransactionError::Abort(()));
         }
-        ctrees.insert(root_id.as_bytes(), binbe_serialize(&parent_id_tree))?;
+        ctrees.insert(root_id.as_bytes(), simd_json::to_vec(&parent_id_tree).unwrap())?;
       } else {
         return Err(sled::transaction::ConflictableTransactionError::Abort(()));
       }
@@ -357,8 +362,8 @@ pub fn comment_on_writ(
             children: HashMap::new(),
             level: 0,
           };
-          comment_trees.insert(comment.id.as_bytes(), cidtree.to_bin())?;
-          comments.insert(comment.id.as_bytes(), comment.to_bin())?;
+          comment_trees.insert(comment.id.as_bytes(), simd_json::to_vec(&cidtree).unwrap())?;
+          comments.insert(comment.id.as_bytes(), comment.try_to_vec().unwrap())?;
           comment_raw_content.insert(comment.id.as_bytes(), raw_content.as_bytes())?;
           votes.insert(comment.id.as_bytes(), IVec::from_i64(0))?;
           Ok(())
@@ -381,12 +386,12 @@ pub fn comment_on_comment(
   author_only: bool,
 ) -> Option<Comment> {
   if let Some(max_len) = settings.max_comment_length {
-    if raw_content.len() > max_len {
+    if raw_content.len() > max_len as usize {
       return None;
     }
   }
   if let Some(min_len) = settings.min_comment_length {
-    if raw_content.len() < min_len {
+    if raw_content.len() < min_len as usize {
       return None;
     }
   }
@@ -402,7 +407,7 @@ pub fn comment_on_comment(
 
   let (tree_id, parts) = get_prefix_and_parts(&parent_id, 2);
   if let Some(max_level) = settings.max_level {
-    if parts.len() + 1 == max_level {
+    if parts.len() + 1 == max_level as usize {
       return None;
     }
   }
@@ -435,8 +440,8 @@ pub fn comment_on_comment(
     comment_raw_content,
     votes
   )| {
-    if let Some(raw) = comment_trees.get(tree_id.as_bytes())? {
-      let mut parent_id_tree: CommentIDTree = raw.to_type();
+    if let Some(mut raw_json) = comment_trees.get(tree_id.as_bytes())?.map(|raw| raw.to_string()) {
+      let mut parent_id_tree: CommentIDTree = simd_json::from_str(&mut raw_json).unwrap();
       let id_tree = CommentIDTree{
         comment: comment.id.clone(),
         children: HashMap::new(),
@@ -447,12 +452,12 @@ pub fn comment_on_comment(
       } else if !parent_id_tree.insert_child(parts.clone(), id_tree) {
         return Err(sled::transaction::ConflictableTransactionError::Abort(()));
       }
-      comment_trees.insert(tree_id.as_bytes(), binbe_serialize(&parent_id_tree))?;
+      comment_trees.insert(tree_id.as_bytes(), simd_json::to_vec(&parent_id_tree).unwrap())?;
     } else {
       return Err(sled::transaction::ConflictableTransactionError::Abort(()));
     }
     kpi.insert(comment.id.as_bytes(), id.as_bytes())?;
-    comments.insert(comment.id.as_bytes(), comment.to_bin())?;
+    comments.insert(comment.id.as_bytes(), comment.try_to_vec().unwrap())?;
     comment_raw_content.insert(comment.id.as_bytes(), raw_content.as_bytes())?;
     votes.insert(comment.id.as_bytes(), IVec::from_i64(0))?;
     Ok(())
@@ -468,7 +473,7 @@ pub struct PublicCommentTree {
   children: Vec<PublicCommentTree>
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct CommentTree {
   comment: Comment,
   children: Vec<CommentTree>
@@ -492,10 +497,10 @@ impl CommentTree {
   }
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct CommentIDTree {
   comment: String,
-  level: usize,
+  level: u64,
   children: HashMap<String, CommentIDTree>,
 }
 
@@ -618,7 +623,7 @@ impl CommentIDTree {
     }
 
     if let Ok(Some(val)) = orc.comments.get(self.comment.as_bytes()) {
-      let comment: Comment = val.to_type();
+      let comment = Comment::try_from_slice(&val).unwrap();
       if check_query_conditions(query, &comment, &author_id) {
         return Some(CommentTree{
           comment,
@@ -635,7 +640,7 @@ impl CommentIDTree {
   pub fn to_comment_tree_sans_query(&self, orc: &Orchestrator) -> Option<CommentTree> {
     if let Ok(res) = orc.comments.get(self.comment.as_bytes()) {
       if let Some(val) = res {
-        let comment: Comment = val.to_type();
+        let comment: Comment = Comment::try_from_slice(&val).unwrap();
         return Some(CommentTree{
           comment,
           children: self.children.par_iter()
@@ -666,15 +671,15 @@ pub struct CommentQuery {
   pub author_id: Option<String>,
   pub exluded_author_ids: Option<Vec<String>>,
   
-  pub posted_before: Option<DateTime<Utc>>,
-  pub posted_after: Option<DateTime<Utc>>,
+  pub posted_before: Option<i64>,
+  pub posted_after: Option<i64>,
   
   pub year: Option<i32>,
-  pub month: Option<u32>,
-  pub day: Option<u32>,
-  pub hour: Option<u32>,
+  pub month: Option<u8>,
+  pub day: Option<u8>,
+  pub hour: Option<u8>,
   
-  pub max_level: Option<usize>,
+  pub max_level: Option<u64>,
 
   pub path: String,
 
@@ -723,23 +728,31 @@ pub fn check_query_conditions(query: &CommentQuery, comment: &Comment, author_id
     }
   }
 
+  let posted = datetime_from_unix_timestamp(comment.posted);
   if let Some(year) = &query.year {
-    if comment.posted.year() != *year {
+    if posted.year() != *year {
       return false;
     }
   }
+
   if let Some(month) = &query.month {
-    if comment.posted.month() != *month {
+    if let Some(day) = &query.day {
+      // they say this is more efficient, so, you know, meh..
+      let (m, d) = posted.month_day();
+      if m != *month || d != *day {
+        return false;
+      }
+    } else if posted.month() != *month {
+      return false;
+    }
+  } else if let Some(day) = &query.day {
+    if posted.day() != *day {
       return false;
     }
   }
-  if let Some(day) = &query.day {
-    if comment.posted.day() != *day {
-      return false;
-    }
-  }
+
   if let Some(hour) = &query.hour {
-    if comment.posted.hour() != *hour {
+    if posted.hour() != *hour {
       return false;
     }
   }
@@ -795,7 +808,7 @@ pub async fn comment_query(
   };
 
   if let Ok(Some(val)) = orc.comment_settings.get(writ_id.as_bytes()) {
-    let settings: CommentSettings = val.to_type();
+    let settings = CommentSettings::try_from_slice(&val).unwrap();
     if !settings.public {
       if let Some(requestor_id) = &query.requestor_id {
         if writ_id.split(":").collect::<Vec<&str>>()[1] != *requestor_id {
@@ -863,14 +876,16 @@ pub async fn comment_query(
   let mut cidtrees = vec![];
 
   let mut iter = orc.comment_trees.scan_prefix(path.as_bytes());
-  while let Some(Ok((_, value))) = iter.next() {
+  while let Some(Ok((_, raw))) = iter.next() {
     if page < 2 {
         if count == amount { break; }
     } else if count != (amount * page) {
         count += 1;
         continue;
     }
-    let id_tree: CommentIDTree = value.to_type();
+
+    let mut raw_json = raw.to_string();
+    let id_tree: CommentIDTree = simd_json::from_str(&mut raw_json).unwrap();
 
     if let Some(dp) = depth_path {
       if let Some(st) = id_tree.subtree(dp) {
@@ -940,21 +955,23 @@ pub async fn make_comment(
   rc.raw_content = rc.raw_content.trim().to_string();
 
   if !orc.dev_mode {
-    // hash contents and ratelimit with it to prevent spam
+    /* hash contents and ratelimit with it to prevent spam
     let hitter = orc.hash(rc.raw_content.as_bytes());
-    let rl = orc.ratelimiter.hit(&hitter, 1, Duration::minutes(60));
-    if rl.is_timing_out() {
-      return crate::responses::TooManyRequests(
-        format!("don't copy existing comments, write your own")
-      );
-    }
+    if let Some(rl) = orc.ratelimiter.hit(&hitter, 1, Duration::minutes(60)) {
+      if rl.is_timing_out() {
+        return crate::responses::TooManyRequests(
+          format!("don't copy existing comments, write your own")
+        );
+      }
+    }*/
 
     let hitter = format!("cmnt{}", usr.id);
-    let rl = orc.ratelimiter.hit(hitter.as_bytes(), 3, Duration::minutes(2));
-    if rl.is_timing_out() {
-      return crate::responses::TooManyRequests(
-        format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
-      );
+    if let Some(rl) = orc.ratelimiter.hit(hitter.as_bytes(), 3, Duration::minutes(2)) {
+      if rl.is_timing_out() {
+        return crate::responses::TooManyRequests(
+          format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
+        );
+      }
     }
   }
 
@@ -1027,7 +1044,7 @@ pub async fn make_comment_on_comment(
   orc: &Orchestrator,
 ) -> HttpResponse {
   if let Ok(Some(val)) = orc.comment_settings.get(rc.writ_id.as_bytes()) {
-    let settings: CommentSettings = val.to_type();
+    let settings = CommentSettings::try_from_slice(&val).unwrap();
     if let Some(parent_comment) = Comment::from_id(orc, rc.parent_id.as_bytes()) {
       if let Some(comment) = comment_on_comment(
         orc, 

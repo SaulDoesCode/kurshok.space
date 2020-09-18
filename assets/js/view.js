@@ -22,7 +22,7 @@ const publicPost = (w) => div({
             div({class: 'author-name'}, `By ${w.author_name}`)
         ),
         div(
-            div({class: 'posted'}, new Date(w.posted).toDateString()),
+            div({class: 'posted'}, new Date(w.posted * 1000).toLocaleString()),
             div({class: 'tags'},
                 w.tags.map(t => span({class: 'tag'}, t))
             )
