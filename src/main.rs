@@ -1,5 +1,3 @@
-#![feature(trivial_bounds)]
-
 #![allow(dead_code)]
 
 #[macro_use(lazy_static)]extern crate lazy_static;

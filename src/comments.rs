@@ -273,8 +273,8 @@ impl Comment {
     raw_contents.remove(self.id.as_bytes())?;
     votes.remove(self.id.as_bytes())?;
 
-    if let Some(mut raw_json) = ctrees.get(root_id.as_bytes())?.map(|raw| raw.to_string()) {
-      let mut parent_id_tree: CommentIDTree = simd_json::from_str(&mut raw_json).unwrap();
+    if let Some(raw) = ctrees.get(root_id.as_bytes())? {
+      let mut parent_id_tree: CommentIDTree = bincode::deserialize(&raw).unwrap();
       if let Some(child_cidtree) = parent_id_tree.remove_child(path) {
         for cidtree in child_cidtree.children.values() {
           if let Some(raw_child_comment) = comments.get(cidtree.comment.as_bytes())? {
@@ -290,7 +290,7 @@ impl Comment {
         } else {
           return Err(sled::transaction::ConflictableTransactionError::Abort(()));
         }
-        ctrees.insert(root_id.as_bytes(), simd_json::to_vec(&parent_id_tree).unwrap())?;
+        ctrees.insert(root_id.as_bytes(), bincode::serialize(&parent_id_tree).unwrap())?;
       } else {
         return Err(sled::transaction::ConflictableTransactionError::Abort(()));
       }
@@ -362,7 +362,7 @@ pub fn comment_on_writ(
             children: HashMap::new(),
             level: 0,
           };
-          comment_trees.insert(comment.id.as_bytes(), simd_json::to_vec(&cidtree).unwrap())?;
+          comment_trees.insert(comment.id.as_bytes(), bincode::serialize(&cidtree).unwrap())?;
           comments.insert(comment.id.as_bytes(), comment.try_to_vec().unwrap())?;
           comment_raw_content.insert(comment.id.as_bytes(), raw_content.as_bytes())?;
           votes.insert(comment.id.as_bytes(), IVec::from_i64(0))?;
@@ -440,8 +440,8 @@ pub fn comment_on_comment(
     comment_raw_content,
     votes
   )| {
-    if let Some(mut raw_json) = comment_trees.get(tree_id.as_bytes())?.map(|raw| raw.to_string()) {
-      let mut parent_id_tree: CommentIDTree = simd_json::from_str(&mut raw_json).unwrap();
+    if let Some(raw) = comment_trees.get(tree_id.as_bytes())? {
+      let mut parent_id_tree: CommentIDTree = bincode::deserialize(&raw).unwrap();
       let id_tree = CommentIDTree{
         comment: comment.id.clone(),
         children: HashMap::new(),
@@ -452,7 +452,7 @@ pub fn comment_on_comment(
       } else if !parent_id_tree.insert_child(parts.clone(), id_tree) {
         return Err(sled::transaction::ConflictableTransactionError::Abort(()));
       }
-      comment_trees.insert(tree_id.as_bytes(), simd_json::to_vec(&parent_id_tree).unwrap())?;
+      comment_trees.insert(tree_id.as_bytes(), bincode::serialize(&parent_id_tree).unwrap())?;
     } else {
       return Err(sled::transaction::ConflictableTransactionError::Abort(()));
     }
@@ -473,7 +473,7 @@ pub struct PublicCommentTree {
   children: Vec<PublicCommentTree>
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct CommentTree {
   comment: Comment,
   children: Vec<CommentTree>
@@ -884,8 +884,7 @@ pub async fn comment_query(
         continue;
     }
 
-    let mut raw_json = raw.to_string();
-    let id_tree: CommentIDTree = simd_json::from_str(&mut raw_json).unwrap();
+    let id_tree: CommentIDTree = bincode::deserialize(&raw).unwrap();
 
     if let Some(dp) = depth_path {
       if let Some(st) = id_tree.subtree(dp) {

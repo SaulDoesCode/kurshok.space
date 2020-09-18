@@ -7,7 +7,8 @@ edition = "2018"
 [dependencies]
 actix-files = { git = "https://github.com/SaulDoesCode/actix-web" }
 actix-web = { git = "https://github.com/SaulDoesCode/actix-web", features = ["rustls"] }
-borsh = { version = "^0.7.1" }
+bincode = "^1.3.1"
+borsh = "^0.7.1"
 clap = "^2.33.3"
 comrak = "^0.8.2"
 derive_more = "^0.99.9"
