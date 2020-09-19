@@ -232,9 +232,10 @@ export default (d => {
       if (listeners.has(event)) {
         const ls = listeners.get(event)
         ls.delete(handler)
-        if (!ls.size) listeners.delete(event)
+        if (!ls.size || handler == null) listeners.delete(event)
       }
-    })
+    }),
+    clear: () => (listeners.clear(), host)
   })
 
   const listen = function (once, target, type, fn, options = false) {
