@@ -1,12 +1,10 @@
 use actix_web::{delete, post, put, web, HttpRequest, HttpResponse};
 use borsh::{BorshDeserialize, BorshSerialize};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sled::{transaction::*, IVec, Transactional};
 use std::{cell::Cell, collections::HashMap, sync::Arc};
 use time::Duration;
-
-use itertools::Itertools;
-use rayon::prelude::*;
 
 use crate::orchestrator::Orchestrator;
 use crate::auth::{User};
@@ -500,7 +498,7 @@ impl CommentTree {
         Some(pc) => pc,
         None => return None,
       },
-      children: self.children.into_par_iter()
+      children: self.children.into_iter()
         .filter_map(|c| c.public(orc, usr_id))
         .collect()
     })
@@ -637,7 +635,7 @@ impl CommentIDTree {
       if check_query_conditions(query, &comment, &author_id) {
         return Some(CommentTree{
           comment,
-          children: self.children.par_iter()
+          children: self.children.iter()
             .filter_map(|(_, child)| child.to_comment_tree(orc, query))
             .collect()
         });
@@ -653,7 +651,7 @@ impl CommentIDTree {
         let comment: Comment = Comment::try_from_slice(&val).unwrap();
         return Some(CommentTree{
           comment,
-          children: self.children.par_iter()
+          children: self.children.iter()
             .filter_map(|(_, child)| child.to_comment_tree_sans_query(orc))
             .collect()
         });
@@ -842,12 +840,10 @@ pub async fn comment_query(
   query.is_admin = Some(is_admin);
 
   if let Some(authors) = &query.authors {
-    let mut ids: Vec<String> = authors.iter().filter_map(|a| {
-      if let Ok(Some(id)) = orc.usernames.get(a.as_bytes()) {
-        return Some(id.to_string());
-      }
-      None
-    }).collect();
+    let mut ids: Vec<String> = authors.iter().filter_map(|a|
+      orc.usernames.get(a.as_bytes())
+        .map_or(None, |id| id.map(|id| id.to_string()))
+    ).collect();
 
     if let Some(author_ids) = &mut query.author_ids {
       author_ids.append(&mut ids);
@@ -856,13 +852,13 @@ pub async fn comment_query(
     }
   } else if query.author_id.is_none() {
     if let Some(name) = &query.author_name {
-      if let Some(id) = orc.usernames.get(name.as_bytes()).unwrap() {
+      if let Ok(Some(id)) = orc.usernames.get(name.as_bytes()) {
         query.author_id = Some(id.to_string());
       } else {
         return None;
       }
     } else if let Some(handle) = &query.author_handle {
-      if let Some(id) = orc.handles.get(handle.as_bytes()).unwrap() {
+      if let Ok(Some(id)) = orc.handles.get(handle.as_bytes()) {
         query.author_id = Some(id.to_string());
       } else {
         return None;
@@ -907,7 +903,7 @@ pub async fn comment_query(
     count += 1;
   }
 
-  let comments: Vec<CommentTree> = cidtrees.into_par_iter()
+  let comments: Vec<CommentTree> = cidtrees.into_iter()
     .filter_map(|cidt| cidt.to_comment_tree(orc, &query))
     .collect();
 
@@ -927,14 +923,11 @@ pub async fn post_comment_query(
   };
 
   match comment_query(o_usr, query.into_inner(), orc.as_ref()).await {
-    Some(comments) => {
-      let public_comments: Vec<PublicCommentTree> = comments
-        .into_par_iter()
+    Some(comments) => crate::responses::Ok(
+      comments.into_iter()
         .filter_map(|c| c.public(orc.as_ref(), &usr_id))
-        .collect();
-
-      crate::responses::Ok(public_comments)
-    },
+        .collect::<Vec<PublicCommentTree>>()
+    ),
     None => crate::responses::NotFoundEmpty()
   }  
 }
