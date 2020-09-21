@@ -1,51 +1,97 @@
 import domlib from '/js/domlib.min.js'
 
-const router = domlib.emitter()
+const {emitter, domfn, directive, run, isRenderable, isFunc} = domlib
 
-router.mode = app.routerMode || window.history.pushState ? 'history' : 'hash'
+const route = emitter((route, view) => {
+    if (view == null) return
+    if (route[0] !== '#') route = '#' + route
 
-window.addEventListener('hashchange', router.check)
-
-router.root = '/'
-
-router.clearSlashes = path => path.toString()
-    .replace(/\/$/, '')
-    .replace(/^\//, '')
-
-router.getFragment = () => {
-    let fragment = ''
-    if (router.mode === 'history') {
-        fragment = router.clearSlashes(decodeURI(window.location.pathname + window.location.search))
-        fragment = fragment.replace(/\?(.*)$/, '')
-        fragment = router.root !== '/' ? fragment.replace(router.root, '') : fragment
-    } else {
-        const match = window.location.href.match(/#(.*)$/)
-        fragment = match ? match[1] : ''
+    if (view.tagName === 'TEMPLATE') {
+        view.remove()
+        view = [...view.content.childNodes]
     }
-    return router.clearSlashes(fragment)
-}
 
-router.navigate = (path = '') => {
-    if (router.mode === 'history') {
-        window.history.pushState(null, null, router.root + router.clearSlashes(path))
-    } else {
-        window.location.href = `${window.location.href.replace(/#(.*)$/, '')}#${path}`
+    if (isRenderable(view)) {
+        views[route] = isFunc(view) ? view() : view
     }
-    router.check()
-    return router
+})
+const views = route.views = Object.create(null)
+route.hash = (hash = location.hash) => hash.replace('#', '')
+
+directive('route-link', {
+    init(el, val) {
+        if (el.tagName !== 'A') throw new Error('route-link is meant for actual a[href] link elements')
+        el.routeLink = route.on.change(() => el.classList.toggle(
+            'active-route',
+            location.hash === (el.href = '#' + el.getAttribute('route-link'))
+        ))
+        el.classList.toggle('active-route', location.hash === (el.href = '#' + val))
+    },
+    remove: (el, val) => el.routeLink.off()
+})
+
+directive('route', {
+    init(el, val) {
+        if (el.tagName === 'TEMPLATE') return route(val, el)
+        el.routeHandler = route.on.change((view, hash) => {
+            if (hash === el.attr.route) { 
+                el.innerHTML = ''
+                domfn.append(el, domfn.html(view))
+            } else {
+                el.textContent = ''
+            }
+        })
+    },
+    remove(el, val) {
+        if (el.routeHandler) {
+            el.routeHandler.off()
+            el.textContent = ''
+        }
+    }
+})
+
+directive('route-active', {
+    init(el, val) {
+        el.routeHandler = route.on.change((view, hash) => {
+            el.setAttribute('route-active', hash)
+            el.innerHTML = ''
+            domfn.append(el, domfn.html(view))
+        })
+    },
+    remove(el, val) {
+        el.routeHandler.off()
+        el.textContent = ''
+    }
+})
+
+domlib.route = route
+
+route.handle = () => {
+    const view = route.views[location.hash]
+    if (view == null) return
+    route.active = view
+    const hash = route.hash()
+    route.emit.change(view, hash, route)
+    route.emit[hash](view, route)
 }
 
-router.check = () => {
-    if (router.current === router.getFragment()) return
-    router.current = router.getFragment()
-    console.log(router.current)
-    router.emit(router.current)
-}
+route.whenActive = (hash, fn, once) => run(() => {
+    if (hash[0] !== '#') hash = '#' + hash
+    let view = route.views[hash]
+    if (location.hash === hash && view != null) {
+        fn(view, route, hash)
+        if (once) return
+    }
+    hash = route.hash(hash)
+    route[once ? 'once' : 'on'][hash](view => {
+        fn(view, route, hash)
+    })
+})
 
-const pushState = window.history.pushState
-window.history.pushState = (data, title, url) => {
-    pushState.call(history, data, title, url)
-    router.check()
-}
+window.onhashchange = route.handle
+run(() => {
+    route.handle()
+    window.dispatchEvent(new window.CustomEvent('routerReady'))
+})
 
-export default router
+export default route
