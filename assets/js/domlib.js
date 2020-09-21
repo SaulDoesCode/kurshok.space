@@ -754,15 +754,20 @@ export default (d => {
         if ((val = ops[key]) == null) continue
 
         if (key[0] == 'o' && key[1] == 'n') {
-          const isOnce = key[2] == 'c'
+          const isOnce = key[2] == 'c' && key[3] == 'e'
           const i = isOnce ? 4 : 2
           const mode = key.substr(0, i)
           let type = key.substr(i)
           const evtfn = d.EventManager(isOnce)
-          const args = d.isArr(val) ? val : [val]
           if (!ops[mode]) ops[mode] = {}
-          ops[mode][type] = type.length ?
-            evtfn(el, type, ...args) : evtfn(el, ...args)
+          if (d.isFunc(val)) {
+            ops[mode][type] = evtfn(el, val.name.substr(i), val)
+            delete ops[val.name]
+          } else {
+            const args = d.isArr(val) ? val : [val]
+            ops[mode][type] = type.length ?
+              evtfn(el, type, ...args) : evtfn(el, ...args)
+          }
         } else if (key in el) {
           if (el[key] instanceof Function) {
             d.isArr(val) ? el[key].apply(el, val) : el[key](val)
