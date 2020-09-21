@@ -224,6 +224,13 @@ a, area,button, input, label, select, summary, textarea, [tabindex] {
     position: absolute;
 }
 
+[hidden] {
+    position: absolute;
+    display: none;
+    opacity: 0;
+    pointer-events: none;
+}
+
 main, header, footer, article, section, aside, details, summary {
     margin: 0 auto;
     margin-bottom: 16px;
