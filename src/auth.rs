@@ -165,6 +165,23 @@ impl Orchestrator {
     }
     None
   }
+
+  pub fn user_id_by_session(&self, req: &HttpRequest) -> Option<String> {
+    if let Some(auth_cookie) = req.cookie("auth") {
+      let sess_id = auth_cookie.value();
+      if let Ok(Some(raw)) = self.sessions.get(sess_id.as_bytes()) {
+        let session = UserSession::try_from_slice(&raw).unwrap();
+        if session.has_expired() {
+          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
+            println!("removing expired session from session tree failed: {}", e);
+          }
+        } else {
+          return Some(session.usr_id);
+        }
+      }
+    }
+    None
+  }
   
   pub fn user_by_session_renew<'c>(
     &self,
@@ -509,12 +526,40 @@ impl Orchestrator {
       .collect()
   }
 
-  pub fn user_attribute(&self, usr_id: &str, attr: &str) -> Option<UserAttribute> {
+  pub fn get_user_attribute(&self, usr_id: &str, attr: &str) -> Option<UserAttribute> {
     let key = format!("{}:{}", usr_id, attr);
     if let Ok(Some(raw)) = self.user_attributes.get(key.as_bytes()) {
       return Some(UserAttribute::try_from_slice(&raw).unwrap());
     }
     None
+  }
+
+  pub fn user_has_attrs(&self, usr_id: &str, attrs: &[&str]) -> Option<bool> {
+    for attr in attrs {
+      let key = format!("{}:{}", usr_id, attr);
+      if let Ok(has_attr) = self.user_attributes.contains_key(key.as_bytes()) {
+        if !has_attr {
+          return Some(false);
+        }
+      } else {
+        return None;
+      }
+    }
+    Some(true)
+  }
+
+  pub fn user_has_some_attrs(&self, usr_id: &str, attrs: &[&str]) -> Option<bool> {
+    for attr in attrs {
+      let key = format!("{}:{}", usr_id, attr);
+      if let Ok(has_attr) = self.user_attributes.contains_key(key.as_bytes()) {
+        if has_attr {
+          return Some(true);
+        }
+      } else {
+        return None;
+      }
+    }
+    Some(false)
   }
 
   pub fn user_attribute_with_data(

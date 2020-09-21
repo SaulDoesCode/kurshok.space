@@ -63,8 +63,8 @@ impl Orchestrator {
     }).is_ok()
   }
 
-  pub fn remove_writ(&self, author: &User, writ_id: String) -> bool {
-    if writ_id.split(":").nth(1).map_or(true, |author_id| author_id != author.id) {
+  pub fn remove_writ(&self, author_id: String, writ_id: String) -> bool {
+    if !self.is_admin(&author_id) && writ_id.split(":").nth(1).map_or(false, |a_id| a_id != author_id) {
       return false;
     }
 
@@ -853,16 +853,16 @@ pub struct RawWrit {
 }
 
 impl RawWrit {
-  pub fn commit(&self, author: &User, orc: &Orchestrator) -> Result<Writ, WritError> {
+  pub fn commit(&self, author_id: String, orc: &Orchestrator) -> Result<Writ, WritError> {
     let is_md = self.is_md.unwrap_or(true);
-    if !is_md && !orc.is_admin(&author.id) {
+    if !is_md && !orc.user_has_some_attrs(&author_id, &["writer", "admin"]).unwrap_or(false) {
       return Err(WritError::NoPermNoMD);
     }
 
     let (writ_id, is_new_writ) = match &self.id {
       Some(wi) => {
-        if let Some(author_id) = wi.split(":").nth(1) {
-          if author_id != author.id {
+        if let Some(a_id) = wi.split(":").nth(1) {
+          if a_id != author_id {
             return Err(WritError::InauthenticAuthor);  
           }
         }
@@ -873,7 +873,7 @@ impl RawWrit {
 
         (wi.clone(), false)
       },
-      None => if let Some(writ_id) = orc.new_writ_id(&author.id, &self.kind) {
+      None => if let Some(writ_id) = orc.new_writ_id(&author_id, &self.kind) {
         (writ_id, true)
       } else {
         return Err(WritError::IDGenErr);
@@ -893,7 +893,7 @@ impl RawWrit {
       is_md,
     };
 
-    let author_attrs = orc.user_attributes(&author.id);
+    let author_attrs = orc.user_attributes(&author_id);
     if !writ.viewable_by.iter().all(|t| author_attrs.contains(t)) {
       return Err(WritError::UsedUnavailableAttributes);
     }
@@ -1212,14 +1212,16 @@ pub async fn push_raw_writ(
   rw: web::Json<RawWrit>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(usr) = orc.admin_by_session(&req) {
-    return match rw.commit(&usr, orc.as_ref()) {
-      Ok(w) => crate::responses::Ok(w),
-      Err(e) => crate::responses::BadRequest(format!("error: {}", e)),
-    };
+  if let Some(usr_id) = orc.user_id_by_session(&req) {
+    if orc.user_has_some_attrs(&usr_id, &["writer", "admin"]).unwrap_or(false) {
+      return match rw.commit(usr_id, orc.as_ref()) {
+        Ok(w) => crate::responses::Ok(w),
+        Err(e) => crate::responses::BadRequest(format!("error: {}", e)),
+      };
+    }
   }
 
-  crate::responses::Forbidden("only admins may post writs")
+  crate::responses::Forbidden("only authorized may post writs")
 }
 
 #[delete("/writ")]
@@ -1229,8 +1231,8 @@ pub async fn delete_writ(
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   if let Ok(writ_id) = String::from_utf8(body.to_vec()) {
-    if let Some(usr) = orc.user_by_session(&req) {
-      return match orc.remove_writ(&usr, writ_id) {
+    if let Some(usr_id) = orc.user_id_by_session(&req) {
+      return match orc.remove_writ(usr_id, writ_id) {
         true => crate::responses::Accepted("writ has been removed"),
         false => crate::responses::BadRequest("invalid data, could not remove writ"),
       };
