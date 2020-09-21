@@ -1,8 +1,12 @@
 import app from '/js/site.min.js'
+import route from '/js/router.min.js'
 const d = app.d, df = d.domfn
 const {div, h4, section, span, header} = df
 
-const contentDisplay = d.query('.content-display')
+const contentDisplay = df.section({class: 'posts'})
+
+route('posts', contentDisplay)
+if (location.hash == '' || location.hash == '#') location.hash = 'posts'
 
 app.view = {
     page: 0,
@@ -10,10 +14,7 @@ app.view = {
 
 const publicPost = (w) => div({
     $: contentDisplay,
-    class: {
-        post: true,
-        'with-content': w.content != null
-    },
+    class: 'post',
     attr: {pid: w.id}
 },
     header(
@@ -27,9 +28,7 @@ const publicPost = (w) => div({
                 w.tags.map(t => span({class: 'tag'}, t))
             )
         )
-    ),
-
-    w.content != null && [df.hr(), section({class: 'content'}, d.html(w.content))]
+    )
 );
 
 app.fetchPostContent = async id => {
@@ -41,7 +40,5 @@ app.fetchPostContent = async id => {
 
 app.writQuery({with_content: false}).then(writs => {
     if(!d.isArr(writs)) return console.error(writs)
-    writs.forEach(w => {
-        publicPost(w)
-    })
+    writs.forEach(w => publicPost(w))
 })
