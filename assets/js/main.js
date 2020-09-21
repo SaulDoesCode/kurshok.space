@@ -135,15 +135,15 @@ domlib.run(() => {
 
 
 app.writs = []
-
-const jsonPost = app.jsonPost = (url, body) => fetch(url, {
+{
+const jsonPost = (url, body) => fetch(url, {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
   },
   body: JSON.stringify(body)
 })
-const jsonPut = app.jsonPut = (url, body) => fetch(url, {
+const jsonPut = (url, body) => fetch(url, {
   method: 'PUT',
   headers: {
     'Content-Type': 'application/json'
@@ -151,13 +151,13 @@ const jsonPut = app.jsonPut = (url, body) => fetch(url, {
   body: JSON.stringify(body)
 })
 
-app.writQuery = (query = {}) => new Promise((resolve, reject) => {
+const writQuery = (query = {}) => new Promise((resolve, reject) => {
   if (isNaN(query.page)) query.page = 1
   if (!query.kind) query.kind = 'post'
   jsonPost('/writs', query).then(res => res.json().then(resolve))
 })
 
-app.pushWrit = (title, raw_content, tags = ['musings'], opts = {}) => new Promise((resolve, reject) => {
+const pushWrit = (title, raw_content, tags = ['musings'], opts = {}) => new Promise((resolve, reject) => {
   const raw_writ = {
     title,
     raw_content: raw_content.trim(),
@@ -172,7 +172,7 @@ app.pushWrit = (title, raw_content, tags = ['musings'], opts = {}) => new Promis
     .then(data => data.ok ? resolve(data.data) : reject(data))
 })
 
-app.wq = (page = 1) => fetch('/writs', {
+const wq = (page = 1) => fetch('/writs', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
@@ -180,7 +180,7 @@ app.wq = (page = 1) => fetch('/writs', {
   body: `{"page":${page},"kind":"post"}`
 })
 
-const pw = () => app.pushWrit(
+const pw = () => pushWrit(
   'Second Writ',
 `
 ** ain't this some shiiit.. **    
@@ -190,8 +190,8 @@ first writ of many that came before
 )
 
 const putComment = ({
-  parent_id = 'post:0:0',
-  writ_id = 'post:0:0',
+  parent_id = 'post:0:1',
+  writ_id = 'post:0:1',
   raw_content = 'This is a comment, and it\'s even unique nogal, see: ' + Math.round(Math.random() * 100) + Math.round(Math.random() * 100) + '.',
   author_only = false
 } = {}) => new Promise((resolve, reject) => {
@@ -241,4 +241,7 @@ const defSetup = async (cWidth = 10, reps) => {
   while (cWidth-- > 0) proms.push(commentRecursively(9, writ.id, writ.id))
   await Promise.all(proms)
   await getComments({ path: writ.id + '/' }, reps)
+}
+
+defSetup()
 }

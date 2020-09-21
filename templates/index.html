@@ -6,6 +6,7 @@
     <title>Grimstack</title>
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
     <link rel="modulepreload" href="/js/domlib.min.js">
+    <link rel="modulepreload" href="/js/router.min.js">
     {% if not dev_mode or dev_mode is undefined  %}
     <link href="https://fonts.googleapis.com/css2?family=Cantarell:wght@400;700&display=swap" rel="stylesheet">
     {% endif %}
@@ -49,6 +50,6 @@
         </section>
     </nav>
 
-    <main class="content-display"></main>
+    <main class="content-display" route-active></main>
 </body>
 </html>
