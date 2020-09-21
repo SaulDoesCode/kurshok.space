@@ -657,6 +657,91 @@ export default (d => {
     return content
   }
 
+  const mutateSet = set => (n, state) =>
+    set[state == null ? 'has' : state ? 'add' : 'delete'](n)
+
+  const Initiated = new Map()
+  const beenInitiated = (name, el) => Initiated.has(name) && Initiated.get(name)(el)
+
+  const attributeObserver = (el, name, opts) => {
+    let {init, update, remove} = opts
+    if (!init && !update && opts instanceof Function) [init, update] = [opts, opts]
+    const intialize = (present, value) => {
+      if (present && !beenInitiated(name, el)) {
+        if (init) init(el, value)
+        if (!Initiated.has(name)) {
+          Initiated.set(name, mutateSet(new WeakSet()))
+        }
+        Initiated.get(name)(el, true)
+        return true
+      }
+      return beenInitiated(name, el)
+    }
+    let removedBefore = false
+    let old = el.getAttribute(name)
+    intialize(el.hasAttribute(name), old)
+    const stop = d.on.attr(el, ({name: attrName, value, oldvalue, present}) => {
+      if (
+        attrName === name &&
+        old !== value &&
+        value !== oldvalue &&
+        intialize(present, value)
+      ) {
+        if (present) {
+          if (update) update(el, value, old)
+          removedBefore = false
+        } else if (!removedBefore) {
+          if (remove) remove(el, value, old)
+          removedBefore = true
+        }
+        old = value
+      }
+    })
+
+    const manager = () => {
+      stop()
+      if (Initiated.has(name)) Initiated.get(name)(el, false)
+    }
+    manager.start = () => {
+      stop.on()
+      Initiated.get(name)(el, true)
+    }
+    return (manager.stop = manager)
+  }
+
+  const directives = new Map()
+  d.directive = (name, opts) => {
+    const directive = new Map()
+    directive.init = el => {
+      if (!beenInitiated(name, el))
+        directive.set(el, attributeObserver(el, name, opts))
+    }
+    directive.stop = el => {
+      if (directive.has(el)) directive.get(el)()
+    }
+    directives.set(name, directive)
+    d.run(() => d.queryEach('[' + name + ']', n => attributeChange(n, name)))
+    return directive
+  }
+
+  const attributeChange = (
+    el,
+    name,
+    oldvalue,
+    value = el.getAttribute(name),
+    present = el.hasAttribute(name)
+  ) => {
+    if (directives.has(name)) directives.get(name).init(el)
+    if (value !== oldvalue) {
+      el.dispatchEvent(d.assign(new CustomEvent('attr'), {
+        name,
+        value,
+        oldvalue,
+        present
+      }))
+    }
+  }
+
   return d
 })(
   function d(tag, ops, ...children) {
