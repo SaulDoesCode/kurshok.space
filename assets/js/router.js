@@ -96,6 +96,7 @@ route.handle = () => {
     route.active = view
     route.emit.change(view, hash, route)
     route.emit[hash](view, route)
+    route.emit[path.slice(1)](hash, view, route)
 }
 
 route.whenActive = (hash, fn, once) => run(() => {
