@@ -15,7 +15,11 @@ app.view = {
 const publicPost = (w) => div({
     $: contentDisplay,
     class: 'post',
-    attr: {pid: w.id}
+    attr: {pid: w.id},
+    onclick(e) {
+        console.log(e)
+        location.hash = w.id
+    }
 },
     header(
         div(

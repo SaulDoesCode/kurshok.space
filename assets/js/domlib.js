@@ -106,12 +106,12 @@ export default (d => {
   }
 
   d.html = (input, ...args) => {
-    if (args.length == 1) host = args[0]
-    else if (args.length) return d.h(input, ...args)
+    if (args.length == 2) host = args[0]
+    else if (args.length > 2) return d.h(input, ...args)
     if (input instanceof Function) input = input(host)
     if (input instanceof Node) return input
     if (d.isNum(input)) input = String(input)
-    if (typeof input === 'string') return Array.from(document.createRange().createContextualFragment(input).childNodes)
+    if (input instanceof String) return Array.from(document.createRange().createContextualFragment(input).childNodes)
     if (d.isArr(input)) return input.map(i => d.html(i, host))
     throw new Error('.html: unrenderable input')
   }
@@ -765,8 +765,7 @@ export default (d => {
             delete ops[val.name]
           } else {
             const args = d.isArr(val) ? val : [val]
-            ops[mode][type] = type.length ?
-              evtfn(el, type, ...args) : evtfn(el, ...args)
+            ops[mode][type] = type.length ? evtfn(el, type, ...args) : evtfn(el, ...args)
           }
         } else if (key in el) {
           if (el[key] instanceof Function) {

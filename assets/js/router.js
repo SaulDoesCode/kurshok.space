@@ -58,7 +58,7 @@ directive('route-active', {
         el.routeHandler = route.on.change((view, hash) => {
             el.setAttribute('route-active', hash)
             el.innerHTML = ''
-            domfn.append(el, domfn.html(view))
+            domfn.append(el, domlib.html(view))
         })
         el.routeOffHandler = route.on.off(hash => {
             el.innerHTML = route.view404(hash)
@@ -76,8 +76,10 @@ domlib.route = route
 
 route.handle = () => {
     if (route.wasReset && route.path == location.hash) return
+    if (route.path != null && route.path == location.hash) return
     let path = location.hash
     if (path.includes('/')) path = path.split('/')[0]
+    if (path.includes(':')) path = path.split(':')[0]
     const view = route.views[path]
     const hash = route.hash()
     if (view == null) {
