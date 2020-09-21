@@ -2,9 +2,10 @@ import domlib from '/js/domlib.min.js'
 
 const {emitter, domfn, directive, run, isRenderable, isFunc} = domlib
 
-const route = emitter((route, view) => {
-    if (view == null) return
-    if (route[0] !== '#') route = '#' + route
+const route = emitter((path, view, omitSuffix) => {
+    if (omitSuffix != null) path.replace(omitSuffix, '')
+    if (view == null) return location.hash = path
+    if (path[0] !== '#') path = '#' + path
 
     if (view.tagName === 'TEMPLATE') {
         view.remove()
@@ -12,8 +13,10 @@ const route = emitter((route, view) => {
     }
 
     if (isRenderable(view)) {
-        views[route] = isFunc(view) ? view() : view
+        views[path] = isFunc(view) ? view() : view
     }
+
+    route.handle()
 })
 const views = route.views = Object.create(null)
 route.hash = (hash = location.hash) => hash.replace('#', '')
@@ -57,6 +60,9 @@ directive('route-active', {
             el.innerHTML = ''
             domfn.append(el, domfn.html(view))
         })
+        el.routeOffHandler = route.on.off(hash => {
+            el.innerHTML = route.view404(hash)
+        })
     },
     remove(el, val) {
         el.routeHandler.off()
@@ -64,13 +70,28 @@ directive('route-active', {
     }
 })
 
+route.view404 = hash => `<br><header>404 - ${hash} | No view for this route</header>`
+
 domlib.route = route
 
 route.handle = () => {
-    const view = route.views[location.hash]
-    if (view == null) return
-    route.active = view
+    if (route.wasReset && route.path == location.hash) return
+    let path = location.hash
+    if (path.includes('/')) path = path.split('/')[0]
+    const view = route.views[path]
     const hash = route.hash()
+    if (view == null) {
+        if (route.path != null) {
+            location.hash = route.path
+            route.wasReset = true
+            return
+        }
+        route.emit.off(hash)
+        return
+    }
+    route.lastPath = route.path
+    route.path = location.hash
+    route.active = view
     route.emit.change(view, hash, route)
     route.emit[hash](view, route)
 }
