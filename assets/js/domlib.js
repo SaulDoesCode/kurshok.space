@@ -111,7 +111,7 @@ export default (d => {
     if (input instanceof Function) input = input(host)
     if (input instanceof Node) return input
     if (d.isNum(input)) input = String(input)
-    if (input instanceof String) return Array.from(document.createRange().createContextualFragment(input).childNodes)
+    if (typeof input === 'string') return Array.from(document.createRange().createContextualFragment(input).childNodes)
     if (d.isArr(input)) return input.map(i => d.html(i, host))
     throw new Error('.html: unrenderable input')
   }
