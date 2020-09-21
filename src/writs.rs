@@ -64,7 +64,7 @@ impl Orchestrator {
   }
 
   pub fn remove_writ(&self, author_id: String, writ_id: String) -> bool {
-    if !self.is_admin(&author_id) && writ_id.split(":").nth(1).map_or(false, |a_id| a_id != author_id) {
+    if writ_id.split(":").nth(1).map_or(false, |a_id| a_id != author_id) && !self.is_admin(&author_id) {
       return false;
     }
 
