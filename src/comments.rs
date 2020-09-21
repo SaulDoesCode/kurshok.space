@@ -215,13 +215,7 @@ impl Comment {
     if let Ok(Some(raw_key)) = orc.comment_key_path_index.get(self.id.as_bytes()) {
       let full_id = raw_key.to_string();
       let mut parts: Vec<&str> = full_id.split('/').filter(|&c| c != "").collect();
-      let path = {
-        let mut path = vec!();
-        for part in &parts {
-          path.push(part.to_string());
-        }
-        path
-      };
+      let path = parts.iter().map(|p| p.to_string()).collect::<Vec<String>>();
       let root_id = parts.drain(..2).join("/");
       return Some((root_id.to_string(), path));
     }
@@ -406,11 +400,10 @@ pub fn comment_on_comment(
 
   let parent_id = if parent_comment.id.contains('/') {
     parent_comment.id.clone()
+  } else if let Some(id) = parent_comment.key_path(orc) {
+    id
   } else {
-    match parent_comment.key_path(orc) {
-      Some(id) => id,
-      None => return None,
-    }
+    return None;
   };
 
   let (tree_id, parts) = get_prefix_and_parts(&parent_id, 2);
@@ -872,9 +865,7 @@ pub async fn comment_query(
     query.max_level = Some(6);
   }
 
-  if !is_admin {
-    if amount > 50 { return None; }
-  } else if amount > 500 { return None; }
+  if (is_admin && amount > 500) || amount > 50 { return None; }
 
   let mut count = 0;
   let page = query.page;
@@ -882,7 +873,7 @@ pub async fn comment_query(
   let mut cidtrees = vec![];
 
   let mut iter = orc.comment_trees.scan_prefix(path.as_bytes());
-  while let Some(Ok((_, raw))) = iter.next() {
+  while let Some(Ok((_, raw))) = iter.next_back() {
     if page < 2 {
         if count == amount { break; }
     } else if count != (amount * page) {
