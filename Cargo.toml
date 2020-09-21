@@ -5,8 +5,10 @@ authors = ["Saul van der Walt <saul@grimstack.io>"]
 edition = "2018"
 
 [dependencies]
-actix-files = { git = "https://github.com/SaulDoesCode/actix-web" }
-actix-web = { git = "https://github.com/SaulDoesCode/actix-web", features = ["rustls"] }
+# actix-files = { git = "https://github.com/SaulDoesCode/actix-web" }
+# actix-web = { git = "https://github.com/SaulDoesCode/actix-web", features = ["rustls"] }
+actix-files = "*"
+actix-web = { version = "*", features = ["rustls"] }
 bincode = "^1.3.1"
 borsh = "^0.7.1"
 clap = "^2.33.3"
@@ -24,7 +26,7 @@ rust-argon2 = "0.8.2"
 rustls = "^0.18.1"
 serde = { version = "^1.0.104", features = ["derive"] }
 serde_json = "^1.0.57"
-simd-json = "^0.3.20"
+# simd-json = "^0.3.20"
 sled = { version = "0.34.4", features = ["compression", "rio"] }
 slug = "^0.1.4"
 sthash = { git = "https://github.com/SaulDoesCode/rust-sthash" }

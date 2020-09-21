@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 #[macro_use(lazy_static)]extern crate lazy_static;
-extern crate simd_json;
+// extern crate simd_json;
 
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;

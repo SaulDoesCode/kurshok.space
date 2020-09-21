@@ -1,7 +1,7 @@
 use argon2::Config;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use simd_json::json;
+use serde_json::json;
 use sled::{transaction::*, IVec, Transactional};
 use slug::slugify;
 use time::Duration;

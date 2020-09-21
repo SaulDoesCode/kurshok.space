@@ -97,8 +97,10 @@ impl FancyIVec for IVec {
   }
 
   fn to_type_from_json<T: serde::de::DeserializeOwned>(&self) -> T {
-    let mut input = self.to_vec();
-    simd_json::from_slice(&mut input).unwrap()
+    // let mut input = self.to_vec();
+    // simd_json::from_slice(&mut input).unwrap()
+    let input = self.to_vec();
+    serde_json::from_slice(&input).unwrap()
   }
 
   fn from_u64(i: u64) -> IVec {
