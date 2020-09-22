@@ -25,9 +25,11 @@
         <header>Grimstack</header>
         <section class="launchers">
         {% if username is defined %}
+            {% if is_writer %}
             <button class="ww-launcher" title="open up the writ writer and post something">
                 WritWriter
             </button>
+            {% endif %}
 
             <button class="profile-launcher" title="click to see or build your profile">{{ username }}</button>
             <script type="module" defer>
@@ -35,7 +37,9 @@
                 app.user = { username: "{{ username }}".trim() }
                 import('/js/profile.min.js')
                 // d.once.click('.profile-launcher', () => {})
+                {% if is_writer %}
                 app.d.once.click('.ww-launcher', () => import('/js/writ-writer.min.js'))
+                {% endif %}
             </script>
         {% else %}
             <button class="auth-launcher" title="click for a login or signup modal">Auth</button>

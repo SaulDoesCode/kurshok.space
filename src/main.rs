@@ -194,6 +194,7 @@ async fn index(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> impl Resp
     if let Some(usr) = o_usr {
         ctx.insert("username", &usr.username);
         ctx.insert("dev_mode", &orc.dev_mode);
+        ctx.insert("is_writer", &orc.user_has_some_attrs(&usr.id, &["writer", "admin"]).unwrap_or(false));
     }
 
     match TEMPLATES.read().render("index.html", &ctx) {
