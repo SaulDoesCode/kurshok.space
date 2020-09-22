@@ -1,0 +1,7 @@
+.git
+target
+/target/*
+node_modules
+/private/*.rs
+/storage
+*.db
