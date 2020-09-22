@@ -64,6 +64,10 @@ body > * > header {
   cursor: pointer;
 }
 
+main {
+  margin-top: 1.5em;
+}
+
 /* .content-display {} */
 
 .post, .post > *:not(hr) {
@@ -88,8 +92,10 @@ body > * > header {
   margin: .25em .25em;
 }
 
-.post>header h4 {
+.post>header h4,
+.post>header h3 {
   margin: 0 0;
+  cursor: pointer;
 }
 
 .post>header .author-name {
