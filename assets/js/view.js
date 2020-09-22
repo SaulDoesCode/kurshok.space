@@ -38,7 +38,7 @@ route('post', postDisplay)
 
 d.run(async () => {
     try {
-        await app.loadScriptsThenRunSequentially(
+        await app.loadScriptsThenRunSequentially(true,
             'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/dayjs.min.js',
             'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/utc.min.js',
             'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/relativeTime.min.js'
@@ -46,6 +46,7 @@ d.run(async () => {
         console.log('loaded the shiz:', dayjs())
         window.dayjs.extend(window.dayjs_plugin_utc)
         window.dayjs.extend(window.dayjs_plugin_relativeTime)
+        dayjs().utcOffset(2)
         app.emit('dayjsLoaded', app.dayjsLoaded = true)
     } catch (e) {}
 })
@@ -76,7 +77,7 @@ route.on.post(hash => app.afterPostsInitialization(async () => {
             d.queryAll('.content code', content).forEach(el => {
                 el.classList.add('language-rust')
             })
-        }, 150)
+        }, 60)
     })
 
     df.prepend(mainView, postNavView)
@@ -131,14 +132,7 @@ app.writQuery({with_content: false, kind: 'post'}).then(async writs => {
     })
     app.postsInitialized = true
     app.emit.postsInitialized()
-    document.head.append(
-        df.link({
-            attr: {
-                rel: 'stylesheet',
-                href: 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.21.0/themes/prism-tomorrow.min.css'
-            }
-        })
-    )
+    app.loadStyle('https://cdnjs.cloudflare.com/ajax/libs/prism/1.21.0/themes/prism-tomorrow.min.css', true)
 })
 
 app.afterPostsInitialization = fn => {
@@ -148,17 +142,18 @@ app.afterPostsInitialization = fn => {
 
 app.dateFormat = 'HH:mm a DD MMM YYYY'
 
+app.dayjsUXTSformat = ts => {
+    const date = dayjs.unix(ts).utcOffset(2)
+    return date.format(app.dateFormat) + ' | ' + date.fromNow()
+}
+
 app.renderUXTimestamp = ts => {
     const txt = d.txt()
-    if (!window.dayjs) {
-        txt.textContent  = new Date(ts * 1000).toLocaleString()
-        app.once.dayjsLoaded(() => {
-            const date = dayjs.unix(ts).utcOffset(2)
-            txt.textContent = date.format(app.dateFormat) + ' | ' + date.fromNow()
-        })
-    } else {
-        const date = dayjs.unix(ts).utcOffset(2)
-        txt.textContent = date.format(app.dateFormat) + ' | ' + date.fromNow()
+    try {
+        txt.textContent = app.dayjsUXTSformat(ts)
+    } catch (e) {
+        txt.textContent = new Date(ts * 1000).toLocaleString()
+        app.once.dayjsLoaded(() => txt.textContent = app.dayjsUXTSformat(ts))
     }
     return txt
 }
