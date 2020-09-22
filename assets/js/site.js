@@ -82,28 +82,45 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation
 }
 
 
-app.loadScriptsThenRunSequentially = (...scripts) => new Promise(async (resolve, reject) => {
+app.loadScriptsThenRunSequentially = (saveInLS, ...scripts) => new Promise(async (resolve, reject) => {
     const fizzout = setTimeout(reject, 3000 * scripts.length)
-    const cache = {}
-    const fetches = []
-
-    for (const script of scripts) fetches.push(
-        fetch(script)
-            .then(res => res.text())
-            .then(txt => {cache[script] = txt})
-    )
-    await Promise.all(fetches)
-
-    let scriptage = ''
-    for (const script in cache) {
-        scriptage += '\n\n; ' + cache[script]
-    }
     const lastScript = scripts[scripts.length - 1]
-    scriptage += `; app.emit("doneLoading:${lastScript}");`
+    let scriptage = ''
+    if (saveInLS && lastScript in localStorage) {
+        scriptage = localStorage.getItem(lastScript)
+    } else {
+        const cache = {}, fetches = []
+        for (const script of scripts) fetches.push(
+            fetch(script)
+                .then(res => res.text())
+                .then(txt => {cache[script] = txt})
+        )
+        await Promise.all(fetches)
+        for (const script in cache) {
+            scriptage += '\n;' + cache[script]
+        }
+        scriptage += `\n; app.emit("doneLoading:${lastScript}");`
+        if (saveInLS) localStorage.setItem(lastScript, scriptage)
+    }
+
     app.once['doneLoading:' + lastScript](resolve)
     df.script({$: document.head}, scriptage)
     clearTimeout(fizzout)
 })
+
+app.loadStyle = async (url, cache) => {
+    let txt
+    if (cache && url in localStorage) {
+        txt = localStorage.getItem(url)
+    } else {
+        txt = await (await fetch(url)).text()
+        if (cache) {
+            localStorage.setItem(url, txt)
+        }
+    }
+
+    df.style({$: document.head}, txt)
+}
 
 window.app = app
 export default app
