@@ -36,6 +36,20 @@ if (location.hash == '' || location.hash == '#') location.hash = 'posts'
 
 route('post', postDisplay)
 
+d.run(async () => {
+    try {
+        await app.loadScriptsThenRunSequentially(
+            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/dayjs.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/utc.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/relativeTime.min.js'
+        )
+        console.log('loaded the shiz:', dayjs())
+        window.dayjs.extend(window.dayjs_plugin_utc)
+        window.dayjs.extend(window.dayjs_plugin_relativeTime)
+        app.emit('dayjsLoaded', app.dayjsLoaded = true)
+    } catch (e) {}
+})
+
 const postNavView = d.html(/* html */`
     <nav class="post-nav">
         <button class="post-back-btn" onclick="location.hash = 'posts'">
@@ -49,7 +63,7 @@ route.on.post(hash => app.afterPostsInitialization(async () => {
     const {title, tags, author, date, content, comments, commentsContainer} = postDisplay.parts
     title.textContent = post.title
     date.innerHTML = ''
-    date.textContent = new Date(post.posted * 1000).toLocaleString()
+    d.render(app.renderUXTimestamp(post.posted), date)
 
     tags.innerHTML = ''
     post.tags.map(tag => df.span({$: tags, class:'tag'}, tag))
@@ -87,7 +101,7 @@ const publicPost = (w) => div({
             div({class: 'author-name'}, `By ${w.author_name}`)
         ),
         div(
-            div({class: 'posted'}, new Date(w.posted * 1000).toLocaleString()),
+            div({class: 'posted'}, app.renderUXTimestamp(w.posted)),
             div({class: 'tags'},
                 w.tags.map(t => span({class: 'tag'}, t))
             )
@@ -109,7 +123,7 @@ app.fetchPostContent = async id => {
 
 app.posts = Object.create(null)
 
-app.writQuery({with_content: false, kind: 'post'}).then(writs => {
+app.writQuery({with_content: false, kind: 'post'}).then(async writs => {
     if(!d.isArr(writs)) return console.error(writs)
     writs.forEach(w => {
         app.posts[w.id] = w
@@ -130,4 +144,21 @@ app.writQuery({with_content: false, kind: 'post'}).then(writs => {
 app.afterPostsInitialization = fn => {
     if (app.postsInitialized) fn()
     else app.once.postsInitialized(fn)
+}
+
+app.dateFormat = 'HH:mm a DD MMM YYYY'
+
+app.renderUXTimestamp = ts => {
+    const txt = d.txt()
+    if (!window.dayjs) {
+        txt.textContent  = new Date(ts * 1000).toLocaleString()
+        app.once.dayjsLoaded(() => {
+            const date = dayjs.unix(ts).utcOffset(2)
+            txt.textContent = date.format(app.dateFormat) + ' | ' + date.fromNow()
+        })
+    } else {
+        const date = dayjs.unix(ts).utcOffset(2)
+        txt.textContent = date.format(app.dateFormat) + ' | ' + date.fromNow()
+    }
+    return txt
 }
