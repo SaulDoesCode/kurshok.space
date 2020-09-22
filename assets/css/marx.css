@@ -240,7 +240,7 @@ main, header, footer, article, section, aside, details, summary {
 main {
     display: block;
     margin: 0 auto;
-    max-width: 768px;
+    max-width: 780px;
     padding: 0 16px 16px;
 }
 

@@ -5,7 +5,7 @@ body > * {
 
 body {
   display: flex;
-  justify-content: start;
+  justify-content: space-between;
   align-items: center;
   align-content: center;
   flex-flow: column nowrap;
@@ -65,7 +65,8 @@ body > * > header {
 }
 
 main {
-  margin-top: 1.5em;
+  margin-top: 1em;
+  min-height: 85vh;
 }
 
 /* .content-display {} */
@@ -92,6 +93,10 @@ main {
   margin: .25em .25em;
 }
 
+.post>header>div:first-of-type {
+  margin-bottom: .5em;
+}
+
 .post>header h4,
 .post>header h3 {
   margin: 0 0;
@@ -104,9 +109,16 @@ main {
 }
 
 .post > .content {
+  margin: .25em .25em 0 .25em;
   padding: 1em .5em .5em .5em;
   justify-content: flex-start;
   flex-flow: column;
+  font-size: 1.1em;
+}
+
+.post .tags {
+  max-width: 280px;
+  margin: .25em;
 }
 
 .tag {

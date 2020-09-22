@@ -53,7 +53,7 @@ d.run(async () => {
 
 const postNavView = d.html(/* html */`
     <nav class="post-nav">
-        <button class="post-back-btn" onclick="location.hash = 'posts'">
+        <button class="post-back-btn" onclick="location.hash = app.fancyHash || 'posts'">
             <- Go back to post list
         </button>
     </nav>
@@ -72,12 +72,14 @@ route.on.post(hash => app.afterPostsInitialization(async () => {
     content.innerHTML = 'Content loading...'
     app.fetchPostContent(post.id).then(postContent => {
         content.innerHTML = ''
-        d.render(d.html(postContent), content)
-        setTimeout(() => {
-            d.queryAll('.content code', content).forEach(el => {
-                el.classList.add('language-rust')
-            })
-        }, 60)
+        if (post == app.activePost) {
+            d.render(d.html(postContent), content)
+            setTimeout(() => {
+                d.queryAll('.content code', content).forEach(el => {
+                    el.classList.add('language-rust')
+                })
+            }, 60)
+        }
     })
 
     df.prepend(mainView, postNavView)
