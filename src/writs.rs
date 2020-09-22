@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sled::{transaction::*, IVec, Transactional};
 use thiserror::Error;
-use time::{Duration, OffsetDateTime};
+use time::{OffsetDateTime};
 
 use std::sync::Arc;
 
@@ -904,7 +904,7 @@ impl RawWrit {
 
     let raw_content = self.raw_content.trim();
 
-    if !orc.dev_mode && is_new_writ {
+    /* if !orc.dev_mode && is_new_writ {
       // hash contents and ratelimit with it to prevent spam
       let rc_hash = orc.hash(raw_content.as_bytes());
       let mut hitter = Vec::from("wr".as_bytes());
@@ -916,7 +916,7 @@ impl RawWrit {
       } else {
         return Err(WritError::DBIssue);
       }
-    }
+    } */
 
     let res: TransactionResult<(), ()> = (
       &orc.content,
@@ -1034,11 +1034,16 @@ impl RawWrit {
       Ok(())
     });
 
-    if res.is_ok() {
-      return Ok(writ);
+    match res {
+      Ok(_) => Ok(writ),
+      Err(_) => {
+        /* if self.dev_mode {
+          println!("writ creation pooped out: {}", err);
+        } */
+        Err(WritError::DBIssue)
+      }
     }
 
-    Err(WritError::DBIssue)
   }
 
   pub fn writ(&self, orc: &Orchestrator) -> Option<Writ> {
@@ -1106,6 +1111,8 @@ pub enum WritError {
     #[error("there was a problem interacting with the db")]
     DBIssue,
     #[error("only authorized users may push non-markdown writs")]
+    RateLimit,
+    #[error("too many requests to writ api, chill for a bit")]
     NoPermNoMD,
     #[error("unknown writ error")]
     Unknown,
