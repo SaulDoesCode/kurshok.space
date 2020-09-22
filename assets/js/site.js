@@ -81,5 +81,29 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation
     return ts
 }
 
+
+app.loadScriptsThenRunSequentially = (...scripts) => new Promise(async (resolve, reject) => {
+    const fizzout = setTimeout(reject, 3000 * scripts.length)
+    const cache = {}
+    const fetches = []
+
+    for (const script of scripts) fetches.push(
+        fetch(script)
+            .then(res => res.text())
+            .then(txt => {cache[script] = txt})
+    )
+    await Promise.all(fetches)
+
+    let scriptage = ''
+    for (const script in cache) {
+        scriptage += '\n\n; ' + cache[script]
+    }
+    const lastScript = scripts[scripts.length - 1]
+    scriptage += `; app.emit("doneLoading:${lastScript}");`
+    app.once['doneLoading:' + lastScript](resolve)
+    df.script({$: document.head}, scriptage)
+    clearTimeout(fizzout)
+})
+
 window.app = app
 export default app
