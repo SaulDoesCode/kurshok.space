@@ -26,9 +26,9 @@
         <section class="launchers">
         {% if username is defined %}
             {% if is_writer %}
-            <button class="ww-launcher" title="open up the writ writer and post something">
-                WritWriter
-            </button>
+                <button class="ww-launcher" title="open up the writ writer and post something">
+                    WritWriter
+                </button>
             {% endif %}
 
             <button class="profile-launcher" title="click to see or build your profile">{{ username }}</button>
@@ -55,5 +55,11 @@
     </nav>
 
     <main class="content-display" route-active></main>
+
+    <footer>
+        <a href="https://m.do.co/c/6564219d6c9a">
+            Support us, use our Digital Ocean Referral link
+        </a>
+    </footer>
 </body>
 </html>
