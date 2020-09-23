@@ -2,19 +2,6 @@
 import os
 import sys
 
-found_syncthing = False
-try:
-    # don't mess up syncthing syncing with minification seriously
-    output = subprocess.check_output(['pgrep', 'syncthing'])
-    if len(output) > 0:
-        print('found syncthing running, so won\'t minify')
-        found_syncthing = True
-except:
-    pass
-
-if found_syncthing:
-    sys.exit(0)
-
 # MAKE SURE that terser & csso is installed locally
 os.getcwd()
 
