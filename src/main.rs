@@ -60,10 +60,9 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    if CONF.read().dev_mode {
-        admin_functions::watch_and_update_files();
-        println!("devmode file watching active");
-    }
+    admin_functions::watch_and_update_files();
+    println!("file watching active");
+    // if CONF.read().dev_mode {}
 
     HttpServer::new(|| 
         App::new()
