@@ -43,7 +43,6 @@ d.run(async () => {
             'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/utc.min.js',
             'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/relativeTime.min.js'
         )
-        console.log('loaded the shiz:', dayjs())
         window.dayjs.extend(window.dayjs_plugin_utc)
         window.dayjs.extend(window.dayjs_plugin_relativeTime)
         dayjs().utcOffset(2)

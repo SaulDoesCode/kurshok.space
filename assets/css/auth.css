@@ -26,5 +26,6 @@
 }
 
 .auth-view label {
+    display: inline;
     color: hsl(0, 0%, 30%);
 }

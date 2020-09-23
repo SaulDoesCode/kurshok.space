@@ -11,7 +11,7 @@ body {
   flex-flow: column nowrap;
   background: #363535;
   color: #fff;
-  min-height: 98vh;  
+  min-height: 100vh;  
   top: 0;
   left: 0;
   padding: 0;
@@ -132,4 +132,15 @@ main {
   text-shadow: 0 1px 2px rgb(0,0,0,.12);
   box-shadow: 0 2px 3px rgb(0,0,0,.12);
   background: var(--primary-color);
+}
+
+footer {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  align-content: center;
+  flex-flow: row wrap;
+  margin: .5em 0 0 0;
+  padding: .5em .25em;
+  background: #282727;
 }
