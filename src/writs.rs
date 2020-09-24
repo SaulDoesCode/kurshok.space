@@ -1219,6 +1219,10 @@ pub async fn push_raw_writ(
   rw: web::Json<RawWrit>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
+  if rw.raw_content.len() > 150_000 {
+    return crate::responses::BadRequest("Your writ is too long, it has to be less than 150k characters")
+  }
+
   if let Some(usr_id) = orc.user_id_by_session(&req) {
     if orc.user_has_some_attrs(&usr_id, &["writer", "admin"]).unwrap_or(false) {
       return match rw.commit(usr_id, orc.as_ref()) {
