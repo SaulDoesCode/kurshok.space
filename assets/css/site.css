@@ -66,7 +66,7 @@ body > * > header {
 
 main {
   margin-top: 1em;
-  min-height: 85vh;
+  min-height: 75vh;
 }
 
 /* .content-display {} */
@@ -137,10 +137,41 @@ main {
 footer {
   display: flex;
   justify-content: space-around;
-  align-items: center;
+  align-items: flex-start;
   align-content: center;
   flex-flow: row wrap;
   margin: .5em 0 0 0;
   padding: .5em .25em;
   background: #282727;
+  font-size: .8em;
+}
+
+footer header {
+  margin: 0 0 .75em 0;
+}
+
+footer > section {
+  display: inline-flex;
+  justify-content: space-around;
+  align-items: center;
+  align-content: center;
+  flex-flow: column;
+  width: fit-content;
+  max-width: 300px;
+  height: 100%;
+  margin: .5em;
+}
+
+footer a {
+  line-height: 1.1;
+  margin: .4em .25em;
+}
+
+.footer-links {
+  display: inline-flex;
+  justify-content: space-around;
+  align-items: center;
+  align-content: center;
+  flex-flow: column;
+  height: 100%;
 }
