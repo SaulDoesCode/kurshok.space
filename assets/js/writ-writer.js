@@ -125,6 +125,10 @@ app.pushWrit = async (title, raw_content, tags, ops = {}) => {
 
 app.deleteWritRequest = writID => app.txtDelete('/writ', writID)
 
+app.reloadWrits = () => {
+    // TODO: keep things up to date when changes happen
+}
+
 app.editableWritQuery({
     author_name: app.user.username,
     with_raw_content: false,
