@@ -243,6 +243,14 @@
     color: #fff;
 }
 
+.writ-writer-view .unpushed {
+    background: #ffeab3 !important;
+}
+
+.writ-writer-view .wl-entry.selected.unpushed {
+    filter: hue-rotate(330deg);
+}
+
 .writ-writer-view .tags-and-toggles>div {
     display: flex;
     justify-content: center;

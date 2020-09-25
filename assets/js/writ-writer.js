@@ -10,6 +10,7 @@ const {
     writingPad,
     tagInput,
     pushWritBtn,
+    saveLocallyBtn,
     clearEditorBtn,
     writSelector,
     isPublicCheckbox,
@@ -43,6 +44,7 @@ const {
         </div>
         <section class="ribbon">
             <button class="submit" ref="pushWritBtn">Push</button>
+            <button class="submit" ref="saveLocallyBtn">Save locally</button>
             <button class="submit" ref="clearEditorBtn">Clear Editor</button>
         </section>
     </section>
@@ -60,11 +62,14 @@ writingPad.value = ''
 })).toggleView()
 
 const writListEntry = (title, id) => div({
-    class: 'wl-entry',
+    class: {
+        'wl-entry': true,
+        unpushed: id == null
+    },
     $: writList,
-    attr: {wid: id}
-},
-    parent => parent.titleSpan = span(title),
+    attr: {wid: id == null ? title : id}
+}, parent => [
+    parent.titleSpan = span(title),
     div(
         () => {
             const delBtn = span({
@@ -88,11 +93,18 @@ const writListEntry = (title, id) => div({
                 }
                 try {
                     clickHandler.off()
-                    const res = await app.deleteWritRequest(id)
-                    if (res.ok) {
-                        df.remove(d.query(`[wid="${id}"]`))
-                        if (app.ww.active && app.ww.active.id == id) app.clearEditor()
-                        delete app.ww.writs[id]
+                    if (id != null) {
+                        const res = await app.deleteWritRequest(id)
+                        if (res.ok) {
+                            df.remove(parent)
+                            if (app.ww.active && app.ww.active.id == id) app.clearEditor()
+                            delete app.ww.writs[id]
+                        }
+                    } else {
+                        await localforage.removeItem('unpushed:' + title)
+                        delete app.ww.unpushed[title]
+                        df.remove(parent)
+                        if (app.ww.active && app.ww.active.title == title) app.clearEditor()
                     }
                 } catch (e) {
                     clickHandler.on()
@@ -103,9 +115,9 @@ const writListEntry = (title, id) => div({
             return delBtn
         }
     )
-)
+])
 
-app.ww = {writs: {}}
+app.ww = {writs: {}, unpushed: {}}
 
 app.pushWrit = async (title, raw_content, tags, ops = {}) => {
     const raw_writ = {
@@ -133,14 +145,19 @@ app.editableWritQuery({
     author_name: app.user.username,
     with_raw_content: false,
 }).then(async writs => {
-    if (!d.isArr(writs)) {
-        console.error("failed to fetch user's editable writs")
-    }
-    console.log(writs)
-
+    // TODO: Error toasts
+    if (!d.isArr(writs)) return console.error("failed to fetch user's editable writs")
     for (const w of writs) {
         app.ww.writs[w.id] = w
         writListEntry(w.title, w.id)
+    }
+
+    for (const key of await (await app.localForage()).keys()) {
+        if (key.includes('unpushed:')) {
+            const uw = JSON.parse(await localforage.getItem(key))
+            app.ww.unpushed[uw.title] = uw
+            writListEntry(uw.title)
+        }
     }
 })
 
@@ -149,11 +166,20 @@ app.rawContentRequest = async wid => {
     return await res.json()
 }
 
+app.localForage = () => app.localForageLoaded ?
+    Promise.resolve(window.localforage) :
+    new Promise(resolve => app.once.localForageLoaded(() => resolve(window.localforage)))
+
+d.run(async () => {
+    await app.loadScriptsThenRunSequentially(true, '/js/localforage.min.js')
+    app.emit('localForageLoaded', app.localForageLoaded = true)
+})
+
 d.on.pointerup(writList, e => {
     if (e.target.classList.contains('selected') || e.target.parentElement.classList.contains('selected')) return
     let wid = e.target.getAttribute('wid') || e.target.parentElement.getAttribute('wid')
     if (wid != null) {
-        const writ = app.ww.active = app.ww.writs[wid]
+        const writ = app.ww.active = (app.ww.writs[wid] || app.ww.unpushed[wid])
         if (app.ww.selectedWLE) app.ww.selectedWLE.classList.remove('selected')
         app.ww.selectedWLE = d.query(`[wid="${wid}"]`)
         app.ww.selectedWLE.classList.add('selected')
@@ -207,10 +233,7 @@ app.clearEditor = () => {
     }
 }
 
-app.editorPushWrit = async () => {
-    console.log('trying to push writ...')
-    let res
-
+app.gatherWritFromWriter = () => {
     const title = titleInput.value.trim()
     const raw_content = writingPad.value.trim()
     const public = isPublicCheckbox.checked
@@ -221,14 +244,40 @@ app.editorPushWrit = async () => {
         public,
         commentable
     }
-    if (app.ww.active) ops.id = app.ww.active.id
-    res = await app.pushWrit(title, raw_content, tags, ops)
+
+    return {title, raw_content, tags, ops}
+}
+
+app.editorPushWrit = async () => {
+    console.log('trying to push writ...')
+    let res
+
+    const writFields = app.gatherWritFromWriter()
+    if (app.ww.active) writFields.ops.id = app.ww.active.id
+    res = await app.pushWrit(
+        writFields.title,
+        writFields.raw_content,
+        writFields.tags,
+        writFields.ops
+    )
 
     if (res != null && res.ok) {
         console.log(res)
         return res
     }
 }
+
+d.on.pointerup(saveLocallyBtn, async e => {
+    if (app.ww.active && app.ww.active.id != null) return
+    const {title, raw_content, tags, ops} = app.gatherWritFromWriter()
+    const writ = {title, raw_content, tags, ...ops}
+    await localforage.setItem('unpushed:' + title, JSON.stringify(writ))
+    app.ww.active = app.ww.unpushed[title] = writ
+
+    if (app.ww.selectedWLE) app.ww.selectedWLE.classList.remove('selected')
+    app.ww.selectedWLE = writListEntry(title)
+    app.ww.selectedWLE.classList.add('selected')
+})
 
 d.on.pointerup(clearEditorBtn, app.clearEditor)
 
