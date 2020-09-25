@@ -30,7 +30,7 @@ impl Orchestrator {
   pub fn index_writ_tags(&self, writ_id: String, tags: Vec<String>) -> bool {
     let res: TransactionResult<(), ()> = (&self.tags_index, &self.tag_counter).transaction(|(tags_index, tag_counter)| {
       for tag in tags.iter() {
-        let id = format!("{}:{}", tag.as_str(), writ_id);
+        let id = format!("{}:{}", &tag, writ_id);
         tags_index.insert(id.as_bytes(), tags.try_to_vec().unwrap())?;
         let count: u64 = match tag_counter.get(tag.as_bytes())? {
           Some(raw_count) => raw_count.to_u64(),
@@ -859,6 +859,10 @@ impl RawWrit {
       return Err(WritError::NoPermNoMD);
     }
 
+    if !self.are_tags_valid() {
+      return Err(WritError::InvalidTags);
+    }
+
     let (writ_id, is_new_writ) = match &self.id {
       Some(wi) => {
         if let Some(a_id) = wi.split(":").nth(1) {
@@ -1046,6 +1050,10 @@ impl RawWrit {
 
   }
 
+  pub fn are_tags_valid(&self) -> bool {
+    self.tags.iter().all(|t| t.len() <= 20 && t.chars().all(char::is_alphanumeric))
+  }
+
   pub fn writ(&self, orc: &Orchestrator) -> Option<Writ> {
     if let Some(id) = &self.id {
       if let Ok(w) = orc.writs.get(id.as_bytes()) {
@@ -1102,6 +1110,8 @@ pub enum WritError {
     IDGenErr,
     #[error("author's id mismatches writ's author_id")]
     InauthenticAuthor,
+    #[error("please see to it that all writ tags are alphanumeric")]
+    InvalidTags,
     #[error("duplicate writ, please don't copy")]
     DuplicateWrit,
     #[error("writ made viewable_only with attributes the author user lacks")]
