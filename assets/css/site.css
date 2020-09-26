@@ -9,7 +9,7 @@ body {
   align-items: center;
   align-content: center;
   flex-flow: column nowrap;
-  background: #363535;
+  background: hsl(0, 0%, 5%);
   color: #fff;
   min-height: 100vh;  
   top: 0;
@@ -23,6 +23,11 @@ body > * > header {
   text-align: center;
   font-size: 1.25em;
   font-weight: 600;
+}
+
+main {
+  margin-top: 1em;
+  min-height: 75vh;
 }
 
 .hero {
@@ -48,53 +53,57 @@ body > * > header {
 
 .hero .launchers {
   width: auto;
-  margin: .25em;
+  margin: .25em;  
 }
 
 .hero .ww-launcher,
 .hero .auth-launcher,
-.hero .profile-launcher {
+.hero .profile-launcher,
+.post-nav button {
   display: inline-block;
   text-align: center;
   margin: .4em;
   padding: .1em .4em;
   font-size: 1.1em;
   border-radius: 4px;
-  background: hsla(0, 0%, 0%, 0.25);
+  background: hsl(0, 0%, 10%);
   cursor: pointer;
 }
 
-main {
-  margin-top: 1em;
-  min-height: 75vh;
-}
-
-/* .content-display {} */
-
-.post, .post > *:not(hr) {
+.post, .post > * {
   display: flex;
   justify-content: space-between;
   align-content: center;
   align-items: center;
-  flex-flow: row wrap;
+  flex-flow: row nowrap;
   margin: 0;
   padding: .5em;
-  background: hsl(0, 0%, 27%);
+  background: hsl(0, 0%, 10%);
+  color: #fff;
   border-radius: 4px;
 }
 
 .post {
-  background: hsl(0, 0%, 30%);
+  background: transparent;
   margin: 1em auto 1.5em auto;
-  filter: drop-shadow(0 2px 1em rgba(0,0,0,.1));
+  filter: drop-shadow(0 2px .5em rgba(0,0,0,.1));
 }
 
-.post > header {
-  margin: .25em .25em;
+.post.full {
+  margin-top: .5em;
+  flex-flow: column;
 }
 
-.post>header>div:first-of-type {
-  margin-bottom: .5em;
+.post > .post-header > * {
+  margin: 0 .5em;
+}
+
+.post > * {
+  min-height: 95px;
+}
+
+.post>header > * {
+  text-align: center;
 }
 
 .post>header h4,
@@ -108,16 +117,69 @@ main {
   font-size: .92em;
 }
 
+.post > header .title {
+  flex: 1 1 auto;  
+  margin: .25em 0 .5em 0;
+  font-size: 0.8em;
+  text-align: left;
+}
+
+.post.full > * {
+  margin-bottom: .5em;
+}
+
+.post article > *:last-child {
+  margin-bottom: 0;
+}
+
+.post .votes {
+  display: flex;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  flex-direction: column;
+  margin-right: .5em;
+  padding: .5em;
+  font-size: 1.1em;
+}
+
+.post .votes .vote {
+  cursor: pointer;
+  transition: all 140ms ease-in;
+}
+
+.post .votes .vote.up:hover,
+.post .votes .vote.up.selected {
+  color: #ffb638;
+}
+
+.post .votes .vote.down:hover,
+.post .votes .vote.down.selected {
+  color: #ff145a;
+}
+
+.post .votes .vote.up::before {
+  content: '🡅';
+}
+.post .votes .vote.down::before {
+  content: '🡇';
+}
+
 .post > .content {
   margin: .25em .25em 0 .25em;
-  padding: 1em .5em .5em .5em;
-  justify-content: flex-start;
+  padding: .75em .5em .5em .5em;
+  justify-content: space-evenly;
   flex-flow: column;
   font-size: 1.1em;
 }
 
 .post .tags {
-  max-width: 280px;
+  display: inline-flex;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+  max-width: 250px;
   margin: .25em;
 }
 
@@ -142,7 +204,7 @@ footer {
   flex-flow: row wrap;
   margin: .5em 0 0 0;
   padding: .5em .25em;
-  background: #282727;
+  background: hsl(0, 0%, 8%);
   font-size: .8em;
 }
 

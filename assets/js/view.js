@@ -6,7 +6,7 @@ const {div, h4, section, span, header} = df
 
 const mainView = d.query('main[route-active]')
 const contentDisplay = df.section({class: 'posts'})
-const postDisplay = df.section({class: 'post'}, pd => {
+const postDisplay = df.section({class: 'full post'}, pd => {
     pd.parts = d.h /* html */ `
         <header class="post-header">
             <div>
@@ -53,36 +53,33 @@ d.run(async () => {
 const postNavView = d.html(/* html */`
     <nav class="post-nav">
         <button class="post-back-btn" onclick="location.hash = app.fancyHash || 'posts'">
-            <- Go back to post list
+           🡄 Back to Post List
         </button>
     </nav>
 `)
 
-route.on.post(hash => app.afterPostsInitialization(async () => {
+route.on.post(async hash => {
+    await app.afterPostsInitialization()
     const post = app.activePost = app.posts[hash]
     const {title, tags, author, date, content, comments, commentsContainer} = postDisplay.parts
     title.textContent = post.title
     date.innerHTML = ''
     d.render(app.renderUXTimestamp(post.posted), date)
-
     tags.innerHTML = ''
     post.tags.map(tag => df.span({$: tags, class:'tag'}, tag))
     author.textContent = 'By ' + post.author_name
     content.innerHTML = 'Content loading...'
-    app.fetchPostContent(post.id).then(postContent => {
-        content.innerHTML = ''
-        if (post == app.activePost) {
-            d.render(d.html(postContent), content)
-            setTimeout(() => {
-                d.queryAll('.content code', content).forEach(el => {
-                    el.classList.add('language-rust')
-                })
-            }, 60)
-        }
-    })
-
     df.prepend(mainView, postNavView)
-}))
+    const postContent = await app.fetchPostContent(post.id)
+    content.innerHTML = ''
+    if (post == app.activePost) {
+        d.render(d.html(postContent), content)
+        setTimeout(() => d.queryAll('.content code', content).forEach(el => {
+            el.classList.add('language-rust')
+        }), 60)
+    }
+})
+
 // TODO: pagination
 app.view = {
     page: 0,
@@ -93,12 +90,70 @@ const publicPost = (w) => div({
     class: 'post',
     attr: {pid: w.id},
     onclick(e, el) {
+        if (e.target.className.includes('vote')) return
         location.hash = w.id
         app.fetchPostContent(w.id)
     }
 },
+    div({
+        class: 'votes',
+        async onclick(e, el) {
+            const isUp = e.target.classList.contains('up')
+            const isDown = e.target.classList.contains('down')
+            if (!isDown && !isUp) return
+            const isSelected = e.target.classList.contains('selected')
+            // unvote
+            if (w.you_voted != null && isSelected) {
+                const res = await app.voteWrit(w.id)
+                if (res != false) {
+                    el.downvote.classList.remove('selected')
+                    el.upvote.classList.remove('selected')
+                    if (isUp) {
+                        el.voteCount.textContent = w.vote -= 1
+                    } else if (isDown) {
+                        el.voteCount.textContent = w.vote += 1
+                    }
+                    w.you_voted = null
+                }
+            } else if (isUp) {
+                if (await app.voteWrit(w.id, true) != false) {
+                    el.downvote.classList.remove('selected')
+                    el.upvote.classList.add('selected')
+                    if (w.you_voted === false) w.vote += 1
+                    el.voteCount.textContent = w.vote += 1
+                    w.you_voted = true
+                }
+            } else if(isDown) {
+                if (await app.voteWrit(w.id, false) != false) {
+                    el.upvote.classList.remove('selected')
+                    el.downvote.classList.add('selected')
+                    if (w.you_voted === true) w.vote -= 1
+                    el.voteCount.textContent = w.vote -= 1
+                    w.you_voted = false
+                }
+            }
+        }
+    },
+        votesEl => [
+            votesEl.upvote = span({
+                class: {
+                    up: true,
+                    vote: true,
+                    selected: w.you_voted === true,
+                }
+            }),
+            votesEl.voteCount = span({class: 'vote-count'}, w.vote),
+            votesEl.downvote = span({
+                class: {
+                    down: true,
+                    vote: true,
+                    selected: w.you_voted === false,
+                }
+            })
+        ]
+    ),
     header(
-        div(
+        div({class: 'title'},
             h4(w.title),
             div({class: 'author-name'}, `By ${w.author_name}`)
         ),
@@ -136,10 +191,11 @@ app.writQuery({with_content: false, kind: 'post'}).then(async writs => {
     app.loadStyle('https://cdnjs.cloudflare.com/ajax/libs/prism/1.21.0/themes/prism-tomorrow.min.css', true)
 })
 
-app.afterPostsInitialization = fn => {
-    if (app.postsInitialized) fn()
-    else app.once.postsInitialized(fn)
-}
+app.afterPostsInitialization = fn => app.postsInitialized ?
+    (fn != null ? fn() : Promise.resolve(true)) : 
+    fn != null ?
+        app.once.postsInitialized(fn) :
+        new Promise(resolve => app.once.postsInitialized(resolve))
 
 app.dateFormat = 'HH:mm a DD MMM YYYY'
 
@@ -157,4 +213,14 @@ app.renderUXTimestamp = ts => {
         app.once.dayjsLoaded(() => txt.textContent = app.dayjsUXTSformat(ts))
     }
     return txt
+}
+
+app.voteWrit = async (id, up) => {
+    try {
+        const res = await fetch(`/writ/${id}/${up == null ? 'unvote' : up ? 'upvote' : 'downvote'}`)
+        return await res.json()
+    } catch(e) {
+        console.error('app.voteWrit error: ', e)
+    }
+    return false
 }
