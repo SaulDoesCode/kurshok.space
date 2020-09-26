@@ -493,19 +493,21 @@ export default (d => {
 
   domfn.class = (node, c, state) => {
     if (node && c != null && node.classList) {
-      if (d.isArr(node))
+      if (d.isArr(node)) {
         for (const n of node) domfn.class(n, c, state)
-      else if (c.constructor === Object)
+      } else if (c.constructor === Object) {
         for (const name in c) {
           if (c[name] === true) node.classList.add(name)
           else if (c[name] === false) node.classList.remove(name)
           else for (const cl of c) node.classList.toggle(name)
         }
-      if (typeof c === 'string') c = c.split(' ')
-      if (d.isArr(c)) {
-        if (state === true) node.classList.add(...c)
-        else if (state === false) node.classList.remove(...c)
-        else for (const cl of c) node.classList.toggle(c)
+      } else {
+        if (typeof c === 'string') c = c.split(' ')
+        for (const cl of c) {
+          if (state === true) node.classList.add(cl)
+          else if (state === false) node.classList.remove(cl)
+          else node.classList.toggle(cl)
+        }
       }
     }
     return node
