@@ -108,27 +108,23 @@ const publicPost = (w) => div({
                 if (res != false) {
                     el.downvote.classList.remove('selected')
                     el.upvote.classList.remove('selected')
-                    if (isUp) {
-                        el.voteCount.textContent = w.vote -= 1
-                    } else if (isDown) {
-                        el.voteCount.textContent = w.vote += 1
-                    }
+                    el.voteCount.textContent = w.vote = res.data
                     w.you_voted = null
                 }
             } else if (isUp) {
-                if (await app.voteWrit(w.id, true) != false) {
+                const res = await app.voteWrit(w.id, true)
+                if (res != false) {
                     el.downvote.classList.remove('selected')
                     el.upvote.classList.add('selected')
-                    if (w.you_voted === false) w.vote += 1
-                    el.voteCount.textContent = w.vote += 1
+                    el.voteCount.textContent = w.vote = res.data
                     w.you_voted = true
                 }
             } else if(isDown) {
-                if (await app.voteWrit(w.id, false) != false) {
+                const res = await app.voteWrit(w.id, false)
+                if (res != false) {
                     el.upvote.classList.remove('selected')
                     el.downvote.classList.add('selected')
-                    if (w.you_voted === true) w.vote -= 1
-                    el.voteCount.textContent = w.vote -= 1
+                    el.voteCount.textContent = w.vote = res.data
                     w.you_voted = false
                 }
             }
