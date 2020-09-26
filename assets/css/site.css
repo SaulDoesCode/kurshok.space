@@ -30,6 +30,10 @@ main {
   min-height: 75vh;
 }
 
+.privacy-policy {
+  min-height: 92vh;
+}
+
 .hero {
   display: flex;
   align-content: center;
@@ -70,6 +74,10 @@ main {
   cursor: pointer;
 }
 
+main[route-active="posts"] {
+  max-width: 900px;
+}
+
 .post, .post > * {
   display: flex;
   justify-content: space-between;
@@ -87,6 +95,11 @@ main {
   background: transparent;
   margin: 1em auto 1.5em auto;
   filter: drop-shadow(0 2px .5em rgba(0,0,0,.1));
+}
+
+main[route-active="posts"] .post,
+main[route-active="posts"] .post>* {
+  height: 120px;
 }
 
 .post.full {
@@ -120,8 +133,18 @@ main {
 .post > header .title {
   flex: 1 1 auto;  
   margin: .25em 0 .5em 0;
-  font-size: 0.8em;
   text-align: left;
+  overflow: hidden;
+}
+
+.post>header .title > h4 {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 1.38em;
+  max-width: 98%;
+  padding: 2px 0;
+  margin: 0;
 }
 
 .post.full > * {
@@ -134,7 +157,7 @@ main {
 
 .post .votes {
   display: flex;
-  justify-content: center;
+  justify-content: space-around;
   align-content: center;
   align-items: center;
   flex-direction: column;
@@ -145,6 +168,7 @@ main {
 
 .post .votes .vote {
   cursor: pointer;
+  border: 3px solid transparent;
   transition: all 140ms ease-in;
 }
 
@@ -170,7 +194,7 @@ main {
 }
 
 .await-vote {
-  animation: await-vote-move-around 400ms ease-in infinite alternate;
+  animation: await-vote-move-around 200ms ease-in infinite alternate;
 }
 
 @keyframes await-vote-move-around {
@@ -184,7 +208,7 @@ main {
 
 .post > .content {
   margin: .25em .25em 0 .25em;
-  padding: .75em .5em .5em .5em;
+  padding: .75em .75em .5em .75em;
   justify-content: space-evenly;
   flex-flow: column;
   font-size: 1.1em;
@@ -193,10 +217,11 @@ main {
 .post .tags {
   display: inline-flex;
   justify-content: center;
-  align-content: center;
+  align-content: flex-start;
   align-items: center;
   flex-flow: row wrap;
   max-width: 250px;
+  overflow: hidden;
   margin: .25em;
 }
 
@@ -212,6 +237,8 @@ main {
   box-shadow: 0 2px 3px rgb(0,0,0,.12);
   background: var(--primary-color);
 }
+
+/*.tag.small {}*/
 
 footer {
   display: flex;
@@ -253,4 +280,27 @@ footer a {
   align-content: center;
   flex-flow: column;
   height: 100%;
+}
+
+@media all and (max-width: 760px) {
+  main[route-active="posts"] .post > header {
+    flex-direction: column;
+  }
+
+  main[route-active="posts"] .post,
+  main[route-active="posts"] .post>* {
+    height: auto;
+  }
+
+  main[route-active="posts"] .post .title,
+  main[route-active="posts"] .post .title * {
+    width: 100%;
+    text-align: center;
+    white-space: normal;
+  }
+
+  main[route-active="posts"] .post header > div:last-of-type {
+    margin-top: 1em;
+  }
+
 }
