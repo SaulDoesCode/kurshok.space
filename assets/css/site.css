@@ -165,6 +165,10 @@ main {
   content: '🡇';
 }
 
+.post .votes .vote-count {
+  white-space: nowrap;
+}
+
 .await-vote {
   animation: await-vote-move-around 400ms ease-in infinite alternate;
 }
