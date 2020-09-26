@@ -66,7 +66,7 @@ route.on.post(async hash => {
     date.innerHTML = ''
     d.render(app.renderUXTimestamp(post.posted), date)
     tags.innerHTML = ''
-    post.tags.map(tag => df.span({$: tags, class:'tag'}, tag))
+    post.tags.map(tag => df.span({$: tags, attr:{title: tag}, class:'tag'}, tag))
     author.textContent = 'By ' + post.author_name
     content.innerHTML = 'Content loading...'
     df.prepend(mainView, postNavView)
@@ -160,7 +160,10 @@ const publicPost = (w) => div({
         div(
             div({class: 'posted'}, app.renderUXTimestamp(w.posted)),
             div({class: 'tags'},
-                w.tags.map(t => span({class: 'tag'}, t))
+                w.tags.map(t => {
+                    const small = t.length > 11
+                    return span({class: {tag: true, small}, attr: {title: t}}, t)
+                })
             )
         )
     )
