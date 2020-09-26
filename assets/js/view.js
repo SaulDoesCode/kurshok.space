@@ -101,6 +101,7 @@ const publicPost = (w) => div({
             const isUp = e.target.classList.contains('up')
             const isDown = e.target.classList.contains('down')
             if (!isDown && !isUp) return
+            e.target.classList.add('await-vote')
             const isSelected = e.target.classList.contains('selected')
             // unvote
             if (w.you_voted != null && isSelected) {
@@ -108,6 +109,7 @@ const publicPost = (w) => div({
                 if (res != false) {
                     el.downvote.classList.remove('selected')
                     el.upvote.classList.remove('selected')
+                    e.target.classList.remove('await-vote')
                     el.voteCount.textContent = w.vote = res.data
                     w.you_voted = null
                 }
@@ -116,6 +118,7 @@ const publicPost = (w) => div({
                 if (res != false) {
                     el.downvote.classList.remove('selected')
                     el.upvote.classList.add('selected')
+                    e.target.classList.remove('await-vote')
                     el.voteCount.textContent = w.vote = res.data
                     w.you_voted = true
                 }
@@ -124,6 +127,7 @@ const publicPost = (w) => div({
                 if (res != false) {
                     el.upvote.classList.remove('selected')
                     el.downvote.classList.add('selected')
+                    e.target.classList.remove('await-vote')
                     el.voteCount.textContent = w.vote = res.data
                     w.you_voted = false
                 }
