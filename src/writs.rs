@@ -1166,7 +1166,7 @@ pub enum WritError {
     IDGenErr,
     #[error("author's id mismatches writ's author_id")]
     InauthenticAuthor,
-    #[error("please see to it that all writ tags are alphanumeric")]
+    #[error("please see to it that all writ tags are alphanumeric and no longer than 20 chars")]
     InvalidTags,
     #[error("duplicate writ, please don't copy")]
     DuplicateWrit,
