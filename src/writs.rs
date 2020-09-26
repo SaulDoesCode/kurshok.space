@@ -649,9 +649,6 @@ impl Writ {
       } else {
         return None;
       }
-      if orc.dev_mode {
-        println!("writ.public: got past public viewability checking");
-      }
     }
 
     let author = if let Some(author) = orc.user_by_id(author_id) {
@@ -766,23 +763,82 @@ impl Writ {
     })
   }
 
-  pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: bool) -> bool {
+  pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: Option<bool>) -> Option<i64> {
     let res: TransactionResult<(), ()> = (&orc.votes, &orc.writ_voters).transaction(|(votes, writ_voters)| {
-      let wv = WritVote{id: self.vote_id(usr_id), when: unix_timestamp(), up};
-      writ_voters.insert(self.vote_id(usr_id).as_bytes(), wv.try_to_vec().unwrap())?;
-      let count: i64 = votes.get(self.id.as_bytes())?.unwrap().to_i64();
-      votes.insert(self.id.as_bytes(), &(count + 1).to_be_bytes())?;
+      let vote_id = self.vote_id(usr_id);
+ 
+      if let Some(raw) = writ_voters.get(vote_id.as_bytes())? {
+        let rw = WritVote::try_from_slice(&raw).unwrap();
+        if let Some(up) = &up {
+          // prevent double voting
+          if rw.up == *up {
+            return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+          }
+          // handle when they alreay voted and now vote the oposite way
+          let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+          if *up { 
+            count += 2;
+          } else {
+            count -= 2;
+          }
+          votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+        } else {
+          // unvote
+          writ_voters.remove(vote_id.as_bytes())?;
+
+          let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+          if rw.up { 
+            count -= 1;
+          } else {
+            count += 1;
+          }
+
+          votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+
+          return Ok(());
+        }
+      } else if up.is_none() {
+        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+      } else {
+        let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+        if up.clone().unwrap() { 
+          count += 1;
+        } else {
+          count -= 1;
+        }
+        votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+      }
+      
+      let wv = WritVote{
+        id: vote_id,
+        when: unix_timestamp(),
+        up: up.unwrap()
+      };
+      writ_voters.insert(wv.id.as_bytes(), wv.try_to_vec().unwrap())?;
+
       Ok(())
     });
-    res.is_ok()
+    
+    if res.is_ok() {
+      if let Ok(Some(raw)) = orc.votes.get(self.id.as_bytes()) {
+        return Some(raw.to_i64());
+      }
+      return Some(-2000000);
+    }
+
+    None
   }
 
-  pub fn upvote(&self, orc: &Orchestrator, usr_id: &str) -> bool {
-    self.vote(orc, usr_id, true)
+  pub fn upvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
+    self.vote(orc, usr_id, Some(true))
   }
 
-  pub fn downvote(&self, orc: &Orchestrator, usr_id: &str) -> bool {
-    self.vote(orc, usr_id, false)
+  pub fn downvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
+    self.vote(orc, usr_id, Some(false))
+  }
+
+  pub fn unvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
+    self.vote(orc, usr_id, None)
   }
 
   pub fn usr_vote(&self, orc: &Orchestrator, usr_id: &str) -> Option<WritVote> {
@@ -1271,8 +1327,8 @@ pub async fn upvote_writ(
 ) -> HttpResponse {
   if let Some(usr) = orc.user_by_session(&req) {
     if let Some(writ) = orc.writ_by_id(&writ_id) {
-      if writ.upvote(orc.as_ref(), &usr.id) {
-        return crate::responses::Accepted("vote went through")
+      if let Some(count) = writ.upvote(orc.as_ref(), &usr.id) {
+        return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
   } else {
@@ -1294,8 +1350,27 @@ pub async fn downvote_writ(
 ) -> HttpResponse {
   if let Some(usr) = orc.user_by_session(&req) {
     if let Some(writ) = orc.writ_by_id(&writ_id) {
-      if writ.downvote(orc.as_ref(), &usr.id) {
-        return crate::responses::Accepted("vote went through");
+      if let Some(count) = writ.downvote(orc.as_ref(), &usr.id) {
+        return crate::responses::AcceptedStatusData("vote went through", count);
+      }
+    }
+  } else {
+    return crate::responses::Forbidden("only users may vote on writs");
+  }
+
+  crate::responses::InternalServerError("failed to register vote")
+}
+
+#[get("/writ/{wrid_id}/unvote")]
+pub async fn unvote_writ(
+  req: HttpRequest,
+  writ_id: web::Path<String>,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
+  if let Some(usr) = orc.user_by_session(&req) {
+    if let Some(writ) = orc.writ_by_id(&writ_id) {
+      if let Some(count) = writ.unvote(orc.as_ref(), &usr.id) {
+        return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
   } else {
