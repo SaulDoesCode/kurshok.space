@@ -111,17 +111,27 @@ main[route-active="posts"] .post>* {
   margin: 0 .5em;
 }
 
+.post>.post-header h3 {
+  margin: .25em 0 .5em 0;
+  text-align: center;
+  font-size: 1.9em;
+}
+
+.post.full > header {
+  padding: .75em;
+}
+
 .post > * {
   min-height: 95px;
 }
 
-.post>header > * {
+.post:not(.full)>header > * {
   text-align: center;
 }
 
-.post>header h4,
-.post>header h3 {
-  margin: 0 0;
+.post header h4,
+.post:not(.full) header h3 {
+  margin: 0 .5em;
   cursor: pointer;
 }
 
@@ -149,6 +159,34 @@ main[route-active="posts"] .post>* {
 
 .post.full > * {
   margin-bottom: .5em;
+}
+
+.post.full>header {
+  flex-flow: column;
+}
+
+.post.full>header > div {
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+  margin-top: .5em;
+}
+
+.post.full>header>div:first-of-type {
+  margin-top: 0;
+}
+
+.post.full .post-title {
+  width: 100%;
+}
+
+.post.full .tags {
+  margin: .5em 0 0 0;
+  justify-content: center;
+  max-width: 100%;
 }
 
 .post article > *:last-child {
@@ -215,7 +253,7 @@ main[route-active="posts"] .post>* {
 }
 
 .post > .content {
-  margin: .25em .25em 0 .25em;
+  margin: 1.25em .25em 0 .25em;
   padding: .75em .75em .5em .75em;
   justify-content: space-evenly;
   flex-flow: column;
@@ -247,6 +285,43 @@ main[route-active="posts"] .post>* {
 }
 
 /*.tag.small {}*/
+
+.post .comments {
+  flex-flow: column;
+  justify-content: center;
+  margin-top: 1.75em;
+}
+
+.post .comment-writer {
+  display: flex;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+}
+
+.post .comments > * {
+  width: 100%;
+}
+
+.post .comments  textarea {
+  margin-bottom: .5em;
+  background: hsl(0,0%,20%);
+  color: #fff;
+  border: 0;
+  box-shadow: inset 0 1px 5px rgb(0,0,0,.12);
+}
+
+.post .comments button {
+  line-height: 1.1;
+  margin-right: .5em;
+  background: hsl(0, 0%, 20%);
+  cursor: pointer;
+}
+
+.post .comments > header > h4 {
+  font-size: 1.2em;
+}
 
 footer {
   display: flex;
