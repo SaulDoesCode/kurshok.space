@@ -915,7 +915,11 @@ impl RawWrit {
       return Err(WritError::NoPermNoMD);
     }
 
-    if !self.are_tags_valid() {
+    let tags: Vec<String> = self.tags.iter()
+        .map(|t| t.trim().replace("  ", " "))
+        .collect();
+
+    if !RawWrit::are_tags_valid(&tags) {
       return Err(WritError::InvalidTags);
     }
 
@@ -946,7 +950,7 @@ impl RawWrit {
       posted: unix_timestamp(),
       title: self.title.clone(),
       kind: self.kind.clone(),
-      tags: self.tags.clone(),
+      tags,
       public: self.public,
       commentable: self.commentable.unwrap_or(true),
       viewable_by: self.viewable_by.clone().unwrap_or(vec!()),
@@ -1106,8 +1110,15 @@ impl RawWrit {
 
   }
 
-  pub fn are_tags_valid(&self) -> bool {
-    self.tags.iter().all(|t| t.len() <= 20 && t.chars().all(char::is_alphanumeric))
+  pub fn are_tags_valid(tags: &Vec<String>) -> bool {
+    tags.iter().all(|t|
+      t.len() <= 20 &&
+      t.chars().all(|c|
+        c.is_alphanumeric() ||
+        c.is_whitespace() ||
+        c == '-'
+      )
+    )
   }
 
   pub fn writ(&self, orc: &Orchestrator) -> Option<Writ> {
