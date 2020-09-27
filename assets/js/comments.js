@@ -54,12 +54,22 @@ const commentsDisplay = section({
             'Post'
         )
     ),
-    cd.commentList = div({
+    cd.list = div({
         class: 'comment-list',
     })
 ])
 
-app.once.postRendered(async post => {
+app.on.postRendered(async post => {
+    app.postDisplay.classList.toggle('with-comments', post.commentable)
+
+    if (post.commentable) {
+        commentsDisplay.list.innerHTML = ''
+        d.render(commentsDisplay, app.postDisplay)
+    } else {
+        df.remove(commentsDisplay)
+        return
+    }
+
     await app.fetchComments(post.id)
 
 })
