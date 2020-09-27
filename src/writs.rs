@@ -916,7 +916,7 @@ impl RawWrit {
     }
 
     let tags: Vec<String> = self.tags.iter()
-        .map(|t| t.trim().replace("  ", " "))
+        .map(|t| t.trim().replace("  ", "-").replace(" ", "-"))
         .collect();
 
     if !RawWrit::are_tags_valid(&tags) {
