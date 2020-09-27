@@ -2,6 +2,7 @@
     --primary-color: #c1ab8a;
     --highlight-color: #b8a58a;
     --border-color: #b6a78a;
+    --button-color: #1a1a1a;
     --shadow-outline-color: rgba(148, 117, 98, 0.466);
 }
 
@@ -17,7 +18,7 @@
 
 html {
     cursor: default;
-    font-family: Cantarell, Noto Sans, sans-serif;
+    font-family: Noto Sans, sans-serif;
     line-height: 1.15;
     -moz-tab-size: 4;
     -o-tab-size: 4;
@@ -558,7 +559,7 @@ input[type=checkbox], input[type=radio] {
 }
 
 input[type=submit], input[type=reset], input[type=button], button {
-    background: var(--primary-color);
+    background: var(--button-color);
     border-color: var(--border-color);
     text-shadow: 0 1px 2px rgba(0, 0, 0, .12);
     border-radius: 4px;
