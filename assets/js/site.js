@@ -122,5 +122,15 @@ app.loadStyle = async (url, cache) => {
     df.style({$: document.head}, txt)
 }
 
+const abreviateNum_units = ['k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
+app.abreviateNum = (num, digits) => {
+    for (let decimal, i = abreviateNum_units.length - 1; i >= 0; i--) {
+        decimal = Math.pow(1000, i + 1)
+        if (num <= -decimal || num >= decimal)
+            return +(num / decimal).toFixed(digits) + abreviateNum_units[i]
+    }
+    return num
+}
+
 window.app = app
 export default app
