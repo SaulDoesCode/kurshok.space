@@ -581,6 +581,7 @@ pub struct PublicWrit {
   content: Option<String>,
   tags: Vec<String>,
   posted: i64,
+  commentable: bool,
   you_voted: Option<bool>,
   vote: i64,
 }
@@ -703,6 +704,7 @@ impl Writ {
         tags: self.tags.clone(),
         posted: self.posted,
         content,
+        commentable: self.commentable,
         vote,
         you_voted,
       })
