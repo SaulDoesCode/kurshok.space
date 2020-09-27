@@ -75,7 +75,7 @@ main {
 }
 
 main[route-active="posts"] {
-  max-width: 900px;
+  max-width: 920px;
 }
 
 .post, .post > * {
@@ -191,6 +191,14 @@ main[route-active="posts"] .post>* {
 
 .post .votes .vote-count {
   white-space: nowrap;
+  font-size: .95em;
+}
+
+.post .votes .vote-count .endbits {
+  font-size: .75em;
+}
+.post .votes .vote-count .marker {
+  color: hsl(44, 68%, 80%);
 }
 
 .await-vote {

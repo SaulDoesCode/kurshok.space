@@ -112,7 +112,6 @@ const publicPost = (w) => div({
                 }
                 return
             }
-            console.log('what?>')
             const isUp = e.target.classList.contains('up')
             const isDown = e.target.classList.contains('down')
             if (!isDown && !isUp) return
@@ -125,7 +124,7 @@ const publicPost = (w) => div({
                     el.downvote.classList.remove('selected')
                     el.upvote.classList.remove('selected')
                     e.target.classList.remove('await-vote')
-                    el.voteCount.textContent = w.vote = res.data
+                    app.formatVoteCount(w.vote = res.data)
                     w.you_voted = null
                 }
             } else if (isUp) {
@@ -134,7 +133,7 @@ const publicPost = (w) => div({
                     el.downvote.classList.remove('selected')
                     el.upvote.classList.add('selected')
                     e.target.classList.remove('await-vote')
-                    el.voteCount.textContent = w.vote = res.data
+                    app.formatVoteCount(w.vote = res.data)
                     w.you_voted = true
                 }
             } else if(isDown) {
@@ -143,7 +142,7 @@ const publicPost = (w) => div({
                     el.upvote.classList.remove('selected')
                     el.downvote.classList.add('selected')
                     e.target.classList.remove('await-vote')
-                    el.voteCount.textContent = w.vote = res.data
+                    app.formatVoteCount(w.vote = res.data)
                     w.you_voted = false
                 }
             }
@@ -183,6 +182,23 @@ const publicPost = (w) => div({
         )
     )
 );
+
+app.formatVoteCount = (el, count, digits = 2) => {
+    el.innerHTML = ''
+    let formated = app.abreviateNum(count, digits)
+    if (formated.includes('.')) {
+        const marker = formated[formated.length - 1]
+        formated = formated.substring(0, formated.length - 1)
+        const [bignum, endbits] = formated.split('.')
+        formated = [
+            span(bignum),
+            '.',
+            span({class: 'endbits'}, endbits),
+            span({class: 'marker'}, marker)
+        ]
+    }
+    d.render(formated, el)
+}
 
 app.fetchPostContent = async id => {
     if (app.posts[id] && app.posts[id].content != null) {
