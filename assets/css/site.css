@@ -105,8 +105,12 @@ main[route-active="posts"] .post>* {
 .post.full {
   margin-top: .5em;
   flex-flow: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-height: 60vh;
+}
+
+.post.full.with-comments {
+  justify-content: space-between;
 }
 
 .post > .post-header > * {
