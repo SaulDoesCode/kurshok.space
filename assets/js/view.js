@@ -6,17 +6,16 @@ const {div, h4, section, span, header} = df
 
 const mainView = d.query('main[route-active]')
 const contentDisplay = df.section({class: 'posts'})
-const postDisplay = df.section({class: 'full post'}, pd => {
+app.postDisplay = df.section({class: 'full post'}, pd => {
     pd.parts = d.h /* html */ `
         <header class="post-header">
             <div>
                 <h3 class="post-title" ref="title"></h3>
                 <div class="author-name" ref="author"></div>
-            </div>
-            <div>
+                <div> ● </div>
                 <div class="posted" ref="date"></div>
-                <div class="tags" ref="tags"></div>
             </div>
+            <div class="tags" ref="tags"></div>
         </header>
     
         <article class="content" ref="content">
@@ -34,7 +33,7 @@ const postDisplay = df.section({class: 'full post'}, pd => {
 route('posts', contentDisplay)
 if (location.hash == '' || location.hash == '#') location.hash = 'posts'
 
-route('post', postDisplay)
+route('post', app.postDisplay)
 
 d.run(async () => {
     try {
@@ -61,7 +60,7 @@ const postNavView = d.html(/* html */`
 route.on.post(async hash => {
     await app.afterPostsInitialization()
     const post = app.activePost = app.posts[hash]
-    const {title, tags, author, date, content, comments, commentsContainer} = postDisplay.parts
+    const {title, tags, author, date, content, comments, commentsContainer} = app.postDisplay.parts
     title.textContent = post.title
     date.innerHTML = ''
     d.render(app.renderUXTimestamp(post.posted), date)
@@ -78,6 +77,7 @@ route.on.post(async hash => {
             el.classList.add('language-rust')
         }), 60)
     }
+    app.emit.postRendered(post, hash)
 })
 
 // TODO: pagination
@@ -91,14 +91,14 @@ const publicPost = (w) => div({
     attr: {pid: w.id},
     onclick(e, el) {
         if (e.target.className.includes('vote')) return
-        location.hash = w.id
         app.fetchPostContent(w.id)
+        location.hash = w.id
     }
 },
     div({
         class: 'votes',
         async onclick(e, el) {
-            if (app.username == null) {
+            if (app.user == null) {
                 e.preventDefault()
                 app.oneTimeAuthLauncher.off()
                 try {
@@ -124,7 +124,7 @@ const publicPost = (w) => div({
                     el.downvote.classList.remove('selected')
                     el.upvote.classList.remove('selected')
                     e.target.classList.remove('await-vote')
-                    app.formatVoteCount(w.vote = res.data)
+                    app.formatVoteCount(el.voteCount, w.vote = res.data)
                     w.you_voted = null
                 }
             } else if (isUp) {
@@ -133,7 +133,7 @@ const publicPost = (w) => div({
                     el.downvote.classList.remove('selected')
                     el.upvote.classList.add('selected')
                     e.target.classList.remove('await-vote')
-                    app.formatVoteCount(w.vote = res.data)
+                    app.formatVoteCount(el.voteCount, w.vote = res.data)
                     w.you_voted = true
                 }
             } else if(isDown) {
@@ -142,7 +142,7 @@ const publicPost = (w) => div({
                     el.upvote.classList.remove('selected')
                     el.downvote.classList.add('selected')
                     e.target.classList.remove('await-vote')
-                    app.formatVoteCount(w.vote = res.data)
+                    app.formatVoteCount(el.voteCount, w.vote = res.data)
                     w.you_voted = false
                 }
             }
@@ -186,7 +186,7 @@ const publicPost = (w) => div({
 app.formatVoteCount = (el, count, digits = 2) => {
     el.innerHTML = ''
     let formated = app.abreviateNum(count, digits)
-    if (formated.includes('.')) {
+    if (typeof formated === 'string' && formated.includes('.')) {
         const marker = formated[formated.length - 1]
         formated = formated.substring(0, formated.length - 1)
         const [bignum, endbits] = formated.split('.')
@@ -216,13 +216,10 @@ app.posts = Object.create(null)
 
 app.writQuery({with_content: false, kind: 'post'}).then(async writs => {
     if(!d.isArr(writs)) return console.error(writs)
-    writs.forEach(w => {
-        app.posts[w.id] = w
-        publicPost(w)
-    })
-    app.postsInitialized = true
-    app.emit.postsInitialized()
+    writs.forEach(w => publicPost(app.posts[w.id] = w))
+    app.emit.postsInitialized(app.postsInitialized = true)
     app.loadStyle('https://cdnjs.cloudflare.com/ajax/libs/prism/1.21.0/themes/prism-tomorrow.min.css', true)
+    await import('/js/comments.min.js')
 })
 
 app.afterPostsInitialization = fn => app.postsInitialized ?
