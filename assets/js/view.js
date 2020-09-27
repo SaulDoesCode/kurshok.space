@@ -98,6 +98,21 @@ const publicPost = (w) => div({
     div({
         class: 'votes',
         async onclick(e, el) {
+            if (app.username == null) {
+                e.preventDefault()
+                app.oneTimeAuthLauncher.off()
+                try {
+                    if (app.authViewToggle) {
+                        app.authViewToggle.toggleView()
+                    } else {
+                        await import('/js/auth.min.js')
+                    }
+                } catch(e) {
+                    app.oneTimeAuthLauncher.on()
+                }
+                return
+            }
+            console.log('what?>')
             const isUp = e.target.classList.contains('up')
             const isDown = e.target.classList.contains('down')
             if (!isDown && !isUp) return

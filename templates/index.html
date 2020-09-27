@@ -7,6 +7,7 @@
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
     <link rel="modulepreload" href="/js/domlib.min.js">
     <link rel="modulepreload" href="/js/router.min.js">
+    <link rel="modulepreload" href="/js/site.min.js">
     {% if not dev_mode or dev_mode is undefined  %}
     <link href="https://fonts.googleapis.com/css2?family=Cantarell:wght@400;700&display=swap" rel="stylesheet">
     {% endif %}
@@ -17,7 +18,6 @@
     {% else %}
     <link rel="stylesheet" href="/css/postauth.min.css">
     {% endif %}
-    <script src="/js/site.min.js" type="module"></script>
     <script src="/js/view.min.js" type="module"></script>
 </head>
 <body>
@@ -44,8 +44,8 @@
         {% else %}
             <button class="auth-launcher" title="click for a login or signup modal">Auth</button>
             <script type="module" defer>
-                import d from '/js/domlib.min.js'
-                d.once.click('.auth-launcher', async e => {
+                import app from '/js/site.min.js'
+                app.oneTimeAuthLauncher = app.d.once.click('.auth-launcher', async e => {
                     e.preventDefault()
                     import('/js/auth.min.js')
                 })
