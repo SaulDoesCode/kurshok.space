@@ -241,7 +241,7 @@ main, header, footer, article, section, aside, details, summary {
 main {
     display: block;
     margin: 0 auto;
-    max-width: 760px;
+    max-width: 800px;
     padding: 0 16px 16px;
 }
 
