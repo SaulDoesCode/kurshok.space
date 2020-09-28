@@ -30,6 +30,61 @@ main {
   min-height: 75vh;
 }
 
+.togglebox-container {
+  display: flex;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  flex-direction: column;
+  margin: .25em .75em;
+}
+
+.togglebox {
+  display: inline-block;
+  position: relative;
+  border-radius: 20px;
+  width: 40px;
+  height: 20px;
+  background: hsl(0, 0%, 95%);
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, .15);
+  cursor: pointer;
+  margin: 2px;
+}
+
+.togglebox input[type=checkbox] {
+  position: absolute;
+  display: block;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.togglebox>span {
+  position: relative;
+  display: inline-block;
+  pointer-events: none;
+  box-sizing: content-box;
+  width: 20px;
+  height: 20px;
+  transform: scale(1.1);
+  border-radius: 100%;
+  background: #fff;
+  box-shadow: 0 0 3px rgba(0, 0, 0, .23);
+
+  left: 0;
+  top: 0;
+  transition: all 100ms ease-in;
+}
+
+.togglebox input[type=checkbox]:checked+span {
+  left: calc(100% - 20px);
+  background: var(--primary-color);
+  filter: brightness(1.1);
+}
+
 .privacy-policy {
   min-height: 92vh;
 }
@@ -307,10 +362,11 @@ main[route-active="posts"] .post>* {
   justify-content: center;
   margin-top: 1.75em;
   padding: .75em;
+  padding-bottom: .25em;
   line-height: 1.3;
 }
 
-.post .comment-writer {
+.comment-writer {
   display: flex;
   justify-content: center;
   align-content: center;
@@ -318,27 +374,90 @@ main[route-active="posts"] .post>* {
   flex-flow: row wrap;
 }
 
-.post .comments > * {
+.comments > * {
   width: 100%;
 }
 
-.post .comments  textarea {
+.comments  textarea {
   margin-bottom: .5em;
   background: hsl(0,0%,20%);
   color: #fff;
   border: 0;
+  min-height: 90px;
   box-shadow: inset 0 1px 5px rgb(0,0,0,.12);
 }
 
-.post .comments button {
-  line-height: 1.1;
+.comments button {
   margin-right: .5em;
   background: hsl(0, 0%, 20%);
   cursor: pointer;
 }
 
-.post .comments > header > h4 {
+.comments > header > h4 {
   font-size: 1.2em;
+}
+
+.comment-controls {
+  display: flex;
+  justify-content: space-around;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+}
+
+.comment-controls > * {
+  margin: .25em .5em;
+}
+
+.comment-controls > .togglebox-container {
+  margin-right: .75em;
+  align-self: flex-start;
+}
+
+.comment-controls .togglebox-container label {
+  font-size: .8em;
+}
+
+.comment-controls .togglebox {
+  background: hsl(0, 0%, 20%);
+}
+
+.comment-controls .togglebox > span {
+  background: hsl(0, 0%, 30%);
+}
+
+.comment-controls .togglebox input[type=checkbox]:checked+span {
+  background: var(--primary-color);
+  filter: brightness(.9);
+}
+
+.comment-list {
+  position: relative;
+}
+
+.comment-list .comment {
+  position: relative;
+  display: block;
+  background: hsl(0,0%,15%);
+  border-radius: 4px;
+  padding: .25em .5em;
+  margin: .75em 0;
+}
+
+.comment-list .comment > header {
+  font-size: .8em;
+  color: hsl(0, 0%, 75%);
+  margin: .2em 0;
+}
+
+.comment-list .comment > .content {
+  padding-left: .5em;
+  width: 100%;
+  margin: 0;
+}
+
+.comment-list .comment p:last-of-type {
+  margin-bottom: .25em;
 }
 
 footer {
