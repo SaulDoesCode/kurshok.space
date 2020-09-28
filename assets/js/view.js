@@ -234,17 +234,23 @@ app.dayjsUXTSformat = ts => {
     return date.format(app.dateFormat) + ' | ' + date.fromNow()
 }
 
-app.renderUXTimestamp = (ts, formater = app.dayjsUXTSformat) => {
-    const txt = d.txt()
+app.renderUXTimestamp = (ts, formater = app.dayjsUXTSformat, txt) => {
+    if (txt == null) txt = d.txt()
     try {
         txt.textContent = formater(ts)
-        txt.updateInterval = setInterval(() => {
-            txt.textContent = formater(ts)
-            if (!document.contains(txt)) clearInterval(txt.updateInterval)
-        }, 60000)
+        if (txt.textContent.includes('minute') || txt.textContent.includes('hour')) {
+            txt.updateInterval = setInterval(function update () {
+                txt.textContent = formater(ts)
+                if (!document.contains(txt)) clearInterval(txt.updateInterval)
+                else if (txt.textContent.includes('hour')) {
+                    clearInterval(txt.updateInterval)
+                    txt.updateInterval = setInterval(update, 60 * 60000)
+                }
+            }, 60000)
+        }
     } catch (e) {
         txt.textContent = new Date(ts * 1000).toLocaleString()
-        app.once.dayjsLoaded(() => app.renderUXTimestamp(ts, formater))
+        app.once.dayjsLoaded(() => app.renderUXTimestamp(ts, formater, txt))
     }
     return txt
 }
