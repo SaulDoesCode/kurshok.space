@@ -180,6 +180,13 @@ d.on.pointerup(writList, e => {
     let wid = e.target.getAttribute('wid') || e.target.parentElement.getAttribute('wid')
     if (wid != null) {
         const writ = app.ww.active = (app.ww.writs[wid] || app.ww.unpushed[wid])
+
+        if (app.ww.writs[wid] == null) {
+            pushWritBtn.after(saveLocallyBtn)
+        } else {
+            df.remove(saveLocallyBtn)
+        }
+
         if (app.ww.selectedWLE) app.ww.selectedWLE.classList.remove('selected')
         app.ww.selectedWLE = d.query(`[wid="${wid}"]`)
         app.ww.selectedWLE.classList.add('selected')
@@ -231,6 +238,7 @@ app.clearEditor = () => {
         app.ww.selectedWLE = null
         pushWritBtn.textContent = 'Push'
     }
+    pushWritBtn.after(saveLocallyBtn)
 }
 
 app.gatherWritFromWriter = () => {
