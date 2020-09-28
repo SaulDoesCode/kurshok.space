@@ -146,6 +146,11 @@ main[route-active="posts"] .post>* {
   font-size: .92em;
 }
 
+.post>header .author-name,
+.post>header .posted {
+  margin: 0 .5em;
+}
+
 .post > header .title {
   flex: 1 1 auto;  
   margin: .25em 0 .5em 0;
@@ -178,7 +183,8 @@ main[route-active="posts"] .post>* {
   align-content: center;
   align-items: center;
   flex-flow: row wrap;
-  margin-top: .5em;
+  margin: .5em 0 0 0;
+  font-size: .9em;
 }
 
 .post.full>header>div:first-of-type {
@@ -191,7 +197,7 @@ main[route-active="posts"] .post>* {
 
 .post.full .tags {
   margin: .5em 0 0 0;
-  justify-content: center;
+  justify-content: flex-start;
   max-width: 100%;
 }
 
@@ -260,12 +266,14 @@ main[route-active="posts"] .post>* {
 
 .post > .content {
   margin: 1.25em .25em 0 .25em;
-  padding: .75em .75em .5em .75em;
+  padding: 1em 4vw;
   flex-flow: column;
   justify-content: flex-start;
   font-size: 1.1em;
   line-height: 1.3;
   min-height: 50px;
+  background: hsl(0,0%,5%);
+  box-shadow: 0 1px 4px hsla(0, 0%, 15%, 0.12);
 }
 
 .post .tags {
