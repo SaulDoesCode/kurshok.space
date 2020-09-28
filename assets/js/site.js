@@ -132,5 +132,20 @@ app.abreviateNum = (num, digits) => {
     return num
 }
 
+app.components = {}
+app.components.toggleBox = (name, {id, checked, ...ops} = {}) => df.div({
+    class: 'togglebox',
+},
+    tb => tb.input = df.input(d.merge({
+        attr: {
+            name,
+            id,
+            checked,
+            type: 'checkbox'
+        }
+    }, ops)),
+    df.span()
+)
+
 window.app = app
 export default app
