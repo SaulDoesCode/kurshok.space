@@ -14,12 +14,11 @@ app.postDisplay = df.section({class: 'full post'}, pd => {
                 <div class="author-name" ref="author"></div>
                 <div> ● </div>
                 <div class="posted" ref="date"></div>
+                <div class="tags" ref="tags"></div>
             </div>
-            <div class="tags" ref="tags"></div>
         </header>
     
-        <article class="content" ref="content">
-        </article>
+        <article class="content" ref="content"></article>
 
         <aside class="post-comments" hidden ref="commentContainer">
             <header>Comments</header>
