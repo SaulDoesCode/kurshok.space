@@ -1,6 +1,7 @@
 import app from '/js/site.min.js'
 const d = app.d, df = d.domfn
 const {div, h4, section, span, header} = df
+const {toggleBox} = app.components
 
 app.fetchComments = async (wid, ops = {}) => {
     if (ops.path == null) ops.path = wid + '/'
@@ -26,8 +27,41 @@ app.fetchComments = async (wid, ops = {}) => {
         ops.max_level = null
         ops.amount = null
     */
-    const res = await app.jsonPost('/comments', ops)
-    console.log(res)
+    try {
+        const res = await app.jsonPost('/comments', ops)
+        return await res.json()
+    } catch(e) {
+        return {ok: false}
+    }
+}
+
+app.makeComment = async (
+    parent_id,
+    writ_id,
+    comment = app.gatherComment()
+) => {
+    if (comment.public == null) comment.public = true
+    if (comment.author_only == null) comment.author_only = false
+
+    if (parent_id == null || parent_id.length < 2) {
+        throw new Error('app.makeComment: invalid parent id')
+    }
+    if (writ_id == null) writ_id = parent_id
+    if (writ_id.length < 2) {
+        throw new Error('app.makeComment: invalid writ id')
+    }
+    if (comment.raw_content == null || comment.raw_content.length < 2) {
+        throw new Error(`app.makeComment: invalid comment content, it's either too long or too short`)
+    }
+    const res = await app.jsonPut('/comment', {
+        parent_id,
+        writ_id,
+        public: comment.public,
+        raw_content: comment.raw_content,
+        author_only: comment.author_only
+    })
+
+    return await res.json()
 }
 
 const commentsDisplay = section({
@@ -43,15 +77,29 @@ const commentsDisplay = section({
         cd.textarea = df.textarea({
             placeholder: 'write a comment'
         }),
-        cd.postBtn = df.button({
+        div({class: 'comment-controls'},
+            div({class: 'togglebox-container'},
+                df.label({attr: {for: 'author-only'}}, 'Author Only'),
+                cd.authorOnlyToggle = toggleBox('author-only', {
+                    id: 'author-only',
+                    attr: {
+                        title: 'check this to make your comment visible only to the post author and no one else'
+                    }
+                })
+            ),
+            cd.cancelBtn = df.button({
                 class: 'cancel-btn',
+                onclick(e) {
+                    cd.textarea.value = ''
+                }
             },
-            'Cancel'
-        ),
-        cd.cancelBtn = df.button({
-                class: 'post-btn',
+                'Cancel'
+            ),
+            cd.postBtn = df.button({
+                    class: 'post-btn',
             },
-            'Post'
+                'Post'
+            )
         )
     ),
     cd.list = div({
@@ -59,7 +107,35 @@ const commentsDisplay = section({
     })
 ])
 
+app.gatherComment = () => {
+    const {textarea, authorOnlyToggle} = commentsDisplay
+    const raw_content = textarea.value.trim()
+    const author_only = authorOnlyToggle.input.checked
+    return {raw_content, author_only}
+}
+
+const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
+    try {
+        const res = await app.makeComment(app.activePostDisplay.id)
+        if (!res.ok) throw res.status || 'very bad, comment post failed miserably'
+        commentsDisplay.textarea.value = ''
+        commentsDisplay.list.prepend(app.formulateThread(res.data))
+    } catch(e) {
+        console.error(e)
+    } finally {
+        commentPostHandler.on()
+    }
+    // await app.fetchComments(app.activePostDisplay.id, {ids: []})
+})
+
+app.commentDateFormat = ts => {
+    const date = dayjs.unix(ts).utcOffset(2)
+    return '  ' + date.fromNow()
+}
+
 app.on.postRendered(async post => {
+    app.activePostDisplay = post
+
     app.postDisplay.classList.toggle('with-comments', post.commentable)
 
     if (post.commentable) {
@@ -70,6 +146,28 @@ app.on.postRendered(async post => {
         return
     }
 
-    await app.fetchComments(post.id)
+    const fcRes = await app.fetchComments(post.id)
+    if (!fcRes.ok) return
+    console.log(fcRes)
+    const commentTrees = fcRes.data
+    const commentList = []
 
+    for (const {comment, children} of commentTrees) {
+        commentList.push(app.formulateThread(comment, children))
+    }
+    d.render(commentList, commentsDisplay.list)
 })
+
+app.formulateThread = (comment, children) => div({class: 'comment'},
+    header(
+        span({class: 'author-name'}, comment.author_name),
+        span({class: 'txt-divider'}, ' - '),
+        span({class: 'posted'}, 
+            app.renderUXTimestamp(comment.posted, app.commentDateFormat)
+        )
+    ),
+    div({class: 'content'}, d.html(comment.content)),
+    children == null || children.length > 0 && div({class: 'children'},
+        children.map(({cmnt, chrn}) => formulateComment(cmnt, chrn))
+    )
+)
