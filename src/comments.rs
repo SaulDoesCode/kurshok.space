@@ -29,6 +29,7 @@ pub struct CommentVote {
 pub struct PublicComment {
   pub id: String,
   pub content: String,
+  pub author_name: String,
   pub posted: i64,
   #[serde(skip_serializing_if = "i64_is_zero")]
   pub votes: i64,
@@ -134,6 +135,7 @@ impl Comment {
   pub fn public(self, orc: &Orchestrator, usr_id: &Option<String>) -> Option<PublicComment> {
     Some(PublicComment{
       posted: self.posted,
+      author_name: self.author_name.clone(),
       edited: self.edited.wrap(), 
       author_only: self.author_only.wrap(),
       you_voted: match usr_id {
