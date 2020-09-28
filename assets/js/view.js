@@ -238,9 +238,13 @@ app.renderUXTimestamp = (ts, formater = app.dayjsUXTSformat) => {
     const txt = d.txt()
     try {
         txt.textContent = formater(ts)
+        txt.updateInterval = setInterval(() => {
+            txt.textContent = formater(ts)
+            if (!document.contains(txt)) clearInterval(txt.updateInterval)
+        }, 60000)
     } catch (e) {
         txt.textContent = new Date(ts * 1000).toLocaleString()
-        app.once.dayjsLoaded(() => txt.textContent = formater(ts))
+        app.once.dayjsLoaded(() => app.renderUXTimestamp(ts, formater))
     }
     return txt
 }
