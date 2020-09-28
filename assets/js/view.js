@@ -234,13 +234,13 @@ app.dayjsUXTSformat = ts => {
     return date.format(app.dateFormat) + ' | ' + date.fromNow()
 }
 
-app.renderUXTimestamp = ts => {
+app.renderUXTimestamp = (ts, formater = app.dayjsUXTSformat) => {
     const txt = d.txt()
     try {
-        txt.textContent = app.dayjsUXTSformat(ts)
+        txt.textContent = formater(ts)
     } catch (e) {
         txt.textContent = new Date(ts * 1000).toLocaleString()
-        app.once.dayjsLoaded(() => txt.textContent = app.dayjsUXTSformat(ts))
+        app.once.dayjsLoaded(() => txt.textContent = formater(ts))
     }
     return txt
 }
