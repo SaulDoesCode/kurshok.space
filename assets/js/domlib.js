@@ -187,7 +187,7 @@ export default (d => {
    * it copies prop descriptions instead of raw values.
    */
   d.merge = (host, target) => {
-    if (isArr(host) && d.isArr(target)) {
+    if (d.isArr(host) && d.isArr(target)) {
       for (const val of target)
         if (!host.includes(val)) host.push(val)
     } else if (d.merge.able(host) && d.merge.able(target)) {
@@ -532,7 +532,7 @@ export default (d => {
   domfn.removeAttribute = (node, ...attrs) => {
     if (attrs.length === 1) node.removeAttribute(attrs[0])
     else for (let i = 0; i < attrs.length; i++) {
-      if (isArr(attrs[i])) {
+      if (d.isArr(attrs[i])) {
         attrs.splice(i, 1, ...attrs[i])
         i--
       }
