@@ -91,6 +91,7 @@ const commentsDisplay = section({
                 class: 'cancel-btn',
                 onclick(e) {
                     cd.textarea.value = ''
+                    if (cd.authorOnlyToggle.input.checked) cd.authorOnlyToggle.input.checked = false
                 }
             },
                 'Cancel'
@@ -119,6 +120,7 @@ const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
         const res = await app.makeComment(app.activePostDisplay.id)
         if (!res.ok) throw res.status || 'very bad, comment post failed miserably'
         commentsDisplay.textarea.value = ''
+        if (commentsDisplay.authorOnlyToggle.input.checked) commentsDisplay.authorOnlyToggle.input.checked = false
         commentsDisplay.list.prepend(app.formulateThread(res.data))
     } catch(e) {
         console.error(e)
