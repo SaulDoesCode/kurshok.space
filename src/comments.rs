@@ -764,7 +764,7 @@ pub fn check_query_conditions(query: &CommentQuery, comment: &Comment, author_id
 }
 
 pub async fn comment_query(
-  o_usr: Option<User>,
+  o_usr: Option<&User>,
   mut query: CommentQuery,
   orc: &Orchestrator,
 ) -> Option<Vec<CommentTree>> {
@@ -909,20 +909,24 @@ pub async fn post_comment_query(
   query: web::Json<CommentQuery>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  let o_usr: Option<User> = orc.user_by_session(&req);
-  let usr_id: Option<String> = match &o_usr {
-    Some(usr) => Some(usr.id.clone()),
+  let o_el = orc.user_by_session(&req);
+  let usr_id: Option<String> = match &o_el {
+    Some(el) => Some(el.id.clone()),
     None => None,
   };
 
-  match comment_query(o_usr, query.into_inner(), orc.as_ref()).await {
+  match comment_query(
+    o_el.as_ref().map(|el| el.value()),
+    query.into_inner(),
+    orc.as_ref()
+  ).await {
     Some(comments) => crate::responses::Ok(
       comments.into_iter()
         .filter_map(|c| c.public(orc.as_ref(), &usr_id))
         .collect::<Vec<PublicCommentTree>>()
     ),
     None => crate::responses::NotFoundEmpty()
-  }  
+  }
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -939,8 +943,9 @@ pub async fn make_comment(
   rc: web::Json<RawComment>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  let usr = match orc.user_by_session(&req) {
-    Some(usr) => usr,
+  let o_usr = orc.user_by_session(&req);
+  let usr = match &o_usr {
+    Some(el) => el.value(),
     None => return crate::responses::BadRequest(
       "only authorized users may post comments"
     ),
@@ -1012,12 +1017,12 @@ pub async fn delete_comment(
   )
 }
 
-pub async fn make_comment_on_writ(usr: User, rc: RawComment, orc: &Orchestrator) -> HttpResponse {
+pub async fn make_comment_on_writ(usr: &User, rc: RawComment, orc: &Orchestrator) -> HttpResponse {
   if let Some(writ) = orc.writ_by_id(&rc.writ_id) {
     if let Some(comment) = comment_on_writ(
       orc,
       &writ,
-      &usr,
+      usr,
       rc.raw_content,
       rc.author_only.unwrap_or(false)
     ) {
@@ -1034,7 +1039,7 @@ pub async fn make_comment_on_writ(usr: User, rc: RawComment, orc: &Orchestrator)
 }
 
 pub async fn make_comment_on_comment(
-  usr: User,
+  usr: &User,
   rc: RawComment,
   orc: &Orchestrator,
 ) -> HttpResponse {

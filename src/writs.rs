@@ -435,14 +435,13 @@ impl Orchestrator {
   pub fn public_writ_query(
     &self,
     query: WritQuery,
-    o_usr: Option<User>,
+    o_usr: Option<&User>,
   ) -> Option<Vec<PublicWrit>> {
-    let usr_id = match &o_usr { Some(usr) => Some(usr.id.clone()), None => None, };
+    let usr_id = o_usr.as_ref().map(|usr| usr.id.clone());
     let with_content = query.with_content.unwrap_or(true);
-    if let Some(writs) = self.writ_query(query, o_usr.as_ref()) {
+    if let Some(writs) = self.writ_query(query, o_usr) {
       let mut public_writs = vec!();
       for w in writs {
-        // if !w.public {continue;}
         if let Some(pw) = w.public(self, &usr_id, with_content) {
           public_writs.push(pw);
         }
@@ -455,7 +454,11 @@ impl Orchestrator {
     None
   }
 
-  pub fn editable_writ_query(&self, mut query: WritQuery, usr: User) -> Option<Vec<EditableWrit>> {
+  pub fn editable_writ_query(
+    &self,
+    mut query: WritQuery,
+    usr: &User,
+  ) -> Option<Vec<EditableWrit>> {
     query.author_id = Some(usr.id.clone());
 
     let with_content = query.with_content.unwrap_or(false);
@@ -690,8 +693,10 @@ impl Writ {
       };
   
       let you_voted = match &requestor_id {
-        Some(req_id) => writ_voters.get(self.vote_id(req_id.as_str()).as_bytes())?
-          .map(|raw| WritVote::try_from_slice(&raw).unwrap().up),
+        Some(req_id) => {
+          writ_voters.get(self.vote_id(&req_id).as_bytes())?
+            .map(|raw| WritVote::try_from_slice(&raw).unwrap().up)
+        },
         None => None,
       };
 
@@ -821,14 +826,20 @@ impl Writ {
       Ok(())
     });
     
-    if res.is_ok() {
-      if let Ok(Some(raw)) = orc.votes.get(self.id.as_bytes()) {
-        return Some(raw.to_i64());
+    match res {
+      Ok(_) => {
+        if let Ok(Some(raw)) = orc.votes.get(self.id.as_bytes()) {
+          return Some(raw.to_i64());
+        }
+        return Some(-2000000);
+      },
+      Err(e) => {
+        if orc.dev_mode {
+          println!("Something bad went down with voting - {:?}", e);
+        }
+        return None;
       }
-      return Some(-2000000);
     }
-
-    None
   }
 
   pub fn upvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
@@ -1262,7 +1273,7 @@ pub async fn writ_query(
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   let o_usr = orc.user_by_session(&req);
-  if let Some(writs) = orc.public_writ_query(query.into_inner(), o_usr) {
+  if let Some(writs) = orc.public_writ_query(query.into_inner(), o_usr.as_ref().map(|el| el.value())) {
     return HttpResponse::Ok().json(writs);
   }
 
@@ -1278,7 +1289,7 @@ pub async fn editable_writ_query(
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   if let Some(usr) = orc.user_by_session(&req) {
-    if let Some(writs) = orc.editable_writ_query(query.into_inner(), usr) {
+    if let Some(writs) = orc.editable_writ_query(query.into_inner(), usr.value()) {
       return HttpResponse::Ok().json(writs);
     }
   } else {

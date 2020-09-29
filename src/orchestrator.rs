@@ -1,6 +1,6 @@
-use sled::{Db, Tree, transaction::*};
-use sthash::*;
 use rand::{thread_rng, RngCore};
+use sled::{transaction::*, Db, Tree};
+use sthash::*;
 
 use super::CONF;
 use crate::ratelimiter::RateLimiter;
@@ -27,6 +27,8 @@ pub struct Orchestrator {
   pub hasher: Hasher,
   pub pwd_secret: Vec<u8>,
 
+  pub authcache: crate::auth::AuthCache,
+
   // writs
   pub writ_db: Db,
   pub writs: Tree,
@@ -36,21 +38,20 @@ pub struct Orchestrator {
   pub titles: Tree, // title: writ_id
   pub slugs: Tree,
   pub dates: Tree, // {kind}:yyyy/mm/dd
-  
-  pub votes: Tree, // writ_id: count
+
+  pub votes: Tree,       // writ_id: count
   pub writ_voters: Tree, // {user_id}:{writ_id} = {up_or_down, when}
 
   pub tags_index: Tree,
   pub tag_counter: Tree,
-  
   // comments
   pub comment_settings: Tree,
   pub comment_key_path_index: Tree,
   pub comment_trees: Tree, // master_id-comment_id: {author}
-  pub comments: Tree, // master_id-comment_id: {author}
+  pub comments: Tree,      // master_id-comment_id: {author}
   pub comment_raw_content: Tree,
   pub comment_voters: Tree, // comment_id_user_id: {up_or_down, when}
-  pub comment_votes: Tree, // comment_id: {up, down, votes, when}
+  pub comment_votes: Tree,  // comment_id: {up, down, votes, when}
 }
 
 impl Orchestrator {
@@ -137,6 +138,8 @@ impl Orchestrator {
     let comment_votes = writ_db.open_tree("comment_votes").unwrap();
     let dates = writ_db.open_tree("dates").unwrap();
 
+    let authcache = crate::auth::AuthCache::new(5000, 5000);
+    
     Orchestrator {
       db,
       id_counter,
@@ -156,6 +159,8 @@ impl Orchestrator {
       dev_mode,
       hasher,
       pwd_secret,
+
+      authcache,
 
       writ_db,
       writs,

@@ -1,12 +1,13 @@
 use argon2::Config;
 use borsh::{BorshDeserialize, BorshSerialize};
+use dashmap::{DashMap, ElementGuard};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sled::{transaction::*, IVec, Transactional};
 use slug::slugify;
 use time::Duration;
 
-use std::sync::Arc;
+use std::sync::{atomic::{AtomicU64, Ordering::{SeqCst}}, Arc};
 
 use actix_web::{get, post, delete, web, HttpMessage, HttpRequest, HttpResponse, Responder, cookie::Cookie};
 
@@ -87,14 +88,12 @@ impl Orchestrator {
     None
   }
 
-   pub fn authenticate(&self, username: &str, pwd: &str) -> Option<User> {
+   pub fn authenticate(&self, username: &str, pwd: &str) -> Option<ElementGuard<String, User>> {
     if let Ok(Some(usr_id)) = self.usernames.get(username.as_bytes()) {
      if let Ok(Some(usr_pwd)) = self.user_secrets.get(&usr_id) {
-       if verify_password(pwd, usr_pwd.to_str()) {
-         if let Ok(Some(raw_usr)) = self.users.get(usr_id) {
-            return Some(User::try_from_slice(&raw_usr).unwrap());
-         }
-       }
+        if verify_password(pwd, usr_pwd.to_str()) {
+          return self.user_by_id(usr_id.to_str());
+        }
       }
     }
     None
@@ -126,41 +125,40 @@ impl Orchestrator {
     };
 
     if self.sessions
-        .insert(sess_id.clone().as_bytes(), session.try_to_vec().unwrap())
+        .insert(sess_id.as_bytes(), session.try_to_vec().unwrap())
         .is_ok()
     {
+      self.authcache.cache_session(sess_id.clone(), session);
       return Some(sess_id);
     }
     None
   }
 
-  pub fn is_authenticated(&self, req: &HttpRequest) -> bool {
-    if let Some(auth_cookie) = req.cookie("auth") {
-      let sess_id = auth_cookie.value();
-      if let Ok(Some(raw)) = self.sessions.get(sess_id.as_bytes()) {
-        let session = UserSession::try_from_slice(&raw).unwrap();
-        return session.has_expired();
+  pub fn get_session(&self, id: &String) -> Option<ElementGuard<String, UserSession>> {
+    if let Some(el) = self.authcache.sessions.get(id) {
+      return Some(el);
+    } else if let Ok(Some(raw)) = self.sessions.get(id.as_bytes()) {
+      let session = UserSession::try_from_slice(&raw).unwrap();
+      if session.has_expired() {
+        if let Err(e) = self.sessions.remove(id.as_bytes()) {
+          println!("removing expired session from session tree failed: {}", e);
+        }
+        return None;
       }
+      return Some(self.authcache.cache_session(id.clone(), session));
     }
-    false  
+    None
   }
 
   pub fn is_admin(&self, usr_id: &str) -> bool {
     self.admins.contains_key(usr_id.as_bytes()).unwrap_or(false)
   }
 
-  pub fn user_by_session(&self, req: &HttpRequest) -> Option<User> {
+  pub fn user_by_session(&self, req: &HttpRequest) -> Option<ElementGuard<String, User>> {
     if let Some(auth_cookie) = req.cookie("auth") {
-      let sess_id = auth_cookie.value();
-      if let Ok(Some(raw)) = self.sessions.get(sess_id.as_bytes()) {
-        let session = UserSession::try_from_slice(&raw).unwrap();
-        if session.has_expired() {
-          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
-            println!("removing expired session from session tree failed: {}", e);
-          }
-        } else if let Some(usr) = self.user_by_id(&session.usr_id) {
-          return Some(usr);
-        }
+      let sess_id = auth_cookie.value().to_string();
+      if let Some(session) = self.get_session(&sess_id) {
+        return self.user_by_id(&session.usr_id);
       }
     }
     None
@@ -168,16 +166,9 @@ impl Orchestrator {
 
   pub fn user_id_by_session(&self, req: &HttpRequest) -> Option<String> {
     if let Some(auth_cookie) = req.cookie("auth") {
-      let sess_id = auth_cookie.value();
-      if let Ok(Some(raw)) = self.sessions.get(sess_id.as_bytes()) {
-        let session = UserSession::try_from_slice(&raw).unwrap();
-        if session.has_expired() {
-          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
-            println!("removing expired session from session tree failed: {}", e);
-          }
-        } else {
-          return Some(session.usr_id);
-        }
+      let sess_id = auth_cookie.value().to_string();
+      if let Some(session) = self.get_session(&sess_id) {
+        return Some(session.usr_id.clone());
       }
     }
     None
@@ -187,64 +178,19 @@ impl Orchestrator {
     &self,
     req: &HttpRequest,
     how_far_to_expiry: Duration,
-  ) -> (Option<User>, Option<Cookie<'c>>) {
+  ) -> (
+    Option<dashmap::ElementGuard<String, User>>,
+    Option<Cookie<'c>>,
+  ) {
     if let Some(auth_cookie) = req.cookie("auth") {
-      let sess_id = auth_cookie.value();
-      if let Ok(Some(raw)) = self.sessions.get(sess_id.as_bytes()) {
-        let session = UserSession::try_from_slice(&raw).unwrap();
-        if session.has_expired() {
-          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
-            println!("removing expired session from session tree failed: {}", e);
-          }
-        } else {
+      let sess_id = auth_cookie.value().to_string();
+      if let Some(session) = self.get_session(&sess_id) {
           let mut cookie: Option<Cookie> = None;
-            if session.close_to_expiry(how_far_to_expiry) {
-              if self.sessions.remove(sess_id.as_bytes()).is_ok() {
-                if let Some(sess_id) = self.setup_session(session.usr_id.clone()) {
-                  cookie = Some(if !self.dev_mode {
-                    Cookie::build("auth", sess_id)
-                      .domain(CONF.read().domain.clone())
-                      .max_age(time::Duration::seconds(self.expiry_tll))
-                      .http_only(true)
-                      .secure(true)
-                      .finish()
-                  } else {
-                    Cookie::build("auth", sess_id)
-                      .http_only(true)
-                      .max_age(time::Duration::seconds(self.expiry_tll))
-                      .finish()
-                  });
-              }
-            }
-          }
-          let o_usr = self.user_by_id(&session.usr_id);
-          if o_usr.is_some() {
-            return (o_usr, cookie);
-          }
-        }
-      }
-    }
-    (None, None)
-  }
-
-  pub fn username_by_session_renew<'c>(
-    &self,
-    req: &HttpRequest,
-    how_far_to_expiry: Duration,
-  ) -> (Option<User>, Option<Cookie<'c>>) {
-    if let Some(auth_cookie) = req.cookie("auth") {
-      let sess_id = auth_cookie.value();
-      if let Ok(Some(raw)) = self.sessions.get(sess_id.as_bytes()) {
-        let session = UserSession::try_from_slice(&raw).unwrap();
-        if session.has_expired() {
-          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
-            println!("removing expired session from session tree failed: {}", e);
-          }
-        } else {
-          let mut cookie: Option<Cookie> = None;
-            if session.close_to_expiry(how_far_to_expiry) {
+          if session.close_to_expiry(how_far_to_expiry) {
+            let usr_id = session.usr_id.clone();
+            self.authcache.remove_session(&sess_id);
             if self.sessions.remove(sess_id.as_bytes()).is_ok() {
-              if let Some(sess_id) = self.setup_session(session.usr_id.clone()) {
+              if let Some(sess_id) = self.setup_session(usr_id) {
                 cookie = Some(if !self.dev_mode {
                   Cookie::build("auth", sess_id)
                     .domain(CONF.read().domain.clone())
@@ -257,32 +203,25 @@ impl Orchestrator {
                     .http_only(true)
                     .max_age(time::Duration::seconds(self.expiry_tll))
                     .finish()
-                });
+                })
               }
-            }
           }
-          if let Some(usr) = self.user_by_id(&session.usr_id) {
-            return (Some(usr), cookie);
-          }
+        }
+        let o_usr = self.user_by_id(&session.usr_id);
+        if o_usr.is_some() {
+          return (o_usr, cookie);
         }
       }
     }
     (None, None)
   }
 
-  pub fn admin_by_session(&self, req: &HttpRequest) -> Option<User> {
+  pub fn admin_by_session(&self, req: &HttpRequest) -> Option<ElementGuard<String, User>> {
     if let Some(auth_cookie) = req.cookie("auth") {
-      let sess_id = auth_cookie.value();
-      if let Ok(Some(raw)) = self.sessions.get(sess_id.as_bytes()) {
-        let session = UserSession::try_from_slice(&raw).unwrap();
-        if session.has_expired() {
-          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
-            println!("removing expired session from session tree failed: {}", e);
-          }
-        } else if self.is_admin(&session.usr_id) {
-          if let Some(usr) = self.user_by_id(&session.usr_id) {
-            return Some(usr);
-          }
+      let sess_id = auth_cookie.value().to_string();
+      if let Some(session) = self.get_session(&sess_id) {
+        if self.is_admin(&session.usr_id) {
+          return self.user_by_id(&session.usr_id);
         }
       }
     }
@@ -291,16 +230,9 @@ impl Orchestrator {
 
   pub fn is_valid_admin_session(&self, req: &HttpRequest) -> bool {
     if let Some(auth_cookie) = req.cookie("auth") {
-      let sess_id = auth_cookie.value();
-      if let Ok(Some(raw)) = self.sessions.get(sess_id.as_bytes()) {
-        let session = UserSession::try_from_slice(&raw).unwrap();
-        if session.has_expired() {
-          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
-            println!("removing expired session from session tree failed: {}", e);
-          }
-        } else if let Ok(is_admin) = self.admins.contains_key(session.usr_id) {
-          return is_admin;
-        }
+      let sess_id = auth_cookie.value().to_string();
+      if let Some(session) = self.get_session(&sess_id) {
+        return self.is_admin(&session.usr_id);
       }
     }
     false
@@ -308,49 +240,39 @@ impl Orchestrator {
 
   pub fn is_valid_session(&self, req: &HttpRequest) -> bool {
     if let Some(auth_cookie) = req.cookie("auth") {
-      let sess_id = auth_cookie.value();
-      if let Ok(Some(raw)) = self.sessions.get(sess_id.as_bytes()) {
-        let session = UserSession::try_from_slice(&raw).unwrap();
-        if session.has_expired() {
-          if let Err(e) = self.sessions.remove(sess_id.as_bytes()) {
-            println!("removing expired session from session tree failed: {}", e);
-          }
-        } else {
-          return true;
-        }
-      }
+      let sess_id = auth_cookie.value().to_string();
+      return self.get_session(&sess_id).is_some();
     }
     false
   }
 
-  pub fn user_by_id(&self, id: &str) -> Option<User> {
-    if let Ok(Some(raw)) = self.users.get(id.as_bytes()) {
-      return Some(User::try_from_slice(&raw).unwrap());
+  pub fn user_by_id(&self, id: &str) -> Option<ElementGuard<String, User>> {
+    if let Some(el) = self.authcache.users.get(&id.to_string()) {
+      return Some(el);
+    } else if let Ok(Some(raw)) = self.users.get(id.as_bytes()) {
+      let el = self.authcache.cache_user(User::try_from_slice(&raw).unwrap());
+      return Some(el);
     }
     None
   }
 
-  pub fn admin_by_id(&self, id: &str) -> Option<User> {
+  pub fn admin_by_id(&self, id: &str) -> Option<ElementGuard<String, User>> {
     if self.is_admin(id) {
       return self.user_by_id(id);
     }
     None
   }
 
-  pub fn user_by_username(&self, username: &str) -> Option<User> {
+  pub fn user_by_username(&self, username: &str) -> Option<ElementGuard<String, User>> {
     if let Ok(Some(user_id)) = self.usernames.get(username.as_bytes()) {
-      if let Ok(Some(raw)) = self.users.get(user_id) {
-        return Some(User::try_from_slice(&raw).unwrap());
-      }
+      return self.user_by_id(user_id.to_str());
     }
     None
   }
 
-  pub fn user_by_handle(&self, handle: &str) -> Option<User> {
+  pub fn user_by_handle(&self, handle: &str) -> Option<ElementGuard<String, User>> {
     if let Ok(Some(user_id)) = self.handles.get(handle.as_bytes()) {
-      if let Ok(Some(raw)) = self.users.get(user_id) {
-        return Some(User::try_from_slice(&raw).unwrap());
-      }
+      return self.user_by_id(user_id.to_str());
     }
     None
   }
@@ -611,6 +533,80 @@ pub fn verify_password(pwd: &str, hash: &str) -> bool {
   argon2::verify_encoded(hash, pwd.as_bytes()).unwrap_or(false)
 }
 
+pub struct AuthCache {
+  user_count: Arc<AtomicU64>,
+  max_user_count: u64,
+  session_count: Arc<AtomicU64>,
+  max_session_count: u64,
+  pub users: DashMap<String, crate::auth::User>,
+  pub sessions: DashMap<String, crate::auth::UserSession>,
+}
+
+impl AuthCache {
+  pub fn new(max_user_count: u64, max_session_count: u64) -> Self {
+    AuthCache{
+      user_count: Arc::new(AtomicU64::new(0)),
+      max_user_count,
+      session_count: Arc::new(AtomicU64::new(0)),
+      max_session_count,
+      users: DashMap::new(),
+      sessions: DashMap::new(),
+    }
+  }
+
+  pub fn cache_user(&self, user: User) -> ElementGuard<String, User> {
+    let el = self.users.insert_and_get(user.id.clone(), user);
+    let count = self.user_count.fetch_add(1, SeqCst) + 1;
+    if count > self.max_user_count {
+      self.pop_user();
+    }
+    el
+  }
+
+  pub fn remove_user(&self, id: &String) -> bool {
+    if self.users.remove(id) {
+      self.user_count.fetch_sub(1, SeqCst);
+      return true;
+    }
+    false
+  }
+
+  pub fn pop_user(&self) -> bool {
+    if let Some(el) = self.users.iter().last() {
+      return self.remove_user(el.key());
+    }
+    false
+  }
+
+  pub fn cache_session(
+    &self,
+    id: String,
+    session: UserSession,
+  ) -> ElementGuard<String, UserSession> {
+    let el = self.sessions.insert_and_get(id, session);
+    let count = self.session_count.fetch_add(1, SeqCst) + 1;
+    if count > self.max_session_count {
+      self.pop_session();
+    }
+    el
+  }
+
+  pub fn remove_session(&self, id: &String) -> bool {
+    if self.sessions.remove(id) {
+      self.session_count.fetch_sub(1, SeqCst);
+      return true;
+    }
+    false
+  }
+
+  pub fn pop_session(&self) -> bool {
+    if let Some(el) = self.sessions.iter().last() {
+      return self.remove_session(el.key());
+    }
+    false
+  }
+}
+
 #[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
 pub struct User {
   pub id: String,
@@ -660,7 +656,8 @@ pub struct AuthRequest {
 pub async fn logout(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> HttpResponse {
   let mut status = "successfully logged out";
   if let Some(auth_cookie) = req.cookie("auth") {
-    if !orc.sessions.remove(auth_cookie.value().as_bytes()).is_ok() {
+    let sess_id = auth_cookie.value().to_string();
+    if orc.sessions.remove(sess_id.as_bytes()).is_ok() && orc.authcache.remove_session(&sess_id) {
       status = "login was already bad or expired, no worries";
     }
   }
@@ -703,8 +700,14 @@ pub fn renew_session_cookie<'c>(
   None
 }
 
-pub async fn login(usr: User, first_time: bool, orc: web::Data<Arc<Orchestrator>>) -> HttpResponse {
-  let token = if let Some(t) = orc.setup_session(usr.id) { t } else {
+pub async fn login(
+  usr_id: String,
+  first_time: bool,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
+  let token = if let Some(t) = orc.setup_session(usr_id) {
+    t
+  } else {
     return crate::responses::Forbidden("trouble setting up session");
   };
 
@@ -724,11 +727,13 @@ pub async fn login(usr: User, first_time: bool, orc: web::Data<Arc<Orchestrator>
   
   HttpResponse::Accepted()
   .cookie(cookie)
-  .json(crate::responses::APIStatusDataResponse {
-    ok: true, 
-    data: "successfully logged in",
-    status: json!({"first_time": first_time})
-  })
+  .json(json!({
+    "ok": true, 
+    "data": "successfully logged in",
+    "status": {
+      "first_time": first_time
+    }
+  }))
 }
 
 #[get("/auth")]
@@ -777,7 +782,7 @@ pub async fn auth_attempt(
   if orc.username_taken(username) {
     if let Some(usr) = orc.authenticate(username, pwd) {
       orc.ratelimiter.forget(hitter.as_bytes());
-      return login(usr, false, orc.clone()).await;
+      return login(usr.id.clone(), false, orc.clone()).await;
     }
     return crate::responses::BadRequest(
       "either your password is wrong or the username is already taken."
@@ -786,7 +791,7 @@ pub async fn auth_attempt(
 
   if let Some(usr) = orc.create_user(ar.into_inner()) {
     orc.ratelimiter.forget(hitter.as_bytes());
-    return login(usr, true, orc).await;
+    return login(usr.id.clone(), true, orc).await;
   }
 
   crate::responses::Forbidden("not working, we might be under attack")
