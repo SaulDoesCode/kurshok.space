@@ -16,8 +16,7 @@ impl RateLimiter {
   pub fn setup_default() -> Self {
     let db = sled::open("./storage/rl.db").unwrap();
     let store = db.open_tree("rl").unwrap();
-    let count = Arc::new(AtomicU64::new(0));
-    count.fetch_add(store.len() as u64, SeqCst);
+    let count = Arc::new(AtomicU64::new(store.len() as u64));
     RateLimiter{db, store, limit: 100_000, count}
   }
 
