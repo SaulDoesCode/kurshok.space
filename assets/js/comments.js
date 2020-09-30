@@ -170,6 +170,6 @@ app.formulateThread = (comment, children) => div({class: 'comment'},
     ),
     div({class: 'content'}, d.html(comment.content)),
     children == null || children.length > 0 && div({class: 'children'},
-        children.map(({cmnt, chrn}) => formulateComment(cmnt, chrn))
+        children.map(c => app.formulateThread(c.comment, c.children))
     )
 )
