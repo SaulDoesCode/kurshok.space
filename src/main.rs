@@ -1,12 +1,21 @@
 #![allow(dead_code)]
 
 #[macro_use(lazy_static)]extern crate lazy_static;
-// extern crate simd_json;
 
+/*
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]static GLOBAL: Jemalloc = Jemalloc;
+*/
+use mimalloc::MiMalloc;
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+/*
+#[global_allocator]
+static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
+*/
+
 
 mod utils;
 mod ratelimiter;
