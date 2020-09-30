@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use sled::{transaction::*, IVec, Transactional};
 use std::{cell::Cell, collections::HashMap, sync::Arc};
 use time::Duration;
+use rayon::prelude::*;
 
 use crate::orchestrator::Orchestrator;
 use crate::auth::{User};
@@ -493,7 +494,7 @@ impl CommentTree {
         Some(pc) => pc,
         None => return None,
       },
-      children: self.children.into_iter()
+      children: self.children.into_par_iter()
         .filter_map(|c| c.public(orc, usr_id))
         .collect()
     })
@@ -512,14 +513,14 @@ impl CommentIDTree {
     self.children.insert(id_tree.comment.clone(), id_tree);
   }
 
-  pub fn subtree(&self, parts: Vec<String>) -> Option<CommentIDTree> {
-    let p_len = parts.len() - 1;
+  pub fn subtree(&self, path: Vec<String>) -> Option<&CommentIDTree> {
+    let p_len = path.len() - 1;
     let mut i = 0;
     let next_layer: Cell<Option<&HashMap<String, CommentIDTree>>> = Cell::new(Some(&self.children));
     while let Some(children) = next_layer.take() {
-      if let Some(child) = children.get(&parts[i]) {
+      if let Some(child) = children.get(&path[i]) {
         if i == p_len {
-          return Some(child.clone());
+          return Some(&child);
         } else {
           i += 1;
           next_layer.replace(Some(&child.children));
@@ -630,7 +631,7 @@ impl CommentIDTree {
       if check_query_conditions(query, &comment, &author_id) {
         return Some(CommentTree{
           comment,
-          children: self.children.iter()
+          children: self.children.par_iter()
             .filter_map(|(_, child)| child.to_comment_tree(orc, query))
             .collect()
         });
@@ -694,18 +695,15 @@ pub fn check_query_conditions(query: &CommentQuery, comment: &Comment, author_id
   let is_admin = query.is_admin.unwrap_or(false);
 
   if let Some(public_status) = query.public {
-    if comment.public == public_status {
-      if !comment.public {
-        if !is_admin {
-          if let Some(requestor_id) = &query.requestor_id {
-            if author_id != *requestor_id {
-              return false;
-            }
-          }
+    if comment.public != public_status {
+      return false;
+    }
+    if !comment.public && !is_admin {
+      if let Some(requestor_id) = &query.requestor_id {
+        if author_id != *requestor_id {
+          return false;
         }
       }
-    } else {
-      return false;
     }
   }
 
@@ -830,7 +828,7 @@ pub async fn comment_query(
     }
   }
 
-  let amount = if let Some(a) = &query.amount { a.clone() } else { 50 };
+  let amount = query.amount.as_ref().map_or(50, |a| *a);
 
   query.is_admin = Some(is_admin);
 
@@ -868,39 +866,45 @@ pub async fn comment_query(
   }
 
   if (is_admin && amount > 500) || amount > 50 { return None; }
-
-  let mut count = 0;
+  
+  let (mut tx, mut rx) = tokio::sync::mpsc::channel::<CommentIDTree>(amount as usize);
+  let mut iter = orc.comment_trees.scan_prefix(path.as_bytes());
   let page = query.page;
 
-  let mut cidtrees = vec![];
-
-  let mut iter = orc.comment_trees.scan_prefix(path.as_bytes());
-  while let Some(Ok((_, raw))) = iter.next_back() {
-    if page < 2 {
-        if count == amount { break; }
-    } else if count != (amount * page) {
-        count += 1;
-        continue;
-    }
-
-    let id_tree: CommentIDTree = bincode::deserialize(&raw).unwrap();
-
-    if let Some(dp) = depth_path {
-      if let Some(st) = id_tree.subtree(dp) {
-        cidtrees.push(st);        
+  tokio::spawn(async move {
+    let mut count = 0;
+    while let Some(Ok((_, raw))) = iter.next_back() {
+      if page < 2 {
+          if count == amount { break; }
+      } else if count != (amount * page) {
+          count += 1;
+          continue;
       }
-      break;
+
+      let id_tree = bincode::deserialize::<CommentIDTree>(&raw).unwrap();
+
+      if let Some(dp) = depth_path {
+        if let Some(st) = id_tree.subtree(dp) {
+          if tx.send(st.clone()).await.is_ok() {
+            break;
+          }
+        }
+        break;
+      }
+
+      if tx.send(id_tree).await.is_ok() {
+        count += 1;
+      }
     }
+  });
 
-    cidtrees.push(id_tree);
-    count += 1;
+  let mut comment_trees = Vec::with_capacity(10);
+  while let Some(cit) = rx.recv().await {
+    if let Some(ct) = cit.to_comment_tree(orc, &query) {
+      comment_trees.push(ct);
+    }
   }
-
-  let comments: Vec<CommentTree> = cidtrees.into_iter()
-    .filter_map(|cidt| cidt.to_comment_tree(orc, &query))
-    .collect();
-
-  (comments.len() != 0).qualify(comments)
+  Some(comment_trees)
 }
 
 #[post("/comments")]
@@ -909,16 +913,16 @@ pub async fn post_comment_query(
   query: web::Json<CommentQuery>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  let o_el = orc.user_by_session(&req);
-  let usr_id: Option<String> = match &o_el {
+  let o_usr = orc.user_by_session(&req);
+  let usr_id = match &o_usr {
     Some(el) => Some(el.id.clone()),
     None => None,
   };
 
   match comment_query(
-    o_el.as_ref().map(|el| el.value()),
+    o_usr.as_ref().map(|el| el.value()),
     query.into_inner(),
-    orc.as_ref()
+    orc.as_ref(),
   ).await {
     Some(comments) => crate::responses::Ok(
       comments.into_iter()
