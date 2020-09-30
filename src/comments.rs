@@ -136,8 +136,7 @@ impl Comment {
   pub fn public(self, orc: &Orchestrator, usr_id: &Option<String>) -> Option<PublicComment> {
     Some(PublicComment{
       posted: self.posted,
-      author_name: self.author_name.clone(),
-      edited: self.edited.wrap(), 
+      edited: self.edited.wrap(),
       author_only: self.author_only.wrap(),
       you_voted: match usr_id {
         Some(id) => match orc.comment_voters.get(self.vote_id(id).as_bytes()) {
@@ -152,6 +151,7 @@ impl Comment {
         return None;
       },
       id: self.id,
+      author_name: self.author_name,
       content: self.content,
     })
   }
@@ -488,15 +488,22 @@ impl CommentTree {
     self,
     orc: &Orchestrator,
     usr_id: &Option<String>,
+    top_level: bool,
   ) -> Option<PublicCommentTree> {
     Some(PublicCommentTree{
       comment: match self.comment.public(orc, usr_id) {
         Some(pc) => pc,
         None => return None,
       },
-      children: self.children.into_par_iter()
-        .filter_map(|c| c.public(orc, usr_id))
+      children: if top_level {
+        self.children.into_par_iter()
+        .filter_map(|c| c.public(orc, usr_id, false))
         .collect()
+      } else {
+        self.children.into_iter()
+        .filter_map(|c| c.public(orc, usr_id, false))
+        .collect()
+      }
     })
   }
 }
@@ -590,7 +597,12 @@ impl CommentIDTree {
     None
   }
 
-  fn to_comment_tree(&self, orc: &Orchestrator, query: &CommentQuery) -> Option<CommentTree> {
+  fn to_comment_tree(
+    &self,
+    orc: &Orchestrator,
+    query: &CommentQuery,
+    is_top_level: bool,
+  ) -> Option<CommentTree> {
     if let Some(max_level) = &query.max_level {
       if self.level == *max_level {
         return None;
@@ -631,13 +643,18 @@ impl CommentIDTree {
       if check_query_conditions(query, &comment, &author_id) {
         return Some(CommentTree{
           comment,
-          children: self.children.par_iter()
-            .filter_map(|(_, child)| child.to_comment_tree(orc, query))
-            .collect()
+          children: if is_top_level {
+            self.children.par_iter()
+              .filter_map(|(_, child)| child.to_comment_tree(orc, query, false))
+              .collect()
+          } else {
+            self.children.iter()
+              .filter_map(|(_, child)| child.to_comment_tree(orc, query, false))
+              .collect()
+          }
         });
       }
     }
-
     None
   }
 
@@ -729,32 +746,34 @@ pub fn check_query_conditions(query: &CommentQuery, comment: &Comment, author_id
     }
   }
 
-  let posted = datetime_from_unix_timestamp(comment.posted);
-  if let Some(year) = &query.year {
-    if posted.year() != *year {
-      return false;
-    }
-  }
-
-  if let Some(month) = &query.month {
-    if let Some(day) = &query.day {
-      // they say this is more efficient, so, you know, meh..
-      let (m, d) = posted.month_day();
-      if m != *month || d != *day {
+  if query.day.is_some() || query.hour.is_some() || query.year.is_some() || query.month.is_some() {
+    let posted = datetime_from_unix_timestamp(comment.posted);
+    if let Some(year) = &query.year {
+      if posted.year() != *year {
         return false;
       }
-    } else if posted.month() != *month {
-      return false;
     }
-  } else if let Some(day) = &query.day {
-    if posted.day() != *day {
-      return false;
-    }
-  }
 
-  if let Some(hour) = &query.hour {
-    if posted.hour() != *hour {
-      return false;
+    if let Some(month) = &query.month {
+      if let Some(day) = &query.day {
+        // they say this is more efficient, so, you know, meh..
+        let (m, d) = posted.month_day();
+        if m != *month || d != *day {
+          return false;
+        }
+      } else if posted.month() != *month {
+        return false;
+      }
+    } else if let Some(day) = &query.day {
+      if posted.day() != *day {
+        return false;
+      }
+    }
+
+    if let Some(hour) = &query.hour {
+      if posted.hour() != *hour {
+        return false;
+      }
     }
   }
 
@@ -903,7 +922,7 @@ pub async fn comment_query(
 
   let mut comment_trees = Vec::with_capacity(10);
   while let Some(cit) = rx.recv().await {
-    if let Some(ct) = cit.to_comment_tree(orc, &query) {
+    if let Some(ct) = cit.to_comment_tree(orc, &query, true) {
       comment_trees.push(ct);
     }
   }
@@ -928,8 +947,8 @@ pub async fn post_comment_query(
     orc.as_ref(),
   ).await {
     Some(comments) => crate::responses::Ok(
-      comments.into_iter()
-        .filter_map(|c| c.public(orc.as_ref(), &usr_id))
+      comments.into_par_iter()
+        .filter_map(|c| c.public(orc.as_ref(), &usr_id, true))
         .collect::<Vec<PublicCommentTree>>()
     ),
     None => crate::responses::NotFoundEmpty()

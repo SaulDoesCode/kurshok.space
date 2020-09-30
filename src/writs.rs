@@ -1,8 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sled::{transaction::*, IVec, Transactional};
 use thiserror::Error;
-use time::{OffsetDateTime};
+use time::OffsetDateTime;
 
 use std::sync::Arc;
 
@@ -16,7 +17,8 @@ use crate::utils::{
   unix_timestamp,
   datetime_from_unix_timestamp,
   render_md,
-  FancyIVec
+  FancyIVec,
+  FancyBool
 };
 
 impl Orchestrator {
@@ -140,13 +142,10 @@ impl Orchestrator {
   }
 
   pub fn writ_query(&self, mut query: WritQuery, o_usr: Option<&User>) -> Option<Vec<Writ>> {
-    let is_admin = if let Some(usr) = &o_usr {
-      self.is_admin(&usr.id)
-    } else {
-      false
-    };
+    let is_admin = o_usr.as_ref()
+      .map_or(false, |usr| self.is_admin(&usr.id));
 
-    let amount = if let Some(a) = &query.amount { a.clone() } else { 20 };
+    let amount = *query.amount.as_ref().unwrap_or(&20);
 
     if !is_admin {
       if amount > 50 { return None; }
@@ -157,13 +156,14 @@ impl Orchestrator {
 
     let mut author_ids: Option<Vec<sled::IVec>> = None;
     if let Some(authors) = &query.authors {
-      let mut ids = vec!();
-      for a in authors {
-        if let Ok(Some(id)) = self.usernames.get(a.as_bytes()) {
-          ids.push(id);
-        }
-      }
-      author_ids = Some(ids);
+      author_ids = Some(authors.par_iter()
+        .filter_map(|a| if let Ok(Some(id)) = self.usernames.get(a.as_bytes()) {
+          Some(id)
+        } else {
+          None
+        })
+        .collect()
+      );
     } else if query.author_id.is_none() {
       if let Some(name) = &query.author_name {
         let mut found = false;
@@ -198,7 +198,7 @@ impl Orchestrator {
       }
     }
 
-    let user_attributes = o_usr.as_ref().map_or(None, |usr| Some(self.user_attributes(&usr.id)));
+    let user_attributes = o_usr.as_ref().map(|usr| self.user_attributes(&usr.id));
 
     let check_writ_against_query = |writ: &Writ, date_scan: bool| {
       if let Some(posted_before) = &query.posted_before {
@@ -440,12 +440,11 @@ impl Orchestrator {
     let usr_id = o_usr.as_ref().map(|usr| usr.id.clone());
     let with_content = query.with_content.unwrap_or(true);
     if let Some(writs) = self.writ_query(query, o_usr) {
-      let mut public_writs = vec!();
-      for w in writs {
-        if let Some(pw) = w.public(self, &usr_id, with_content) {
-          public_writs.push(pw);
-        }
-      }
+      let public_writs = writs.into_par_iter()
+        .filter_map(|w|
+          w.public(self, &usr_id, with_content)
+        )
+        .collect::<Vec<PublicWrit>>();
 
       if public_writs.len() > 0 {
         return Some(public_writs);
@@ -464,19 +463,15 @@ impl Orchestrator {
     let with_content = query.with_content.unwrap_or(false);
     let with_raw_content = query.with_raw_content.unwrap_or(true);
 
-    if let Some(writs) = self.writ_query(query, Some(&usr)) {
-      let mut editable_writs = vec!();
-      for w in writs {
-        if let Some(pw) = w.editable(self, &usr, with_content, with_raw_content) {
-          editable_writs.push(pw);
-        }
-      }
+    self.writ_query(query, Some(&usr)).and_then(|writs| {
+      let editable_writs = writs.into_par_iter()
+        .filter_map(|w|
+          w.editable(self, &usr, with_content, with_raw_content)
+        )
+        .collect::<Vec<EditableWrit>>();
 
-      if editable_writs.len() > 0 {
-        return Some(editable_writs);
-      }
-    }
-    None
+      (editable_writs.len() > 0).qualify(editable_writs)
+    })
   }
 
   pub fn writ_by_id(&self, id: &str) -> Option<Writ> {
@@ -1124,7 +1119,7 @@ impl RawWrit {
   }
 
   pub fn are_tags_valid(tags: &Vec<String>) -> bool {
-    tags.iter().all(|t|
+    tags.par_iter().all(|t|
       t.len() <= 20 &&
       t.chars().all(|c|
         c.is_alphanumeric() ||
