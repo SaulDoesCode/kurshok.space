@@ -358,7 +358,7 @@ impl Orchestrator {
   }
 
   pub fn has_admin_level(&self, usr_id: &str, level: u8) -> bool {
-    if let Some(levels) = self.admins.get(usr_id.as_bytes()).unwrap() {
+    if let Ok(Some(levels)) = self.admins.get(usr_id.as_bytes()) {
       return levels[0] == level;
     }
     false
@@ -705,10 +705,9 @@ pub async fn login(
   first_time: bool,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  let token = if let Some(t) = orc.setup_session(usr_id) {
-    t
-  } else {
-    return crate::responses::Forbidden("trouble setting up session");
+  let token = match orc.setup_session(usr_id) {
+    Some(t) => t,
+    None => return crate::responses::Forbidden("trouble setting up session"),
   };
 
   let cookie = if !orc.dev_mode {

@@ -789,7 +789,10 @@ pub async fn comment_query(
   let mut parts: Vec<&str> = query.path.split('/').filter(|&c| c != "").collect();
   let depth_path: Option<Vec<String>> = if parts.len() > 2 {
     path = parts.drain(..2).join("/");
-    let depth_path: Vec<String> = parts.iter().map(|p| p.to_string()).collect();
+    let depth_path: Vec<String> = parts.iter()
+      .map(|p| p.to_string())
+      .collect();
+
     if parts.len() == 0 {
       return None;
     }
@@ -833,7 +836,7 @@ pub async fn comment_query(
   query.is_admin = Some(is_admin);
 
   if let Some(authors) = &query.authors {
-    let mut ids: Vec<String> = authors.iter().filter_map(|a|
+    let mut ids: Vec<String> = authors.par_iter().filter_map(|a|
       orc.usernames.get(a.as_bytes())
         .map_or(None, |id| id.map(|id| id.to_string()))
     ).collect();
