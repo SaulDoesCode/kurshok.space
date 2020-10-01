@@ -113,10 +113,9 @@ impl Orchestrator {
             sess.remove(&k)?;
             Ok(())
           });
-        res.unwrap();
-        return false;
+        return !res.is_ok();
       }
-      timestamp - ses.timestamp < Duration::minutes(5).whole_seconds()
+      false
     })) {
       return Err(AuthError::SessionRemovalErr);
     }
