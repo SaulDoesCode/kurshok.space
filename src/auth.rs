@@ -1,3 +1,4 @@
+use actix_web::{get, post, delete, web, HttpMessage, HttpRequest, HttpResponse, Responder, cookie::Cookie};
 use argon2::Config;
 use borsh::{BorshDeserialize, BorshSerialize};
 use dashmap::{DashMap, ElementGuard};
@@ -5,11 +6,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sled::{transaction::*, IVec, Transactional};
 use slug::slugify;
+use thiserror::Error;
 use time::Duration;
 
-use std::sync::{atomic::{AtomicU64, Ordering::{SeqCst}}, Arc};
-
-use actix_web::{get, post, delete, web, HttpMessage, HttpRequest, HttpResponse, Responder, cookie::Cookie};
+use std::sync::{
+  atomic::{AtomicU64, Ordering::SeqCst},
+  Arc,
+};
 
 use super::CONF;
 use crate::orchestrator::Orchestrator;
@@ -99,10 +102,10 @@ impl Orchestrator {
     None
   }
 
-  pub fn setup_session(&self, usr_id: String) -> Option<String> {
-    let sess_id = format!("{}:{}", usr_id.clone(), random_string(28));
+  pub fn setup_session(&self, usr_id: String) -> Result<String, AuthError> {
+    let sess_id = format!("{}:{}", &usr_id, random_string(20));
     let timestamp = unix_timestamp();
-    if self.sessions.scan_prefix(usr_id.clone().as_bytes()).any(|r| r.map_or(false, |(k, v)| {
+    if self.sessions.scan_prefix(usr_id.as_bytes()).any(|r| r.map_or(false, |(k, v)| {
       let ses = UserSession::try_from_slice(&v).unwrap();
       if ses.has_expired() {
         let res: TransactionResult<(), ()> = (&self.sessions, &self.users)
@@ -115,7 +118,7 @@ impl Orchestrator {
       }
       timestamp - ses.timestamp < Duration::minutes(5).whole_seconds()
     })) {
-      return None;
+      return Err(AuthError::SessionRemovalErr);
     }
 
     let session = UserSession{
@@ -124,14 +127,22 @@ impl Orchestrator {
       exp: timestamp + time::Duration::weeks(2).whole_seconds(),
     };
 
-    if self.sessions
-        .insert(sess_id.as_bytes(), session.try_to_vec().unwrap())
-        .is_ok()
-    {
-      self.authcache.cache_session(sess_id.clone(), session);
-      return Some(sess_id);
-    }
-    None
+    match self.sessions.insert(
+      sess_id.as_bytes(),
+      session.try_to_vec().unwrap()
+    ) {
+      Ok(_) => {
+        self.authcache.cache_session(sess_id.clone(), session);
+        return Ok(sess_id);
+      },
+      Err(e) => {
+        if self.dev_mode {
+          println!("sessions.insert error: {:?}", e);
+        }
+        return Err(AuthError::DBIssue);
+      }
+    } 
+        
   }
 
   pub fn get_session(&self, id: &String) -> Option<ElementGuard<String, UserSession>> {
@@ -190,7 +201,7 @@ impl Orchestrator {
             let usr_id = session.usr_id.clone();
             self.authcache.remove_session(&sess_id);
             if self.sessions.remove(sess_id.as_bytes()).is_ok() {
-              if let Some(sess_id) = self.setup_session(usr_id) {
+              if let Ok(sess_id) = self.setup_session(usr_id) {
                 cookie = Some(if !self.dev_mode {
                   Cookie::build("auth", sess_id)
                     .domain(CONF.read().domain.clone())
@@ -607,6 +618,24 @@ impl AuthCache {
   }
 }
 
+#[derive(Error, Debug)]
+pub enum AuthError {
+  #[error("id does not match any currently existing user")]
+  BadID,
+  #[error("id generation failed for some reason, maybe try again later")]
+  IDGenErr,
+  #[error("there was a problem interacting with the db")]
+  DBIssue,
+  #[error("too many requests to Auth API, chill for a bit")]
+  RateLimit,
+  #[error("something fishy going on with session")]
+  SessionErr,
+  #[error("ran into trouble removing bad or expired sessions")]
+  SessionRemovalErr,
+  #[error("unknown auth error")]
+  Unknown,
+}
+
 #[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
 pub struct User {
   pub id: String,
@@ -675,10 +704,9 @@ pub fn renew_session_cookie<'c>(
     let sess_id = auth_cookie.value();
     if let Ok(Some(raw)) = orc.sessions.get(sess_id.as_bytes()) {
       let session = UserSession::try_from_slice(&raw).unwrap();
-
       if session.close_to_expiry(how_far_to_expiry) {
         if orc.sessions.remove(sess_id.as_bytes()).is_ok() {
-          if let Some(sess_id) = orc.setup_session(session.usr_id) {
+          if let Ok(sess_id) = orc.setup_session(session.usr_id) {
             return Some(if !orc.dev_mode {
               Cookie::build("auth", sess_id.clone())
                 .domain(CONF.read().domain.clone())
@@ -706,8 +734,10 @@ pub async fn login(
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   let token = match orc.setup_session(usr_id) {
-    Some(t) => t,
-    None => return crate::responses::Forbidden("trouble setting up session"),
+    Ok(t) => t,
+    Err(e) => {
+      return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
+    },
   };
 
   let cookie = if !orc.dev_mode {
