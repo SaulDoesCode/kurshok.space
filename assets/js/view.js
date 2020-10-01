@@ -90,7 +90,6 @@ const publicPost = (w) => div({
     attr: {pid: w.id},
     onclick(e, el) {
         if (e.target.className.includes('vote')) return
-        app.fetchPostContent(w.id)
         location.hash = w.id
     }
 },
@@ -205,10 +204,8 @@ app.fetchPostContent = async id => {
     }
     const res = await fetch('/post-content/' + id)
     const data = await res.json()
-    if (data.ok) {
-        return app.posts[id].content = data.data
-    }
-    throw new Error(data.status)
+    if (!data.ok) throw new Error(data.status)
+    return app.posts[id].content = data.data
 }
 
 app.posts = Object.create(null)
