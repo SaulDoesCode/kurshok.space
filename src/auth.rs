@@ -1,4 +1,6 @@
-use actix_web::{get, post, delete, web, HttpMessage, HttpRequest, HttpResponse, Responder, cookie::Cookie};
+use actix_web::{
+  cookie::Cookie, delete, get, post, web, HttpMessage, HttpRequest, HttpResponse, Responder,
+};
 use argon2::Config;
 use borsh::{BorshDeserialize, BorshSerialize};
 use dashmap::{DashMap, ElementGuard};
@@ -17,16 +19,15 @@ use std::sync::{
 use super::CONF;
 use crate::orchestrator::Orchestrator;
 use crate::utils::{
-  unix_timestamp,
+  is_email_ok,
   // datetime_from_unix_timestamp,
   is_password_ok,
-  is_email_ok,
   is_username_ok,
   random_string,
+  unix_timestamp,
   FancyBool,
   FancyIVec,
 };
-
 
 impl Orchestrator {
   pub fn hash(&self, data: &[u8]) -> Vec<u8> {
@@ -37,7 +38,7 @@ impl Orchestrator {
     self.id_counter.transaction(|idc| {
       let id = match idc.get(key)? {
         Some(count) => count.to_u64() + 1,
-        None => 0
+        None => 0,
       };
       idc.insert(key, IVec::from_u64(id))?;
       Ok(id)
@@ -55,45 +56,58 @@ impl Orchestrator {
     let pwd = match self.hash_pwd(&ar.password) {
       Some(p) => p,
       None => return None,
-    };    
+    };
 
     let user_id = match self.generate_id("usr".as_bytes()) {
       Ok(id) => format!("{}", id),
       Err(_) => return None,
     };
 
-    let email = ar.email.and_then(|email| is_email_ok(&email).qualify(email));
+    let email = ar
+      .email
+      .and_then(|email| is_email_ok(&email).qualify(email));
 
-    let usr = User{
+    let usr = User {
       id: user_id.clone(),
       username: ar.username.clone(),
       handle: ar.handle.unwrap_or(slugify(ar.username)),
       reg: unix_timestamp(),
     };
 
-    if (&self.users, &self.usernames, &self.user_secrets, &self.user_emails, &self.handles).transaction(|(users, usernames, usr_secrets, usr_emails, handles)| {
-      if usernames.get(usr.username.as_bytes())?.is_some() || handles.get(usr.handle.as_bytes())?.is_some() {
-        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-      }
+    if (
+      &self.users,
+      &self.usernames,
+      &self.user_secrets,
+      &self.user_emails,
+      &self.handles,
+    )
+      .transaction(|(users, usernames, usr_secrets, usr_emails, handles)| {
+        if usernames.get(usr.username.as_bytes())?.is_some()
+          || handles.get(usr.handle.as_bytes())?.is_some()
+        {
+          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+        }
 
-      users.insert(user_id.as_bytes(), usr.try_to_vec().unwrap())?;
-      usr_secrets.insert(user_id.as_bytes(), pwd.as_bytes())?;
-      if let Some(email) = &email {
-        usr_emails.insert(user_id.as_bytes(), email.as_bytes())?;
-      }
-      usernames.insert(usr.username.as_bytes(), user_id.as_bytes())?;
-      handles.insert(usr.handle.as_bytes(), user_id.as_bytes())?;
-      Ok(())
-    }).is_ok() {
+        users.insert(user_id.as_bytes(), usr.try_to_vec().unwrap())?;
+        usr_secrets.insert(user_id.as_bytes(), pwd.as_bytes())?;
+        if let Some(email) = &email {
+          usr_emails.insert(user_id.as_bytes(), email.as_bytes())?;
+        }
+        usernames.insert(usr.username.as_bytes(), user_id.as_bytes())?;
+        handles.insert(usr.handle.as_bytes(), user_id.as_bytes())?;
+        Ok(())
+      })
+      .is_ok()
+    {
       return Some(usr);
     }
 
     None
   }
 
-   pub fn authenticate(&self, username: &str, pwd: &str) -> Option<ElementGuard<String, User>> {
+  pub fn authenticate(&self, username: &str, pwd: &str) -> Option<ElementGuard<String, User>> {
     if let Ok(Some(usr_id)) = self.usernames.get(username.as_bytes()) {
-     if let Ok(Some(usr_pwd)) = self.user_secrets.get(&usr_id) {
+      if let Ok(Some(usr_pwd)) = self.user_secrets.get(&usr_id) {
         if verify_password(pwd, usr_pwd.to_str()) {
           return self.user_by_id(usr_id.to_str());
         }
@@ -105,43 +119,44 @@ impl Orchestrator {
   pub fn setup_session(&self, usr_id: String) -> Result<String, AuthError> {
     let sess_id = format!("{}:{}", &usr_id, random_string(20));
     let timestamp = unix_timestamp();
-    if self.sessions.scan_prefix(usr_id.as_bytes()).any(|r| r.map_or(false, |(k, v)| {
-      let ses = UserSession::try_from_slice(&v).unwrap();
-      if ses.has_expired() {
-        let res: TransactionResult<(), ()> = (&self.sessions, &self.users)
-          .transaction(|(sess, _users)| {
-            sess.remove(&k)?;
-            Ok(())
-          });
-        return !res.is_ok();
-      }
-      false
-    })) {
+    if self.sessions.scan_prefix(usr_id.as_bytes()).any(|r| {
+      r.map_or(false, |(k, v)| {
+        let ses = UserSession::try_from_slice(&v).unwrap();
+        if ses.has_expired() {
+          let res: TransactionResult<(), ()> =
+            (&self.sessions, &self.users).transaction(|(sess, _users)| {
+              sess.remove(&k)?;
+              Ok(())
+            });
+          return !res.is_ok();
+        }
+        false
+      })
+    }) {
       return Err(AuthError::SessionRemovalErr);
     }
 
-    let session = UserSession{
+    let session = UserSession {
       usr_id,
       timestamp,
       exp: timestamp + time::Duration::weeks(2).whole_seconds(),
     };
 
-    match self.sessions.insert(
-      sess_id.as_bytes(),
-      session.try_to_vec().unwrap()
-    ) {
+    match self
+      .sessions
+      .insert(sess_id.as_bytes(), session.try_to_vec().unwrap())
+    {
       Ok(_) => {
         self.authcache.cache_session(sess_id.clone(), session);
         return Ok(sess_id);
-      },
+      }
       Err(e) => {
         if self.dev_mode {
           println!("sessions.insert error: {:?}", e);
         }
         return Err(AuthError::DBIssue);
       }
-    } 
-        
+    }
   }
 
   pub fn get_session(&self, id: &String) -> Option<ElementGuard<String, UserSession>> {
@@ -183,7 +198,6 @@ impl Orchestrator {
     }
     None
   }
-  
   pub fn user_by_session_renew<'c>(
     &self,
     req: &HttpRequest,
@@ -195,26 +209,26 @@ impl Orchestrator {
     if let Some(auth_cookie) = req.cookie("auth") {
       let sess_id = auth_cookie.value().to_string();
       if let Some(session) = self.get_session(&sess_id) {
-          let mut cookie: Option<Cookie> = None;
-          if session.close_to_expiry(how_far_to_expiry) {
-            let usr_id = session.usr_id.clone();
-            self.authcache.remove_session(&sess_id);
-            if self.sessions.remove(sess_id.as_bytes()).is_ok() {
-              if let Ok(sess_id) = self.setup_session(usr_id) {
-                cookie = Some(if !self.dev_mode {
-                  Cookie::build("auth", sess_id)
-                    .domain(CONF.read().domain.clone())
-                    .max_age(time::Duration::seconds(self.expiry_tll))
-                    .http_only(true)
-                    .secure(true)
-                    .finish()
-                } else {
-                  Cookie::build("auth", sess_id)
-                    .http_only(true)
-                    .max_age(time::Duration::seconds(self.expiry_tll))
-                    .finish()
-                })
-              }
+        let mut cookie: Option<Cookie> = None;
+        if session.close_to_expiry(how_far_to_expiry) {
+          let usr_id = session.usr_id.clone();
+          self.authcache.remove_session(&sess_id);
+          if self.sessions.remove(sess_id.as_bytes()).is_ok() {
+            if let Ok(sess_id) = self.setup_session(usr_id) {
+              cookie = Some(if !self.dev_mode {
+                Cookie::build("auth", sess_id)
+                  .domain(CONF.read().domain.clone())
+                  .max_age(time::Duration::seconds(self.expiry_tll))
+                  .http_only(true)
+                  .secure(true)
+                  .finish()
+              } else {
+                Cookie::build("auth", sess_id)
+                  .http_only(true)
+                  .max_age(time::Duration::seconds(self.expiry_tll))
+                  .finish()
+              })
+            }
           }
         }
         let o_usr = self.user_by_id(&session.usr_id);
@@ -260,7 +274,9 @@ impl Orchestrator {
     if let Some(el) = self.authcache.users.get(&id.to_string()) {
       return Some(el);
     } else if let Ok(Some(raw)) = self.users.get(id.as_bytes()) {
-      let el = self.authcache.cache_user(User::try_from_slice(&raw).unwrap());
+      let el = self
+        .authcache
+        .cache_user(User::try_from_slice(&raw).unwrap());
       return Some(el);
     }
     None
@@ -296,27 +312,32 @@ impl Orchestrator {
   }
 
   pub fn change_username(&self, usr: &mut User, new_username: &str) -> bool {
-    if self.username_taken(new_username) { return false; }
+    if self.username_taken(new_username) {
+      return false;
+    }
 
     let old_username = usr.username.clone();
     usr.username = new_username.to_string();
 
-    let res: TransactionResult<(), ()> = (&self.users, &self.usernames).transaction(|(users, usernames)| {
-      users.insert(usr.id.as_bytes(), usr.try_to_vec().unwrap())?;
-      usernames.remove(old_username.as_bytes())?;
-      usernames.insert(new_username.as_bytes(), usr.id.as_bytes())?;
-      Ok(())
-    });
+    let res: TransactionResult<(), ()> =
+      (&self.users, &self.usernames).transaction(|(users, usernames)| {
+        users.insert(usr.id.as_bytes(), usr.try_to_vec().unwrap())?;
+        usernames.remove(old_username.as_bytes())?;
+        usernames.insert(new_username.as_bytes(), usr.id.as_bytes())?;
+        Ok(())
+      });
     res.is_ok()
   }
 
   pub fn change_handle(&self, usr: &mut User, new_handle: &str) -> bool {
-    if self.handle_taken(new_handle) { return false; }
+    if self.handle_taken(new_handle) {
+      return false;
+    }
 
     let old_handle = usr.handle.clone();
     usr.handle = new_handle.to_string();
-    let res: TransactionResult<(), ()> = (&self.users, &self.handles)
-      .transaction(|(users, handles)| {
+    let res: TransactionResult<(), ()> =
+      (&self.users, &self.handles).transaction(|(users, handles)| {
         users.insert(usr.id.as_bytes(), usr.try_to_vec().unwrap())?;
         handles.remove(old_handle.as_bytes())?;
         handles.insert(new_handle.as_bytes(), usr.id.as_bytes())?;
@@ -326,15 +347,20 @@ impl Orchestrator {
   }
 
   pub fn change_description(&self, usr: &mut User, new_desc: &str) -> bool {
-    new_desc.len() > 1 &&
-    self.user_descriptions.insert(usr.id.as_bytes(), new_desc.as_bytes()).is_ok()
+    new_desc.len() > 1
+      && self
+        .user_descriptions
+        .insert(usr.id.as_bytes(), new_desc.as_bytes())
+        .is_ok()
   }
 
   pub fn change_password(&self, usr: &mut User, new_pwd: &str) -> bool {
-    if !is_password_ok(new_pwd) { return false; }
+    if !is_password_ok(new_pwd) {
+      return false;
+    }
     self.hash_pwd(new_pwd).map_or(false, |p| {
-      let res: TransactionResult<(), ()> = (&self.user_secrets, &self.users)
-        .transaction(|(user_secrets, _users)| {
+      let res: TransactionResult<(), ()> =
+        (&self.user_secrets, &self.users).transaction(|(user_secrets, _users)| {
           user_secrets.insert(usr.id.as_bytes(), p.as_bytes())?;
           Ok(())
         });
@@ -343,9 +369,12 @@ impl Orchestrator {
   }
 
   pub fn make_admin(&self, usr_id: &str, level: u8, reason: Option<String>) -> bool {
-    let attr = UserAttribute{aquired: unix_timestamp(), reason};
-    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.admins)
-      .transaction(|(usr_attrs, admins)| {
+    let attr = UserAttribute {
+      aquired: unix_timestamp(),
+      reason,
+    };
+    let res: TransactionResult<(), ()> =
+      (&self.user_attributes, &self.admins).transaction(|(usr_attrs, admins)| {
         let key = format!("{}:admin", usr_id);
         usr_attrs.insert(key.as_bytes(), attr.try_to_vec().unwrap())?;
         admins.insert(usr_id.as_bytes(), &[level])?;
@@ -355,8 +384,8 @@ impl Orchestrator {
   }
 
   pub fn change_admin_level(&self, usr_id: &str, level: u8) -> bool {
-    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.admins)
-      .transaction(|(usr_attrs, admins)| {
+    let res: TransactionResult<(), ()> =
+      (&self.user_attributes, &self.admins).transaction(|(usr_attrs, admins)| {
         let key = format!("{}:admin", usr_id);
         if let Some(_) = usr_attrs.get(key.as_bytes())? {
           admins.insert(usr_id.as_bytes(), &[level])?;
@@ -390,7 +419,10 @@ impl Orchestrator {
       .transaction(|(usr_attrs, usr_attrs_data)| {
         for attr in &attrs {
           let key = format!("{}:{}", usr_id, attr);
-          usr_attrs.insert(key.as_bytes(), UserAttribute::default().try_to_vec().unwrap())?;
+          usr_attrs.insert(
+            key.as_bytes(),
+            UserAttribute::default().try_to_vec().unwrap(),
+          )?;
           usr_attrs_data.remove(key.as_bytes())?;
         }
         // return Err(sled::transaction::ConflictableTransactionError::Abort(()));
@@ -404,16 +436,17 @@ impl Orchestrator {
     usr_id: &str,
     attrs: Vec<(String, UserAttribute, Option<Vec<u8>>)>,
   ) -> bool {
-    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.user_attributes_data).transaction(|(usr_attrs, usr_attrs_data)| {
-      for (name, attr, data) in &attrs {
-        let key = format!("{}:{}", usr_id, name);
-        usr_attrs.insert(key.as_bytes(), attr.try_to_vec().unwrap())?;
-        if let Some(data) = data {
-          usr_attrs_data.insert(key.as_bytes(), data.as_slice())?;
+    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.user_attributes_data)
+      .transaction(|(usr_attrs, usr_attrs_data)| {
+        for (name, attr, data) in &attrs {
+          let key = format!("{}:{}", usr_id, name);
+          usr_attrs.insert(key.as_bytes(), attr.try_to_vec().unwrap())?;
+          if let Some(data) = data {
+            usr_attrs_data.insert(key.as_bytes(), data.as_slice())?;
+          }
         }
-      }
-      Ok(())
-    });
+        Ok(())
+      });
     res.is_ok()
   }
 
@@ -449,12 +482,17 @@ impl Orchestrator {
 
   pub fn user_attributes(&self, usr_id: &str) -> Vec<String> {
     let prefix = format!("{}:", usr_id);
-    self.user_attributes.scan_prefix(usr_id.as_bytes()).keys()
-      .filter_map(|res| res.map_or(None, |key| {
-        let raw_attr = key.to_string();
-        let attr = raw_attr.trim_start_matches(&prefix);
-        Some(attr.to_string())
-      }))
+    self
+      .user_attributes
+      .scan_prefix(usr_id.as_bytes())
+      .keys()
+      .filter_map(|res| {
+        res.map_or(None, |key| {
+          let raw_attr = key.to_string();
+          let attr = raw_attr.trim_start_matches(&prefix);
+          Some(attr.to_string())
+        })
+      })
       .collect()
   }
 
@@ -502,10 +540,7 @@ impl Orchestrator {
     let key = format!("{}:{}", usr_id, attr);
     if let Ok(Some(raw_attr)) = self.user_attributes.get(key.as_bytes()) {
       if let Ok(Some(raw_data)) = self.user_attributes_data.get(key.as_bytes()) {
-        return Some((
-          UserAttribute::try_from_slice(&raw_attr).unwrap(),
-          raw_data
-        ));
+        return Some((UserAttribute::try_from_slice(&raw_attr).unwrap(), raw_data));
       }
     }
     None
@@ -554,7 +589,7 @@ pub struct AuthCache {
 
 impl AuthCache {
   pub fn new(max_user_count: u64, max_session_count: u64) -> Self {
-    AuthCache{
+    AuthCache {
       user_count: Arc::new(AtomicU64::new(0)),
       max_user_count,
       session_count: Arc::new(AtomicU64::new(0)),
@@ -651,7 +686,10 @@ pub struct UserAttribute {
 
 impl Default for UserAttribute {
   fn default() -> Self {
-    Self{aquired: unix_timestamp(), reason: None}
+    Self {
+      aquired: unix_timestamp(),
+      reason: None,
+    }
   }
 }
 
@@ -736,7 +774,7 @@ pub async fn login(
     Ok(t) => t,
     Err(e) => {
       return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
-    },
+    }
   };
 
   let cookie = if !orc.dev_mode {
@@ -752,11 +790,9 @@ pub async fn login(
       .max_age(time::Duration::seconds(orc.expiry_tll))
       .finish()
   };
-  
-  HttpResponse::Accepted()
-  .cookie(cookie)
-  .json(json!({
-    "ok": true, 
+
+  HttpResponse::Accepted().cookie(cookie).json(json!({
+    "ok": true,
     "data": "successfully logged in",
     "status": {
       "first_time": first_time
@@ -793,17 +829,24 @@ pub async fn auth_attempt(
   }
 
   if let Some(usr) = orc.user_by_session(&req) {
-    return crate::responses::Accepted(
-      format!("Hey {}, you're already authenticated.", usr.username)
-    );
+    return crate::responses::Accepted(format!(
+      "Hey {}, you're already authenticated.",
+      usr.username
+    ));
   }
 
-  let hitter = req.peer_addr().map_or(username.to_string(), |a| format!("{}{}", username, a));
-  if let Some(rl) = orc.ratelimiter.hit(hitter.as_bytes(), 3, Duration::minutes(2)) {
+  let hitter = req
+    .peer_addr()
+    .map_or(username.to_string(), |a| format!("{}{}", username, a));
+  if let Some(rl) = orc
+    .ratelimiter
+    .hit(hitter.as_bytes(), 3, Duration::minutes(2))
+  {
     if rl.is_timing_out() {
-      return crate::responses::TooManyRequests(
-        format!("Too many requests, timeout has {} minutes left.", rl.minutes_left())
-      );
+      return crate::responses::TooManyRequests(format!(
+        "Too many requests, timeout has {} minutes left.",
+        rl.minutes_left()
+      ));
     }
   }
 
@@ -813,7 +856,7 @@ pub async fn auth_attempt(
       return login(usr.id.clone(), false, orc.clone()).await;
     }
     return crate::responses::BadRequest(
-      "either your password is wrong or the username is already taken."
+      "either your password is wrong or the username is already taken.",
     );
   }
 
@@ -826,7 +869,9 @@ pub async fn auth_attempt(
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct AdministralityRequest {key: String}
+pub struct AdministralityRequest {
+  key: String,
+}
 
 #[post("/administrality")]
 pub async fn administer_administrality(
@@ -837,43 +882,51 @@ pub async fn administer_administrality(
   if CONF.read().admin_key == ar.key {
     if let Some(ref mut usr) = orc.user_by_session(&req) {
       if orc.make_admin(&usr.id, 0, Some("passed administrality".to_string())) {
-        return crate::responses::Accepted(
-          "Congratulations, you are now an admin."
-        );
+        return crate::responses::Accepted("Congratulations, you are now an admin.");
       }
-      return crate::responses::InternalServerError(
-        format!(
-          "Sorry {}, you got it right, but there was a database error. Try again later. ;D",
-          usr.username
-        )
-      );
+      return crate::responses::InternalServerError(format!(
+        "Sorry {}, you got it right, but there was a database error. Try again later. ;D",
+        usr.username
+      ));
     } else if let Some(remote_addr) = req.connection_info().remote_addr() {
       let hitter = format!("aA{}", remote_addr);
-      if let Some(rl) = orc.ratelimiter.hit(hitter.as_bytes(), 2, Duration::minutes(60)) {
+      if let Some(rl) = orc
+        .ratelimiter
+        .hit(hitter.as_bytes(), 2, Duration::minutes(60))
+      {
         if rl.is_timing_out() {
-          return crate::responses::TooManyRequests(
-            format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
-          );
+          return crate::responses::TooManyRequests(format!(
+            "too many requests, timeout has {} minutes left.",
+            rl.minutes_left()
+          ));
         }
       }
     }
   } else if let Some(auth_cookie) = req.cookie("auth") {
     let hitter = format!("aA{}", auth_cookie.value());
-    if let Some(rl) = orc.ratelimiter.hit(hitter.as_bytes(), 2, Duration::minutes(60)) {
+    if let Some(rl) = orc
+      .ratelimiter
+      .hit(hitter.as_bytes(), 2, Duration::minutes(60))
+    {
       if rl.is_timing_out() {
-        return crate::responses::TooManyRequests(
-          format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
-        );
+        return crate::responses::TooManyRequests(format!(
+          "too many requests, timeout has {} minutes left.",
+          rl.minutes_left()
+        ));
       }
     }
   } else if let Some(remote_addr) = req.connection_info().remote_addr() {
     let hitter = format!("aA{}", remote_addr);
-    if let Some(rl) = orc.ratelimiter.hit(hitter.as_bytes(), 2, Duration::minutes(60)) {
-    if rl.is_timing_out() {
-      return crate::responses::TooManyRequests(
-        format!("too many requests, timeout has {} minutes left.", rl.minutes_left())
-      );
-    }
+    if let Some(rl) = orc
+      .ratelimiter
+      .hit(hitter.as_bytes(), 2, Duration::minutes(60))
+    {
+      if rl.is_timing_out() {
+        return crate::responses::TooManyRequests(format!(
+          "too many requests, timeout has {} minutes left.",
+          rl.minutes_left()
+        ));
+      }
     }
   }
 
@@ -887,14 +940,13 @@ pub async fn remove_administrality(
 ) -> HttpResponse {
   if let Some(ref mut usr) = orc.admin_by_session(&req) {
     if orc.revoke_admin(&usr.id) {
-      return crate::responses::Accepted(
-        format!("Sorry {}, you've lost your adminstrality.", usr.username)
-      );
+      return crate::responses::Accepted(format!(
+        "Sorry {}, you've lost your adminstrality.",
+        usr.username
+      ));
     }
   }
-  crate::responses::Forbidden(
-    "To lose administrality one needs to have some in the first place!"
-  )
+  crate::responses::Forbidden("To lose administrality one needs to have some in the first place!")
 }
 
 #[get("/administrality")]

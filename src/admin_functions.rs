@@ -1,22 +1,21 @@
-use actix_web::{client, post, web, http::{Cookie, HeaderName, HeaderValue}, HttpRequest, HttpResponse};
+use actix_web::{
+    client,
+    http::{Cookie, HeaderName, HeaderValue},
+    post, web, HttpRequest, HttpResponse,
+};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use std::{
-    collections::HashMap, 
-    sync::Arc, 
-    thread,
-    process::Command,
-};
+use std::{collections::HashMap, process::Command, sync::Arc, thread};
 
 use crate::orchestrator::Orchestrator;
 
 use super::TEMPLATES;
 
 pub fn watch_and_update_files() -> thread::JoinHandle<()> {
-    thread::spawn(|| {      
-        let (tx, rx) = flume::unbounded();  
+    thread::spawn(|| {
+        let (tx, rx) = flume::unbounded();
 
         let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| {
             if let Ok(event) = res {
@@ -24,20 +23,25 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
                     println!("error sending file change event through channel: {}", err);
                 }
             }
-        }).expect("failed to setup file watcher for hot reloading related development features");
+        })
+        .expect("failed to setup file watcher for hot reloading related development features");
 
-        watcher.watch("./templates", RecursiveMode::Recursive)
+        watcher
+            .watch("./templates", RecursiveMode::Recursive)
             .expect("watcher failed to watch ./templates");
-        watcher.watch("./assets/js", RecursiveMode::Recursive)
+        watcher
+            .watch("./assets/js", RecursiveMode::Recursive)
             .expect("watcher failed to watch ./assets/js");
-        watcher.watch("./assets/css", RecursiveMode::Recursive)
+        watcher
+            .watch("./assets/css", RecursiveMode::Recursive)
             .expect("watcher failed to watch ./assets/css");
-  
         while let Ok(event) = rx.recv() {
             match event.kind {
                 notify::EventKind::Modify(_) => {
                     for path in event.paths {
-                        if !path.is_file() {continue;}
+                        if !path.is_file() {
+                            continue;
+                        }
                         if path.to_str().unwrap().contains("templates") {
                             println!("reloading templates...");
                             let mut templates = TEMPLATES.write();
@@ -46,9 +50,9 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
                             }
                             break;
                         }
-    
                         if let Some(ext) = path.extension() {
-                            let filename = String::from(path.file_name().unwrap().to_str().unwrap());
+                            let filename =
+                                String::from(path.file_name().unwrap().to_str().unwrap());
                             if filename.contains(".min.") {
                                 continue;
                             }
@@ -58,7 +62,6 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
                                     .arg("../../scripts/minify-js.py")
                                     .arg(&filename)
                                     .output();
-        
                                 if let Ok(_) = res {
                                     println!("minified {}", &filename);
                                 } else if let Err(err) = res {
@@ -70,7 +73,6 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
                                     .arg("../../scripts/minify-css.py")
                                     .arg(&filename)
                                     .output();
-        
                                 if let Ok(_) = res {
                                     println!("minified {}", &filename);
                                 } else if let Err(err) = res {
@@ -79,7 +81,7 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
                             }
                         }
                     }
-                },
+                }
                 _ => continue,
             }
         }
@@ -118,8 +120,8 @@ impl RemoteHttpRequest {
             "delete" => client.delete(&self.url),
             _ => {
                 println!("remote-http: invalid method");
-                return None
-            },
+                return None;
+            }
         };
 
         if let Some(headers) = &self.headers {
@@ -143,7 +145,7 @@ impl RemoteHttpRequest {
                     Err(_e) => {
                         println!("remote-htpp: request cookie parsing fucky");
                         return None;
-                    },
+                    }
                 }
             }
         }
@@ -168,7 +170,10 @@ impl RemoteHttpRequest {
 
         if res.is_err() {
             let err = res.err().unwrap();
-            println!("remote-http: sending and getting body went terrible - {}", err);
+            println!(
+                "remote-http: sending and getting body went terrible - {}",
+                err
+            );
             return None;
         }
 
@@ -193,11 +198,11 @@ impl RemoteHttpRequest {
 
             if let Ok(raw) = res.body().await {
                 if let Ok(body) = String::from_utf8(raw.to_vec()) {
-                    return Some(RemoteHttpResponse{
+                    return Some(RemoteHttpResponse {
                         status,
                         headers,
                         content_type,
-                        body
+                        body,
                     });
                 } else {
                     println!("remote-http: reading response body to string went super fuckedly");

@@ -4,7 +4,7 @@ use sthash::*;
 
 use super::CONF;
 use crate::ratelimiter::RateLimiter;
-use crate::utils::{generate_random_bytes};
+use crate::utils::generate_random_bytes;
 
 pub struct Orchestrator {
   // auth
@@ -80,26 +80,29 @@ impl Orchestrator {
     let session_data = db.open_tree(b"session_data").unwrap();
     let secrets = db.open_tree(b"secrets").unwrap();
 
-    let scrt_res: TransactionResult<Vec<u8>, ()> = secrets
-      .transaction(|s| Ok(match s.get(b"pwd_secret")? {
-        Some(scrt) => scrt.to_vec(),
-        None => {
-          let scrt = generate_random_bytes(64);
-          s.insert(b"pwd_secret", scrt.clone())?;
-          scrt
-        }
-      }));
-    let pwd_secret = scrt_res.unwrap();
+    let pwd_secret = {
+      let scrt_res: TransactionResult<Vec<u8>, ()> = secrets.transaction(|s| {
+        Ok(match s.get(b"pwd_secret")? {
+          Some(scrt) => scrt.to_vec(),
+          None => {
+            let scrt = generate_random_bytes(64);
+            s.insert(b"pwd_secret", scrt.clone())?;
+            scrt
+          }
+        })
+      });
+      scrt_res.unwrap()
+    };
 
     let hasher = if secrets.contains_key(b"hasher_seed").unwrap() {
-        let seed = secrets.get(b"hasher_seed").unwrap().unwrap();
-        Hasher::new(Key::from_seed(&seed, None), None)
+      let seed = secrets.get(b"hasher_seed").unwrap().unwrap();
+      Hasher::new(Key::from_seed(&seed, None), None)
     } else {
-        let mut seed = [0; SEED_BYTES];
-        thread_rng().fill_bytes(&mut seed);
-        secrets.insert(b"hasher_seed", &seed).unwrap();
-        db.flush().unwrap();
-        Hasher::new(Key::from_seed(&seed, None), None)
+      let mut seed = [0; SEED_BYTES];
+      thread_rng().fill_bytes(&mut seed);
+      secrets.insert(b"hasher_seed", &seed).unwrap();
+      db.flush().unwrap();
+      Hasher::new(Key::from_seed(&seed, None), None)
     };
 
     let ratelimiter = RateLimiter::setup_default();
@@ -119,7 +122,6 @@ impl Orchestrator {
     let writs = writ_db.open_tree("writs").unwrap();
     let raw_content = writ_db.open_tree("raw_content").unwrap();
     let content = writ_db.open_tree("content").unwrap();
-    
     let tags_index = writ_db.open_tree("tags_index").unwrap();
     let tag_counter = writ_db.open_tree("tag_counter").unwrap();
 
@@ -139,7 +141,6 @@ impl Orchestrator {
     let dates = writ_db.open_tree("dates").unwrap();
 
     let authcache = crate::auth::AuthCache::new(5000, 5000);
-    
     Orchestrator {
       db,
       id_counter,

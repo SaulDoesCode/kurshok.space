@@ -7,19 +7,13 @@ use time::OffsetDateTime;
 
 use std::sync::Arc;
 
-use actix_web::{get, post, put, delete, web, HttpRequest, HttpResponse};
+use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse};
 
 // use super::CONF;
-use crate::orchestrator::Orchestrator;
-use crate::auth::{User};
+use crate::auth::User;
 use crate::comments::Comment;
-use crate::utils::{
-  unix_timestamp,
-  datetime_from_unix_timestamp,
-  render_md,
-  FancyIVec,
-  FancyBool
-};
+use crate::orchestrator::Orchestrator;
+use crate::utils::{datetime_from_unix_timestamp, render_md, unix_timestamp, FancyBool, FancyIVec};
 
 impl Orchestrator {
   pub fn new_writ_id(&self, author_id: &str, kind: &str) -> Option<String> {
@@ -30,43 +24,50 @@ impl Orchestrator {
   }
 
   pub fn index_writ_tags(&self, writ_id: String, tags: Vec<String>) -> bool {
-    let res: TransactionResult<(), ()> = (&self.tags_index, &self.tag_counter).transaction(|(tags_index, tag_counter)| {
-      for tag in tags.iter() {
-        let id = format!("{}:{}", &tag, writ_id);
-        tags_index.insert(id.as_bytes(), tags.try_to_vec().unwrap())?;
-        let count: u64 = match tag_counter.get(tag.as_bytes())? {
-          Some(raw_count) => raw_count.to_u64(),
-          None => 0,
-        };
-        tag_counter.insert(tag.as_bytes(), &(count + 1).to_be_bytes())?;
-      }
-      Ok(())
-    });
-    
+    let res: TransactionResult<(), ()> =
+      (&self.tags_index, &self.tag_counter).transaction(|(tags_index, tag_counter)| {
+        for tag in tags.iter() {
+          let id = format!("{}:{}", &tag, writ_id);
+          tags_index.insert(id.as_bytes(), tags.try_to_vec().unwrap())?;
+          let count: u64 = match tag_counter.get(tag.as_bytes())? {
+            Some(raw_count) => raw_count.to_u64(),
+            None => 0,
+          };
+          tag_counter.insert(tag.as_bytes(), &(count + 1).to_be_bytes())?;
+        }
+        Ok(())
+      });
     res.is_ok()
   }
 
   pub fn remove_indexed_writ_tags(&self, writ_id: String, tags: Vec<String>) -> bool {
-    (&self.tags_index, &self.tag_counter).transaction(|(tags_index, tag_counter)| {
-      for tag in tags.iter() {
-        let id = format!("{}:{}", tag, writ_id);
-        tags_index.remove(id.as_bytes())?;
-        let count: u64 = match tag_counter.get(tag.as_bytes())? {
-          Some(raw_count) => raw_count.to_u64(),
-          None => return Err(sled::transaction::ConflictableTransactionError::Abort(())),
-        };
-        if count <= 1 {
-          tag_counter.remove(tag.as_bytes())?;
-        } else {
-          tag_counter.insert(tag.as_bytes(), IVec::from_u64(count - 1))?;
+    (&self.tags_index, &self.tag_counter)
+      .transaction(|(tags_index, tag_counter)| {
+        for tag in tags.iter() {
+          let id = format!("{}:{}", tag, writ_id);
+          tags_index.remove(id.as_bytes())?;
+          let count: u64 = match tag_counter.get(tag.as_bytes())? {
+            Some(raw_count) => raw_count.to_u64(),
+            None => return Err(sled::transaction::ConflictableTransactionError::Abort(())),
+          };
+          if count <= 1 {
+            tag_counter.remove(tag.as_bytes())?;
+          } else {
+            tag_counter.insert(tag.as_bytes(), IVec::from_u64(count - 1))?;
+          }
         }
-      }
-      Ok(())
-    }).is_ok()
+        Ok(())
+      })
+      .is_ok()
   }
 
   pub fn remove_writ(&self, author_id: String, writ_id: String) -> bool {
-    if writ_id.split(":").nth(1).map_or(false, |a_id| a_id != author_id) && !self.is_admin(&author_id) {
+    if writ_id
+      .split(":")
+      .nth(1)
+      .map_or(false, |a_id| a_id != author_id)
+      && !self.is_admin(&author_id)
+    {
       return false;
     }
 
@@ -142,27 +143,34 @@ impl Orchestrator {
   }
 
   pub fn writ_query(&self, mut query: WritQuery, o_usr: Option<&User>) -> Option<Vec<Writ>> {
-    let is_admin = o_usr.as_ref()
-      .map_or(false, |usr| self.is_admin(&usr.id));
+    let is_admin = o_usr.as_ref().map_or(false, |usr| self.is_admin(&usr.id));
 
     let amount = *query.amount.as_ref().unwrap_or(&20);
 
     if !is_admin {
-      if amount > 50 { return None; }
-    } else if amount > 500 { return None; }
+      if amount > 50 {
+        return None;
+      }
+    } else if amount > 500 {
+      return None;
+    }
 
-    let mut writs: Vec<Writ> = vec!();
+    let mut writs: Vec<Writ> = vec![];
     let mut count: u64 = 0;
 
     let mut author_ids: Option<Vec<sled::IVec>> = None;
     if let Some(authors) = &query.authors {
-      author_ids = Some(authors.par_iter()
-        .filter_map(|a| if let Ok(Some(id)) = self.usernames.get(a.as_bytes()) {
-          Some(id)
-        } else {
-          None
-        })
-        .collect()
+      author_ids = Some(
+        authors
+          .par_iter()
+          .filter_map(|a| {
+            if let Ok(Some(id)) = self.usernames.get(a.as_bytes()) {
+              Some(id)
+            } else {
+              None
+            }
+          })
+          .collect(),
       );
     } else if query.author_id.is_none() {
       if let Some(name) = &query.author_name {
@@ -247,7 +255,7 @@ impl Orchestrator {
             }
           }
         } else if let Some(viewable_by) = &query.viewable_by {
-          if let Some(attrs) = &user_attributes {  
+          if let Some(attrs) = &user_attributes {
             if !viewable_by.iter().all(|a| attrs.contains(a)) {
               return false;
             }
@@ -300,10 +308,12 @@ impl Orchestrator {
     if let Some(ids) = &query.ids {
       for id in ids {
         if query.page < 2 {
-            if count == amount { break; }
+          if count == amount {
+            break;
+          }
         } else if count != (amount * query.page) {
-            count += 1;
-            continue;
+          count += 1;
+          continue;
         }
 
         if let Some(skip_ids) = &query.skip_ids {
@@ -386,17 +396,19 @@ impl Orchestrator {
 
       while let Some(Ok(res)) = writ_iter.next_back() {
         if query.page < 2 {
-            if count == amount { break; }
+          if count == amount {
+            break;
+          }
         } else if count != (amount * query.page) {
-            count += 1;
-            continue;
+          count += 1;
+          continue;
         }
 
         let writ: Writ = if date_scan {
           let id = res.1.to_string();
           if let Some(skip_ids) = &query.skip_ids {
             if skip_ids.contains(&id) {
-                continue;
+              continue;
             }
           }
           if let Some(author_id) = &query.author_id {
@@ -413,7 +425,7 @@ impl Orchestrator {
           let w = Writ::try_from_slice(&res.1).unwrap();
           if let Some(skip_ids) = &query.skip_ids {
             if skip_ids.contains(&w.id) {
-                continue;
+              continue;
             }
           }
           w
@@ -440,10 +452,9 @@ impl Orchestrator {
     let usr_id = o_usr.as_ref().map(|usr| usr.id.clone());
     let with_content = query.with_content.unwrap_or(true);
     if let Some(writs) = self.writ_query(query, o_usr) {
-      let public_writs = writs.into_par_iter()
-        .filter_map(|w|
-          w.public(self, &usr_id, with_content)
-        )
+      let public_writs = writs
+        .into_par_iter()
+        .filter_map(|w| w.public(self, &usr_id, with_content))
         .collect::<Vec<PublicWrit>>();
 
       if public_writs.len() > 0 {
@@ -453,21 +464,16 @@ impl Orchestrator {
     None
   }
 
-  pub fn editable_writ_query(
-    &self,
-    mut query: WritQuery,
-    usr: &User,
-  ) -> Option<Vec<EditableWrit>> {
+  pub fn editable_writ_query(&self, mut query: WritQuery, usr: &User) -> Option<Vec<EditableWrit>> {
     query.author_id = Some(usr.id.clone());
 
     let with_content = query.with_content.unwrap_or(false);
     let with_raw_content = query.with_raw_content.unwrap_or(true);
 
     self.writ_query(query, Some(&usr)).and_then(|writs| {
-      let editable_writs = writs.into_par_iter()
-        .filter_map(|w|
-          w.editable(self, &usr, with_content, with_raw_content)
-        )
+      let editable_writs = writs
+        .into_par_iter()
+        .filter_map(|w| w.editable(self, &usr, with_content, with_raw_content))
         .collect::<Vec<EditableWrit>>();
 
       (editable_writs.len() > 0).qualify(editable_writs)
@@ -505,43 +511,43 @@ impl Orchestrator {
 #[serde(deny_unknown_fields)]
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct WritQuery {
-    pub title: Option<String>,
-    pub slug: Option<String>,
-    
-    pub tags: Option<Vec<String>>,
-    pub omit_tags: Option<Vec<String>>,
-    pub viewable_by: Option<Vec<String>>,
+  pub title: Option<String>,
+  pub slug: Option<String>,
 
-    pub ids: Option<Vec<String>>,
-    pub skip_ids: Option<Vec<String>>,
-    
-    pub authors: Option<Vec<String>>,
-    
-    pub public: Option<bool>,
-    pub author_name: Option<String>,
-    pub author_handle: Option<String>,
-    pub author_id: Option<String>,
-    
-    pub posted_before: Option<i64>,
-    pub posted_after: Option<i64>,
-    
-    pub year: Option<i32>,
-    pub month: Option<u8>,
-    pub day: Option<u8>,
-    pub hour: Option<u8>,
-    
-    pub amount: Option<u64>,
-    pub page: u64,
+  pub tags: Option<Vec<String>>,
+  pub omit_tags: Option<Vec<String>>,
+  pub viewable_by: Option<Vec<String>>,
 
-    pub with_content: Option<bool>,
-    pub with_raw_content: Option<bool>,
+  pub ids: Option<Vec<String>>,
+  pub skip_ids: Option<Vec<String>>,
 
-    pub kind: String,
+  pub authors: Option<Vec<String>>,
+
+  pub public: Option<bool>,
+  pub author_name: Option<String>,
+  pub author_handle: Option<String>,
+  pub author_id: Option<String>,
+
+  pub posted_before: Option<i64>,
+  pub posted_after: Option<i64>,
+
+  pub year: Option<i32>,
+  pub month: Option<u8>,
+  pub day: Option<u8>,
+  pub hour: Option<u8>,
+
+  pub amount: Option<u64>,
+  pub page: u64,
+
+  pub with_content: Option<bool>,
+  pub with_raw_content: Option<bool>,
+
+  pub kind: String,
 }
 
 impl std::default::Default for WritQuery {
   fn default() -> Self {
-    WritQuery{
+    WritQuery {
       title: None,
       slug: None,
       tags: None,
@@ -659,57 +665,48 @@ impl Writ {
       return None;
     };
 
-    let res: TransactionResult<PublicWrit, ()> = (
-      &orc.content,
-      &orc.votes,
-      &orc.writ_voters,
-    ).transaction(|(
-      content_tree,
-      votes,
-      writ_voters,
-    )| {
-      let vote: i64 = if let Some(res) = votes.get(self.id.as_bytes())? {
-        res.to_i64()
-      } else {
-        0
-      };
-  
-      let content = if with_content {
-        if let Some(res) = content_tree.get(self.id.as_bytes())? {
-          Some(res.to_string())
+    let res: TransactionResult<PublicWrit, ()> = (&orc.content, &orc.votes, &orc.writ_voters)
+      .transaction(|(content_tree, votes, writ_voters)| {
+        let vote: i64 = if let Some(res) = votes.get(self.id.as_bytes())? {
+          res.to_i64()
         } else {
-          if orc.dev_mode {
-            println!("writ.public: could not retrieve content");
+          0
+        };
+
+        let content = if with_content {
+          if let Some(res) = content_tree.get(self.id.as_bytes())? {
+            Some(res.to_string())
+          } else {
+            if orc.dev_mode {
+              println!("writ.public: could not retrieve content");
+            }
+            return Err(sled::transaction::ConflictableTransactionError::Abort(()));
           }
-          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-        }
-      } else {
-        None
-      };
-  
-      let you_voted = match &requestor_id {
-        Some(req_id) => {
-          writ_voters.get(self.vote_id(&req_id).as_bytes())?
-            .map(|raw| WritVote::try_from_slice(&raw).unwrap().up)
-        },
-        None => None,
-      };
+        } else {
+          None
+        };
 
-      Ok(PublicWrit{
-        id: self.id.clone(),
-        title: self.title.clone(),
-        author_name: author.username.clone(),
-        author_handle: author.handle.clone(),
-        kind: self.kind.clone(),
-        tags: self.tags.clone(),
-        posted: self.posted,
-        content,
-        commentable: self.commentable,
-        vote,
-        you_voted,
-      })
-    });
+        let you_voted = match &requestor_id {
+          Some(req_id) => writ_voters
+            .get(self.vote_id(&req_id).as_bytes())?
+            .map(|raw| WritVote::try_from_slice(&raw).unwrap().up),
+          None => None,
+        };
 
+        Ok(PublicWrit {
+          id: self.id.clone(),
+          title: self.title.clone(),
+          author_name: author.username.clone(),
+          author_handle: author.handle.clone(),
+          kind: self.kind.clone(),
+          tags: self.tags.clone(),
+          posted: self.posted,
+          content,
+          commentable: self.commentable,
+          vote,
+          you_voted,
+        })
+      });
     match res {
       Ok(pw) => Some(pw),
       Err(e) => {
@@ -733,7 +730,7 @@ impl Writ {
       return None;
     }
 
-    Some(EditableWrit{
+    Some(EditableWrit {
       id: self.id.clone(),
       title: self.title.clone(),
       slug: self.slug.clone(),
@@ -766,68 +763,68 @@ impl Writ {
   }
 
   pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: Option<bool>) -> Option<i64> {
-    let res: TransactionResult<(), ()> = (&orc.votes, &orc.writ_voters).transaction(|(votes, writ_voters)| {
-      let vote_id = self.vote_id(usr_id);
- 
-      if let Some(raw) = writ_voters.get(vote_id.as_bytes())? {
-        let rw = WritVote::try_from_slice(&raw).unwrap();
-        if let Some(up) = &up {
-          // prevent double voting
-          if rw.up == *up {
-            return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-          }
-          // handle when they alreay voted and now vote the oposite way
-          let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
-          if *up { 
-            count += 2;
-          } else {
-            count -= 2;
-          }
-          votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
-        } else {
-          // unvote
-          writ_voters.remove(vote_id.as_bytes())?;
+    let res: TransactionResult<(), ()> =
+      (&orc.votes, &orc.writ_voters).transaction(|(votes, writ_voters)| {
+        let vote_id = self.vote_id(usr_id);
 
-          let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
-          if rw.up { 
-            count -= 1;
+        if let Some(raw) = writ_voters.get(vote_id.as_bytes())? {
+          let rw = WritVote::try_from_slice(&raw).unwrap();
+          if let Some(up) = &up {
+            // prevent double voting
+            if rw.up == *up {
+              return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+            }
+            // handle when they alreay voted and now vote the oposite way
+            let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+            if *up {
+              count += 2;
+            } else {
+              count -= 2;
+            }
+            votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
           } else {
+            // unvote
+            writ_voters.remove(vote_id.as_bytes())?;
+
+            let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+            if rw.up {
+              count -= 1;
+            } else {
+              count += 1;
+            }
+
+            votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+
+            return Ok(());
+          }
+        } else if up.is_none() {
+          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+        } else {
+          let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+          if up.clone().unwrap() {
             count += 1;
+          } else {
+            count -= 1;
           }
-
           votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
-
-          return Ok(());
         }
-      } else if up.is_none() {
-        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-      } else {
-        let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
-        if up.clone().unwrap() { 
-          count += 1;
-        } else {
-          count -= 1;
-        }
-        votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
-      }
-      
-      let wv = WritVote{
-        id: vote_id,
-        when: unix_timestamp(),
-        up: up.unwrap()
-      };
-      writ_voters.insert(wv.id.as_bytes(), wv.try_to_vec().unwrap())?;
 
-      Ok(())
-    });
-    
+        let wv = WritVote {
+          id: vote_id,
+          when: unix_timestamp(),
+          up: up.unwrap(),
+        };
+        writ_voters.insert(wv.id.as_bytes(), wv.try_to_vec().unwrap())?;
+
+        Ok(())
+      });
     match res {
       Ok(_) => {
         if let Ok(Some(raw)) = orc.votes.get(self.id.as_bytes()) {
           return Some(raw.to_i64());
         }
         return Some(-2000000);
-      },
+      }
       Err(e) => {
         if orc.dev_mode {
           println!("Something bad went down with voting - {:?}", e);
@@ -852,7 +849,7 @@ impl Writ {
   pub fn usr_vote(&self, orc: &Orchestrator, usr_id: &str) -> Option<WritVote> {
     match orc.writ_voters.get(self.vote_id(usr_id).as_bytes()) {
       Ok(wv) => wv.map(|raw| WritVote::try_from_slice(&raw).unwrap()),
-      Err(_) => None
+      Err(_) => None,
     }
   }
 
@@ -874,7 +871,8 @@ impl Writ {
   #[inline]
   pub fn date_key(&self) -> String {
     let posted = datetime_from_unix_timestamp(self.posted);
-    format!("{}:{}{}{}{}:{}",
+    format!(
+      "{}:{}{}{}{}:{}",
       self.kind,
       posted.year(),
       posted.month(),
@@ -919,13 +917,19 @@ pub struct RawWrit {
 impl RawWrit {
   pub fn commit(&self, author_id: String, orc: &Orchestrator) -> Result<Writ, WritError> {
     let is_md = self.is_md.unwrap_or(true);
-    if !is_md && !orc.user_has_some_attrs(&author_id, &["writer", "admin"]).unwrap_or(false) {
+    if !is_md
+      && !orc
+        .user_has_some_attrs(&author_id, &["writer", "admin"])
+        .unwrap_or(false)
+    {
       return Err(WritError::NoPermNoMD);
     }
 
-    let tags: Vec<String> = self.tags.iter()
-        .map(|t| t.trim().replace("  ", "-").replace(" ", "-"))
-        .collect();
+    let tags: Vec<String> = self
+      .tags
+      .iter()
+      .map(|t| t.trim().replace("  ", "-").replace(" ", "-"))
+      .collect();
 
     if !RawWrit::are_tags_valid(&tags) {
       return Err(WritError::InvalidTags);
@@ -935,7 +939,7 @@ impl RawWrit {
       Some(wi) => {
         if let Some(a_id) = wi.split(":").nth(1) {
           if a_id != author_id {
-            return Err(WritError::InauthenticAuthor);  
+            return Err(WritError::InauthenticAuthor);
           }
         }
 
@@ -944,15 +948,17 @@ impl RawWrit {
         }
 
         (wi.clone(), false)
-      },
-      None => if let Some(writ_id) = orc.new_writ_id(&author_id, &self.kind) {
-        (writ_id, true)
-      } else {
-        return Err(WritError::IDGenErr);
+      }
+      None => {
+        if let Some(writ_id) = orc.new_writ_id(&author_id, &self.kind) {
+          (writ_id, true)
+        } else {
+          return Err(WritError::IDGenErr);
+        }
       }
     };
 
-    let writ = Writ{
+    let writ = Writ {
       id: writ_id,
       slug: slug::slugify(&self.title),
       posted: unix_timestamp(),
@@ -961,7 +967,7 @@ impl RawWrit {
       tags,
       public: self.public,
       commentable: self.commentable.unwrap_or(true),
-      viewable_by: self.viewable_by.clone().unwrap_or(vec!()),
+      viewable_by: self.viewable_by.clone().unwrap_or(vec![]),
       is_md,
     };
 
@@ -970,7 +976,12 @@ impl RawWrit {
       return Err(WritError::UsedUnavailableAttributes);
     }
 
-    if is_new_writ && orc.titles.contains_key(writ.title_key().as_bytes()).unwrap() {
+    if is_new_writ
+      && orc
+        .titles
+        .contains_key(writ.title_key().as_bytes())
+        .unwrap()
+    {
       return Err(WritError::TitleTaken);
     }
 
@@ -1001,110 +1012,123 @@ impl RawWrit {
       &orc.tags_index,
       &orc.tag_counter,
       &orc.comment_settings,
-    ).transaction(|(
-      ctn,
-      raw_ctn,
-      titles,
-      slugs,
-      dates,
-      votes,
-      writs,
-      tags_index,
-      tag_counter,
-      comment_settings
-    )| {
-      let writ_id = writ.id.as_bytes();
-      
-      let mut new_writ = writ.clone();
+    )
+      .transaction(
+        |(
+          ctn,
+          raw_ctn,
+          titles,
+          slugs,
+          dates,
+          votes,
+          writs,
+          tags_index,
+          tag_counter,
+          comment_settings,
+        )| {
+          let writ_id = writ.id.as_bytes();
 
-      if writ.is_md {
-        raw_ctn.insert(writ_id, raw_content.as_bytes())?;
-        ctn.insert(writ_id, render_md(raw_content).as_bytes())?;
-      } else {
-        ctn.insert(writ_id, raw_content.as_bytes())?;
-      }
+          let mut new_writ = writ.clone();
 
-      if is_new_writ {
-        for tag in new_writ.tags.iter() {
-          let id = format!("{}:{}", tag.as_str(), new_writ.id);
-          tags_index.insert(id.as_bytes(), tag.try_to_vec().unwrap())?;
+          if writ.is_md {
+            raw_ctn.insert(writ_id, raw_content.as_bytes())?;
+            ctn.insert(writ_id, render_md(raw_content).as_bytes())?;
+          } else {
+            ctn.insert(writ_id, raw_content.as_bytes())?;
+          }
 
-          let count: u64 = tag_counter.get(tag.as_bytes())?
-            .map_or(0, |raw| raw.to_u64());
-          tag_counter.insert(tag.as_bytes(), IVec::from_u64(count + 1))?;
-        }
+          if is_new_writ {
+            for tag in new_writ.tags.iter() {
+              let id = format!("{}:{}", tag.as_str(), new_writ.id);
+              tags_index.insert(id.as_bytes(), tag.try_to_vec().unwrap())?;
 
-        titles.insert(new_writ.title_key().as_bytes(), writ_id)?;
-        slugs.insert(new_writ.slug_key().as_bytes(), writ_id)?;
+              let count: u64 = tag_counter
+                .get(tag.as_bytes())?
+                .map_or(0, |raw| raw.to_u64());
+              tag_counter.insert(tag.as_bytes(), IVec::from_u64(count + 1))?;
+            }
 
-        dates.insert(new_writ.date_key().as_bytes(), writ_id)?;
+            titles.insert(new_writ.title_key().as_bytes(), writ_id)?;
+            slugs.insert(new_writ.slug_key().as_bytes(), writ_id)?;
 
-        votes.insert(writ_id, &0i64.to_be_bytes())?;
+            dates.insert(new_writ.date_key().as_bytes(), writ_id)?;
 
-        comment_settings.insert(
-          writ_id,
-          CommentSettings::default(new_writ.id.clone(), new_writ.public).try_to_vec().unwrap()
-        )?;
-      } else {
-        let old_writ = Writ::try_from_slice(&writs.get(writ_id)?.unwrap()).unwrap();
-        
-        if new_writ.kind != old_writ.kind || new_writ.id != old_writ.id || new_writ.title != old_writ.title  || new_writ.slug != old_writ.slug {
-          writs.remove(old_writ.id.as_bytes())?;
-          titles.remove(old_writ.title_key().as_bytes())?;
-          titles.insert(new_writ.title_key().as_bytes(), writ_id)?;
+            votes.insert(writ_id, &0i64.to_be_bytes())?;
 
-          slugs.remove(old_writ.slug_key().as_bytes())?;
-          slugs.insert(new_writ.slug_key().as_bytes(), writ_id)?;
+            comment_settings.insert(
+              writ_id,
+              CommentSettings::default(new_writ.id.clone(), new_writ.public)
+                .try_to_vec()
+                .unwrap(),
+            )?;
+          } else {
+            let old_writ = Writ::try_from_slice(&writs.get(writ_id)?.unwrap()).unwrap();
 
-          let mut settings = CommentSettings::try_from_slice(&comment_settings.get(old_writ.id.as_bytes())?.unwrap()).unwrap();
-          settings.id = new_writ.id.clone();
-          comment_settings.insert(writ_id, settings.try_to_vec().unwrap())?;
-        }
+            if new_writ.kind != old_writ.kind
+              || new_writ.id != old_writ.id
+              || new_writ.title != old_writ.title
+              || new_writ.slug != old_writ.slug
+            {
+              writs.remove(old_writ.id.as_bytes())?;
+              titles.remove(old_writ.title_key().as_bytes())?;
+              titles.insert(new_writ.title_key().as_bytes(), writ_id)?;
 
-        if new_writ.tags != old_writ.tags {
-          for tag in old_writ.tags.iter() {
-            let id = format!("{}:{}", tag, new_writ.id);
-            tags_index.remove(id.as_bytes())?;
-            let count: u64 = match tag_counter.get(tag.as_bytes())? {
-                Some(c) => c.to_u64(),
-                None => 0,
-            };
-            if count <= 1 {
-              tag_counter.remove(tag.as_bytes())?;
-            } else {
-              tag_counter.insert(tag.as_bytes(), &(count - 1).to_be_bytes())?;
+              slugs.remove(old_writ.slug_key().as_bytes())?;
+              slugs.insert(new_writ.slug_key().as_bytes(), writ_id)?;
+
+              let mut settings = CommentSettings::try_from_slice(
+                &comment_settings.get(old_writ.id.as_bytes())?.unwrap(),
+              )
+              .unwrap();
+              settings.id = new_writ.id.clone();
+              comment_settings.insert(writ_id, settings.try_to_vec().unwrap())?;
+            }
+
+            if new_writ.tags != old_writ.tags {
+              for tag in old_writ.tags.iter() {
+                let id = format!("{}:{}", tag, new_writ.id);
+                tags_index.remove(id.as_bytes())?;
+                let count: u64 = match tag_counter.get(tag.as_bytes())? {
+                  Some(c) => c.to_u64(),
+                  None => 0,
+                };
+                if count <= 1 {
+                  tag_counter.remove(tag.as_bytes())?;
+                } else {
+                  tag_counter.insert(tag.as_bytes(), &(count - 1).to_be_bytes())?;
+                }
+              }
+              for tag in new_writ.tags.iter() {
+                let id = format!("{}:{}", tag, new_writ.id);
+                tags_index.remove(id.as_bytes())?;
+                let count: u64 = match tag_counter.get(tag.as_bytes())? {
+                  Some(c) => c.to_u64(),
+                  None => 0,
+                };
+                if count <= 1 {
+                  tag_counter.remove(tag.as_bytes())?;
+                } else {
+                  tag_counter.insert(tag.as_bytes(), &(count - 1).to_be_bytes())?;
+                }
+              }
+            }
+
+            if old_writ.is_md && !new_writ.is_md {
+              raw_ctn.remove(writ_id)?;
+            }
+
+            if new_writ.posted != old_writ.posted {
+              new_writ.posted = old_writ.posted;
+              // dates.remove(old_writ.date_key().as_bytes())?;
+              // dates.insert(writ.date_key().as_bytes(), writ_id)?;
             }
           }
-          for tag in new_writ.tags.iter() {
-            let id = format!("{}:{}", tag, new_writ.id);
-            tags_index.remove(id.as_bytes())?;
-            let count: u64 = match tag_counter.get(tag.as_bytes())? {
-              Some(c) => c.to_u64(),
-              None => 0,
-            };
-            if count <= 1 {
-              tag_counter.remove(tag.as_bytes())?;
-            } else {
-              tag_counter.insert(tag.as_bytes(), &(count - 1).to_be_bytes())?;
-            }
-          }
-        }
 
-        if old_writ.is_md && !new_writ.is_md {
-          raw_ctn.remove(writ_id)?;
-        }
+          writs.insert(writ_id, new_writ.try_to_vec().unwrap())?;
 
-        if new_writ.posted != old_writ.posted {
-          new_writ.posted = old_writ.posted;
-          // dates.remove(old_writ.date_key().as_bytes())?;
-          // dates.insert(writ.date_key().as_bytes(), writ_id)?;
-        }
-      }
-
-      writs.insert(writ_id, new_writ.try_to_vec().unwrap())?;
-
-      Ok(())
-    });
+          Ok(())
+        },
+      );
 
     match res {
       Ok(_) => Ok(writ),
@@ -1115,18 +1139,15 @@ impl RawWrit {
         Err(WritError::DBIssue)
       }
     }
-
   }
 
   pub fn are_tags_valid(tags: &Vec<String>) -> bool {
-    tags.par_iter().all(|t|
-      t.len() <= 20 &&
-      t.chars().all(|c|
-        c.is_alphanumeric() ||
-        c.is_whitespace() ||
-        c == '-'
-      )
-    )
+    tags.par_iter().all(|t| {
+      t.len() <= 20
+        && t
+          .chars()
+          .all(|c| c.is_alphanumeric() || c.is_whitespace() || c == '-')
+    })
   }
 
   pub fn writ(&self, orc: &Orchestrator) -> Option<Writ> {
@@ -1162,7 +1183,7 @@ pub struct CommentSettings {
 
 impl CommentSettings {
   pub fn default(id: String, public: bool) -> Self {
-    Self{
+    Self {
       id,
       public,
       visible_to: None,
@@ -1179,28 +1200,28 @@ impl CommentSettings {
 
 #[derive(Error, Debug)]
 pub enum WritError {
-    #[error("id does not match any currently existing writ")]
-    BadID,
-    #[error("id generation failed for some reason, maybe try again later")]
-    IDGenErr,
-    #[error("author's id mismatches writ's author_id")]
-    InauthenticAuthor,
-    #[error("please see to it that all writ tags are alphanumeric and no longer than 20 chars")]
-    InvalidTags,
-    #[error("duplicate writ, please don't copy")]
-    DuplicateWrit,
-    #[error("writ made viewable_only with attributes the author user lacks")]
-    UsedUnavailableAttributes,
-    #[error("writ title is already used, choose a different one")]
-    TitleTaken,
-    #[error("there was a problem interacting with the db")]
-    DBIssue,
-    #[error("only authorized users may push non-markdown writs")]
-    RateLimit,
-    #[error("too many requests to writ api, chill for a bit")]
-    NoPermNoMD,
-    #[error("unknown writ error")]
-    Unknown,
+  #[error("id does not match any currently existing writ")]
+  BadID,
+  #[error("id generation failed for some reason, maybe try again later")]
+  IDGenErr,
+  #[error("author's id mismatches writ's author_id")]
+  InauthenticAuthor,
+  #[error("please see to it that all writ tags are alphanumeric and no longer than 20 chars")]
+  InvalidTags,
+  #[error("duplicate writ, please don't copy")]
+  DuplicateWrit,
+  #[error("writ made viewable_only with attributes the author user lacks")]
+  UsedUnavailableAttributes,
+  #[error("writ title is already used, choose a different one")]
+  TitleTaken,
+  #[error("there was a problem interacting with the db")]
+  DBIssue,
+  #[error("only authorized users may push non-markdown writs")]
+  RateLimit,
+  #[error("too many requests to writ api, chill for a bit")]
+  NoPermNoMD,
+  #[error("unknown writ error")]
+  Unknown,
 }
 
 #[get("/writ-raw-content/{id}")]
@@ -1243,13 +1264,11 @@ pub async fn post_content(
       if let Some(usr) = orc.user_by_session(&req) {
         if !writ.id.starts_with(&format!("post:{}", usr.id)) {
           return crate::responses::Forbidden(
-            "You can't load the contents of private writs that aren't yours"
+            "You can't load the contents of private writs that aren't yours",
           );
         }
       } else {
-        return crate::responses::Forbidden(
-          "You can't load the contents of private writs"
-        );
+        return crate::responses::Forbidden("You can't load the contents of private writs");
       }
     }
 
@@ -1268,13 +1287,13 @@ pub async fn writ_query(
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   let o_usr = orc.user_by_session(&req);
-  if let Some(writs) = orc.public_writ_query(query.into_inner(), o_usr.as_ref().map(|el| el.value())) {
+  if let Some(writs) =
+    orc.public_writ_query(query.into_inner(), o_usr.as_ref().map(|el| el.value()))
+  {
     return HttpResponse::Ok().json(writs);
   }
 
-  crate::responses::NotFound(
-    "writ query didn't match anything, perhaps reformulate"
-  )
+  crate::responses::NotFound("writ query didn't match anything, perhaps reformulate")
 }
 
 #[post("/editable-writs")]
@@ -1288,14 +1307,10 @@ pub async fn editable_writ_query(
       return HttpResponse::Ok().json(writs);
     }
   } else {
-    return crate::responses::Forbidden(
-      "You can't edit things that aren't yours to edit"
-    );
+    return crate::responses::Forbidden("You can't edit things that aren't yours to edit");
   }
 
-  crate::responses::NotFound(
-    "writ query didn't match anything, perhaps reformulate"
-  )
+  crate::responses::NotFound("writ query didn't match anything, perhaps reformulate")
 }
 
 #[put("/writ")]
@@ -1305,11 +1320,16 @@ pub async fn push_raw_writ(
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   if rw.raw_content.len() > 150_000 {
-    return crate::responses::BadRequest("Your writ is too long, it has to be less than 150k characters")
+    return crate::responses::BadRequest(
+      "Your writ is too long, it has to be less than 150k characters",
+    );
   }
 
   if let Some(usr_id) = orc.user_id_by_session(&req) {
-    if orc.user_has_some_attrs(&usr_id, &["writer", "admin"]).unwrap_or(false) {
+    if orc
+      .user_has_some_attrs(&usr_id, &["writer", "admin"])
+      .unwrap_or(false)
+    {
       return match rw.commit(usr_id, orc.as_ref()) {
         Ok(w) => crate::responses::Ok(w),
         Err(e) => crate::responses::BadRequest(format!("error: {}", e)),
@@ -1351,14 +1371,10 @@ pub async fn upvote_writ(
       }
     }
   } else {
-    return crate::responses::Forbidden(
-      "only users may vote on writs"
-    );
+    return crate::responses::Forbidden("only users may vote on writs");
   }
 
-  crate::responses::InternalServerError(
-    "failed to register vote"
-  )
+  crate::responses::InternalServerError("failed to register vote")
 }
 
 #[get("/writ/{wrid_id}/downvote")]

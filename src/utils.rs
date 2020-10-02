@@ -1,7 +1,7 @@
 use comrak::{markdown_to_html, ComrakOptions};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use sled::{IVec};
 use regex::Regex;
+use sled::IVec;
 use time::OffsetDateTime;
 
 use std::convert::TryInto;
@@ -10,26 +10,26 @@ use std::convert::TryInto;
 
 lazy_static! {
   static ref COMRAK_OPTS: ComrakOptions = {
-        let mut md_opts = ComrakOptions::default();
-        md_opts.parse.smart = true;
-        md_opts.render.hardbreaks = true;
-        md_opts.render.github_pre_lang = true;
-        md_opts.extension.header_ids = Some("writ-".to_string());
-        md_opts.extension.autolink = true;
-        md_opts.extension.footnotes = true;
-        md_opts.extension.table = true;
-        md_opts.extension.tasklist = true;
-        md_opts.extension.tagfilter = true;
-        md_opts.extension.strikethrough = true;
-        md_opts.extension.superscript = true;
-        md_opts.extension.description_lists = true;
+    let mut md_opts = ComrakOptions::default();
+    md_opts.parse.smart = true;
+    md_opts.render.hardbreaks = true;
+    md_opts.render.github_pre_lang = true;
+    md_opts.extension.header_ids = Some("writ-".to_string());
+    md_opts.extension.autolink = true;
+    md_opts.extension.footnotes = true;
+    md_opts.extension.table = true;
+    md_opts.extension.tasklist = true;
+    md_opts.extension.tagfilter = true;
+    md_opts.extension.strikethrough = true;
+    md_opts.extension.superscript = true;
+    md_opts.extension.description_lists = true;
 
-        md_opts
+    md_opts
   };
-
   static ref EMAIL_REGEX: Regex = Regex::new(
     r"^([a-z0-9_+]([a-z0-9_+.]*[a-z0-9_+])?)@([a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6})"
-  ).unwrap();
+  )
+  .unwrap();
 }
 
 pub fn unix_timestamp() -> i64 {
@@ -127,7 +127,7 @@ pub fn word_count_bytes(text: &[u8]) -> usize {
 
 #[inline]
 fn is_whitespace(c: &u8) -> bool {
-    *c == b' ' || *c == b'\t' || *c == b'\n'
+  *c == b' ' || *c == b'\t' || *c == b'\n'
 }
 
 pub fn is_char_number_or_uppercase(c: char) -> bool {
@@ -141,17 +141,23 @@ pub fn is_char_username_unfriendly(c: char) -> bool {
 #[inline]
 pub fn is_password_ok(pwd: &str) -> bool {
   let len = pwd.len();
-  len > 7 && len < 257 &&
-  pwd.find(is_char_number_or_uppercase).is_some()
+  len > 7 && len < 257 && pwd.find(is_char_number_or_uppercase).is_some()
 }
 
 #[inline]
 pub fn is_username_ok(username: &str) -> bool {
-  username.len() > 3 && username.len() < 50 &&
-  !username.starts_with(' ') && !username.ends_with(' ') && !username.contains("  ") &&
-  !username.starts_with('-') && !username.ends_with('-') && !username.contains("--") &&
-  !username.starts_with('_') && !username.ends_with('_') && !username.contains("__") &&
-  username.find(is_char_username_unfriendly).is_none()
+  username.len() > 3
+    && username.len() < 50
+    && !username.starts_with(' ')
+    && !username.ends_with(' ')
+    && !username.contains("  ")
+    && !username.starts_with('-')
+    && !username.ends_with('-')
+    && !username.contains("--")
+    && !username.starts_with('_')
+    && !username.ends_with('_')
+    && !username.contains("__")
+    && username.find(is_char_username_unfriendly).is_none()
 }
 
 pub fn is_email_ok(email: &str) -> bool {

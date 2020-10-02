@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-#[macro_use(lazy_static)]extern crate lazy_static;
+#[macro_use(lazy_static)]
+extern crate lazy_static;
 
 /*
 #[cfg(not(target_env = "msvc"))]
@@ -16,19 +17,18 @@ static GLOBAL: MiMalloc = MiMalloc;
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 */
 
-
-mod utils;
+mod admin_functions;
+mod auth;
+mod comments;
+mod orchestrator;
+mod posts;
 mod ratelimiter;
 mod responses;
-mod admin_functions;
-mod orchestrator;
-mod auth;
+mod utils;
 mod writs;
-mod comments;
-mod posts;
 
+use actix_files::NamedFile;
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
-use actix_files::{NamedFile};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io::BufReader, sync::Arc};
@@ -46,15 +46,17 @@ async fn main() -> std::io::Result<()> {
         .version("0.0.1")
         .author("Saul <me@saul.app>")
         .about("multipurpose web app database thingy")
-        .arg(clap::Arg::with_name("production")
-            .short("p")
-            .long("production")
-            .help("run the server in production mode")
+        .arg(
+            clap::Arg::with_name("production")
+                .short("p")
+                .long("production")
+                .help("run the server in production mode"),
         )
-        .arg(clap::Arg::with_name("domain")
-            .short("d")
-            .long("domain")
-            .help("set the server's domain name")
+        .arg(
+            clap::Arg::with_name("domain")
+                .short("d")
+                .long("domain")
+                .help("set the server's domain name"),
         )
         .get_matches();
 
@@ -73,25 +75,27 @@ async fn main() -> std::io::Result<()> {
     println!("file watching active");
     // if CONF.read().dev_mode {}
 
-    HttpServer::new(|| 
-        App::new()
-            .service(web::resource("*").route(
-                web::get().to(|req: HttpRequest| {
-                    HttpResponse::Found().header(
-                        actix_web::http::header::LOCATION,
-                        format!("https://{}{}", CONF.read().domain, req.path())
-                    ).finish().into_body()
-                })
-        ))
-    )
+    HttpServer::new(|| {
+        App::new().service(web::resource("*").route(web::get().to(|req: HttpRequest| {
+            HttpResponse::Found()
+                .header(
+                    actix_web::http::header::LOCATION,
+                    format!("https://{}{}", CONF.read().domain, req.path()),
+                )
+                .finish()
+                .into_body()
+        })))
+    })
     .disable_signals()
     .bind("0.0.0.0:80")
     // .bind("0.0.0.0:8080")
     .unwrap()
     .run();
 
-    let cert_file = &mut BufReader::new(File::open(CONF.read().cert_path.clone().as_str()).unwrap());
-    let key_file = &mut BufReader::new(File::open(CONF.read().privkey_path.clone().as_str()).unwrap());
+    let cert_file =
+        &mut BufReader::new(File::open(CONF.read().cert_path.clone().as_str()).unwrap());
+    let key_file =
+        &mut BufReader::new(File::open(CONF.read().privkey_path.clone().as_str()).unwrap());
 
     let mut tls_config = ServerConfig::new(NoClientAuth::new());
     let cert_chain = certs(cert_file).unwrap();
@@ -106,43 +110,35 @@ async fn main() -> std::io::Result<()> {
 
     let orc_clone = orc.clone();
 
-    let app_server = HttpServer::new(move || App::new()
-        .wrap(actix_web::middleware::Compress::default())
-        
-        .data(orc_clone.clone())
-
-        .service(index)
-        
-        .service(auth::check_authentication)
-        .service(auth::auth_attempt)
-        .service(auth::logout)
-        .service(auth::administer_administrality)
-        .service(auth::remove_administrality)
-        .service(auth::check_administrality)
-        
-        .service(writs::editable_writ_query)
-        .service(writs::writ_query)
-        .service(writs::push_raw_writ)
-        .service(writs::delete_writ)
-        .service(writs::upvote_writ)
-        .service(writs::unvote_writ)
-        .service(writs::downvote_writ)
-        .service(writs::post_content)
-        .service(writs::writ_raw_content)
-        
-        .service(comments::post_comment_query)
-        .service(comments::make_comment)
-
-        .service(posts::render_post)
-        .service(posts::render_post_by_slug)
-        
-        .service(admin_functions::remote_http)
-        
-        .service(admin_panel)
-        .service(admin_gateway)
-
-        .service(serve_files_and_templates)
-    )
+    let app_server = HttpServer::new(move || {
+        App::new()
+            .wrap(actix_web::middleware::Compress::default())
+            .data(orc_clone.clone())
+            .service(index)
+            .service(auth::check_authentication)
+            .service(auth::auth_attempt)
+            .service(auth::logout)
+            .service(auth::administer_administrality)
+            .service(auth::remove_administrality)
+            .service(auth::check_administrality)
+            .service(writs::editable_writ_query)
+            .service(writs::writ_query)
+            .service(writs::push_raw_writ)
+            .service(writs::delete_writ)
+            .service(writs::upvote_writ)
+            .service(writs::unvote_writ)
+            .service(writs::downvote_writ)
+            .service(writs::post_content)
+            .service(writs::writ_raw_content)
+            .service(comments::post_comment_query)
+            .service(comments::make_comment)
+            .service(posts::render_post)
+            .service(posts::render_post_by_slug)
+            .service(admin_functions::remote_http)
+            .service(admin_panel)
+            .service(admin_gateway)
+            .service(serve_files_and_templates)
+    })
     // .bind_rustls("0.0.0.0:8443", tls_config)?
     .bind_rustls("0.0.0.0:443", tls_config)?
     .backlog(4096)
@@ -155,7 +151,8 @@ async fn main() -> std::io::Result<()> {
         orc.ratelimiter.db.flush().unwrap();
 
         drop(orc);
-    }).await?;
+    })
+    .await?;
 
     app_server
 }
@@ -186,12 +183,10 @@ lazy_static! {
         tera.autoescape_on(vec![]);
         RwLock::new(tera)
     };
-
     pub static ref CONF: RwLock<Config> = {
         let config_toml = std::fs::read_to_string("./private/config.toml")
             .expect("couldn't read the config file");
-        let config: Config = toml::from_str(&config_toml)
-            .expect("config file is broken TOML");
+        let config: Config = toml::from_str(&config_toml).expect("config file is broken TOML");
         RwLock::new(config)
     };
 }
@@ -203,7 +198,11 @@ async fn index(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> impl Resp
     if let Some(usr) = o_usr {
         ctx.insert("username", &usr.username);
         ctx.insert("dev_mode", &orc.dev_mode);
-        ctx.insert("is_writer", &orc.user_has_some_attrs(&usr.id, &["writer", "admin"]).unwrap_or(false));
+        ctx.insert(
+            "is_writer",
+            &orc.user_has_some_attrs(&usr.id, &["writer", "admin"])
+                .unwrap_or(false),
+        );
     }
 
     match TEMPLATES.read().render("index.html", &ctx) {
@@ -277,7 +276,10 @@ async fn serve_files_and_templates(
     let path: &str = req.path();
     if path.ends_with("/") {
         return HttpResponse::Found()
-            .header(actix_web::http::header::LOCATION, path.trim_end_matches("/"))
+            .header(
+                actix_web::http::header::LOCATION,
+                path.trim_end_matches("/"),
+            )
             .finish()
             .into_body();
     }

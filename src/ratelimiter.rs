@@ -1,9 +1,14 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use sled::{Db, Tree};
-use std::sync::{atomic::{AtomicU64, Ordering::{SeqCst}}, Arc};
-use time::{OffsetDateTime, Duration};
+use std::sync::{
+  atomic::{AtomicU64, Ordering::SeqCst},
+  Arc,
+};
+use time::{Duration, OffsetDateTime};
 
-fn now() -> i64 { OffsetDateTime::now_utc().timestamp() }
+fn now() -> i64 {
+  OffsetDateTime::now_utc().timestamp()
+}
 
 pub struct RateLimiter {
   pub db: Db,
@@ -17,18 +22,32 @@ impl RateLimiter {
     let db = sled::open("./storage/rl.db").unwrap();
     let store = db.open_tree("rl").unwrap();
     let count = Arc::new(AtomicU64::new(store.len() as u64));
-    RateLimiter{db, store, limit: 100_000, count}
+    RateLimiter {
+      db,
+      store,
+      limit: 100_000,
+      count,
+    }
   }
 
   pub fn new(db: Db, store: Tree, limit: u64) -> Self {
     let count = Arc::new(AtomicU64::new(0));
     count.fetch_add(store.len() as u64, SeqCst);
-    Self{db, store, limit, count}
+    Self {
+      db,
+      store,
+      limit,
+      count,
+    }
   }
 
   pub fn hit(&self, data: &[u8], threshhold: u32, dur: Duration) -> Option<RateLimited> {
     if let Some(mut rl) = self.get(data) {
-      if self.store.insert(data, rl.hit(1, threshhold, dur).to_bin()).is_ok() {
+      if self
+        .store
+        .insert(data, rl.hit(1, threshhold, dur).to_bin())
+        .is_ok()
+      {
         return Some(rl);
       }
     }
@@ -40,23 +59,22 @@ impl RateLimiter {
   }
 
   pub fn forget(&self, data: &[u8]) -> bool {
-    if self.store.remove(data).is_err() { return false; }
+    if self.store.remove(data).is_err() {
+      return false;
+    }
     self.count.fetch_sub(1, SeqCst);
     true
   }
-  
   pub fn insert(&self, data: &[u8], entry: Vec<u8>) -> bool {
-    if 
-      self.store.insert(data, entry).is_ok() &&
-      self.count.fetch_add(1, SeqCst) == self.limit &&
-      self.store.pop_min().is_ok()
+    if self.store.insert(data, entry).is_ok()
+      && self.count.fetch_add(1, SeqCst) == self.limit
+      && self.store.pop_min().is_ok()
     {
       self.count.fetch_sub(1, SeqCst);
       return true;
     }
     false
   }
-  
   pub fn get(&self, data: &[u8]) -> Option<RateLimited> {
     match self.store.get(data) {
       Ok(rl) => rl.map(|raw| RateLimited::try_from_slice(&raw).unwrap()),
@@ -79,7 +97,11 @@ pub struct RateLimited {
 impl RateLimited {
   pub fn new() -> Self {
     let now = now();
-    Self{hits: 1, lasthit: now, timeout: now}
+    Self {
+      hits: 1,
+      lasthit: now,
+      timeout: now,
+    }
   }
 
   pub fn to_bin(&self) -> Vec<u8> {

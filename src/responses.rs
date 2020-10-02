@@ -25,7 +25,6 @@ pub struct APIStatusDataResponse<X: Serialize, Y: Serialize> {
     pub data: Y,
 }
 
-
 #[allow(non_snake_case, missing_docs)]
 pub fn NotFoundEmpty() -> HttpResponse {
     HttpResponse::NotFound().json(EmptyAPIResponse { ok: false })
@@ -33,27 +32,35 @@ pub fn NotFoundEmpty() -> HttpResponse {
 
 #[allow(non_snake_case, missing_docs)]
 pub fn Ok<T: Serialize>(data: T) -> HttpResponse {
-    HttpResponse::Ok().json(APIResponse {ok: true, data})
+    HttpResponse::Ok().json(APIResponse { ok: true, data })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn OkDataStatus<X: Serialize, Y: Serialize>(status: X, data: Y) -> HttpResponse {
-    HttpResponse::Ok().json(APIStatusDataResponse {ok: true, data, status})
+    HttpResponse::Ok().json(APIStatusDataResponse {
+        ok: true,
+        data,
+        status,
+    })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn AcceptedData<T: Serialize>(data: T) -> HttpResponse {
-    HttpResponse::Accepted().json(APIResponse {ok: true, data})
+    HttpResponse::Accepted().json(APIResponse { ok: true, data })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn AcceptedStatusData<X: Serialize, Y: Serialize>(status: X, data: Y) -> HttpResponse {
-    HttpResponse::Accepted().json(APIStatusDataResponse {ok: true, data, status})
+    HttpResponse::Accepted().json(APIStatusDataResponse {
+        ok: true,
+        data,
+        status,
+    })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn Accepted<T: Serialize>(status: T) -> HttpResponse {
-    HttpResponse::Accepted().json(APIStatusResponse {ok: true, status})
+    HttpResponse::Accepted().json(APIStatusResponse { ok: true, status })
 }
 
 #[allow(non_snake_case, missing_docs)]
