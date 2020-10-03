@@ -146,13 +146,15 @@ pub fn is_password_ok(pwd: &str) -> bool {
 
 #[inline]
 pub fn is_username_ok(username: &str) -> bool {
-  username.len() > 3
-    && username.len() < 50
+  let len = username.len();
+  len > 3
+    && len < 50
     && !username.starts_with(' ')
     && !username.ends_with(' ')
     && !username.contains("  ")
     && !username.starts_with('-')
     && !username.ends_with('-')
+    && !username.contains("--")
     && !username.contains("--")
     && !username.starts_with('_')
     && !username.ends_with('_')
