@@ -689,7 +689,7 @@ impl Writ {
         let you_voted = match &requestor_id {
           Some(req_id) => writ_voters
             .get(self.vote_id(&req_id).as_bytes())?
-            .map(|raw| WritVote::try_from_slice(&raw).unwrap().up),
+            .map(|raw| Vote::try_from_slice(&raw).unwrap().up),
           None => None,
         };
 
@@ -768,7 +768,7 @@ impl Writ {
         let vote_id = self.vote_id(usr_id);
 
         if let Some(raw) = writ_voters.get(vote_id.as_bytes())? {
-          let rw = WritVote::try_from_slice(&raw).unwrap();
+          let rw = Vote::try_from_slice(&raw).unwrap();
           if let Some(up) = &up {
             // prevent double voting
             if rw.up == *up {
@@ -809,7 +809,7 @@ impl Writ {
           votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
         }
 
-        let wv = WritVote {
+        let wv = Vote {
           id: vote_id,
           when: unix_timestamp(),
           up: up.unwrap(),
@@ -818,18 +818,20 @@ impl Writ {
 
         Ok(())
       });
+
     match res {
       Ok(_) => {
         if let Ok(Some(raw)) = orc.votes.get(self.id.as_bytes()) {
-          return Some(raw.to_i64());
+          Some(raw.to_i64())
+        } else {
+          Some(-2000000)
         }
-        return Some(-2000000);
       }
       Err(e) => {
         if orc.dev_mode {
           println!("Something bad went down with voting - {:?}", e);
         }
-        return None;
+        None
       }
     }
   }
@@ -846,9 +848,9 @@ impl Writ {
     self.vote(orc, usr_id, None)
   }
 
-  pub fn usr_vote(&self, orc: &Orchestrator, usr_id: &str) -> Option<WritVote> {
+  pub fn usr_vote(&self, orc: &Orchestrator, usr_id: &str) -> Option<Vote> {
     match orc.writ_voters.get(self.vote_id(usr_id).as_bytes()) {
-      Ok(wv) => wv.map(|raw| WritVote::try_from_slice(&raw).unwrap()),
+      Ok(wv) => wv.map(|raw| Vote::try_from_slice(&raw).unwrap()),
       Err(_) => None,
     }
   }
@@ -1161,7 +1163,7 @@ impl RawWrit {
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
-pub struct WritVote {
+pub struct Vote {
   pub id: String,
   pub up: bool,
   pub when: i64,
@@ -1413,4 +1415,11 @@ pub async fn unvote_writ(
   }
 
   crate::responses::InternalServerError("failed to register vote")
+}
+
+// TODO: prevent malformed ids from even getting to sled .get/.insert/.delete
+#[inline]
+fn is_valid_writ_id(id: &str) -> bool {
+  let len = id.len();
+  len > 2 && len < 30 && id.matches(":").count() > 0
 }

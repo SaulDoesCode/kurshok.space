@@ -1,4 +1,4 @@
-use actix_web::{delete, post, put, web, HttpRequest, HttpResponse};
+use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse};
 use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Itertools;
 use rayon::prelude::*;
@@ -12,14 +12,7 @@ use crate::orchestrator::Orchestrator;
 use crate::utils::{
   datetime_from_unix_timestamp, i64_is_zero, render_md, unix_timestamp, FancyBool, FancyIVec,
 };
-use crate::writs::{CommentSettings, Writ};
-
-#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
-pub struct CommentVote {
-  pub id: String,
-  pub up: bool,
-  pub when: i64,
-}
+use crate::writs::{CommentSettings, Vote, Writ};
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct PublicComment {
@@ -128,7 +121,7 @@ impl Comment {
       author_only: self.author_only.wrap(),
       you_voted: match usr_id {
         Some(id) => match orc.comment_voters.get(self.vote_id(id).as_bytes()) {
-          Ok(cv) => cv.map(|raw| CommentVote::try_from_slice(&raw).unwrap().up),
+          Ok(cv) => cv.map(|raw| Vote::try_from_slice(&raw).unwrap().up),
           Err(_) => None,
         },
         None => None,
@@ -337,6 +330,92 @@ impl Comment {
         Ok(())
       })
       .is_ok()
+  }
+
+  pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: Option<bool>) -> Option<i64> {
+    let res: TransactionResult<(), ()> =
+      (&orc.comment_votes, &orc.comment_voters).transaction(|(votes, voters)| {
+        let vote_id = self.vote_id(usr_id);
+
+        if let Some(raw) = voters.get(vote_id.as_bytes())? {
+          let old_vote = Vote::try_from_slice(&raw).unwrap();
+          if let Some(up) = &up {
+            // prevent double voting
+            if old_vote.up == *up {
+              return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+            }
+            // handle when they alreay voted and now vote the oposite way
+            let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+            if *up {
+              count += 2;
+            } else {
+              count -= 2;
+            }
+            votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+          } else {
+            // unvote
+            voters.remove(vote_id.as_bytes())?;
+
+            let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+            if old_vote.up {
+              count -= 1;
+            } else {
+              count += 1;
+            }
+
+            votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+
+            return Ok(());
+          }
+        } else if up.is_none() {
+          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+        } else {
+          let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+          if up.clone().unwrap() {
+            count += 1;
+          } else {
+            count -= 1;
+          }
+          votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+        }
+
+        let v = Vote {
+          id: vote_id,
+          when: unix_timestamp(),
+          up: up.unwrap(),
+        };
+        voters.insert(v.id.as_bytes(), v.try_to_vec().unwrap())?;
+
+        Ok(())
+      });
+
+    match res {
+      Ok(_) => {
+        if let Ok(Some(raw)) = orc.votes.get(self.id.as_bytes()) {
+          Some(raw.to_i64())
+        } else {
+          Some(-2000000)
+        }
+      }
+      Err(e) => {
+        if orc.dev_mode {
+          println!("Something bad went down with voting - {:?}", e);
+        }
+        None
+      }
+    }
+  }
+
+  pub fn upvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
+    self.vote(orc, usr_id, Some(true))
+  }
+
+  pub fn downvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
+    self.vote(orc, usr_id, Some(false))
+  }
+
+  pub fn unvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
+    self.vote(orc, usr_id, None)
   }
 }
 
@@ -1063,6 +1142,63 @@ pub async fn delete_comment(
   }
 
   crate::responses::InternalServerError("troubles abound, failed to delete comment :(")
+}
+
+#[get("/comment/{id}/upvote")]
+pub async fn upvote_comment(
+  req: HttpRequest,
+  id: web::Path<String>,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
+  if let Some(usr) = orc.user_by_session(&req) {
+    if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
+      if let Some(count) = comment.upvote(orc.as_ref(), &usr.id) {
+        return crate::responses::AcceptedStatusData("vote went through", count);
+      }
+    }
+  } else {
+    return crate::responses::Forbidden("only users may vote on writs");
+  }
+
+  crate::responses::InternalServerError("failed to register vote")
+}
+
+#[get("/comment/{id}/downvote")]
+pub async fn downvote_comment(
+  req: HttpRequest,
+  id: web::Path<String>,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
+  if let Some(usr) = orc.user_by_session(&req) {
+    if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
+      if let Some(count) = comment.downvote(orc.as_ref(), &usr.id) {
+        return crate::responses::AcceptedStatusData("vote went through", count);
+      }
+    }
+  } else {
+    return crate::responses::Forbidden("only users may vote on writs");
+  }
+
+  crate::responses::InternalServerError("failed to register vote")
+}
+
+#[get("/comment/{id}/unvote")]
+pub async fn unvote_comment(
+  req: HttpRequest,
+  id: web::Path<String>,
+  orc: web::Data<Arc<Orchestrator>>,
+) -> HttpResponse {
+  if let Some(usr) = orc.user_by_session(&req) {
+    if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
+      if let Some(count) = comment.unvote(orc.as_ref(), &usr.id) {
+        return crate::responses::AcceptedStatusData("vote went through", count);
+      }
+    }
+  } else {
+    return crate::responses::Forbidden("only users may vote on writs");
+  }
+
+  crate::responses::InternalServerError("failed to register vote")
 }
 
 pub async fn make_comment_on_writ(usr: &User, rc: RawComment, orc: &Orchestrator) -> HttpResponse {
