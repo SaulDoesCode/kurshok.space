@@ -15,7 +15,7 @@ use super::TEMPLATES;
 
 pub fn watch_and_update_files() -> thread::JoinHandle<()> {
     thread::spawn(|| {
-        let (tx, rx) = flume::unbounded();
+        let (tx, rx) = crossbeam_channel::unbounded();
 
         let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| {
             if let Ok(event) = res {
