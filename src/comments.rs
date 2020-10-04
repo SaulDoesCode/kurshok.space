@@ -1150,9 +1150,10 @@ pub async fn upvote_comment(
   id: web::Path<String>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(usr) = orc.user_by_session(&req) {
+  if let Some(raw) = orc.user_id_by_session(&req) {
+    let usr_id = raw.to_string();
     if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
-      if let Some(count) = comment.upvote(orc.as_ref(), &usr.id) {
+      if let Some(count) = comment.upvote(orc.as_ref(), &usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1169,9 +1170,10 @@ pub async fn downvote_comment(
   id: web::Path<String>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(usr) = orc.user_by_session(&req) {
+  if let Some(raw) = orc.user_id_by_session(&req) {
+    let usr_id = raw.to_string();
     if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
-      if let Some(count) = comment.downvote(orc.as_ref(), &usr.id) {
+      if let Some(count) = comment.downvote(orc.as_ref(), &usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1188,9 +1190,10 @@ pub async fn unvote_comment(
   id: web::Path<String>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(usr) = orc.user_by_session(&req) {
+  if let Some(raw) = orc.user_id_by_session(&req) {
+    let usr_id = raw.to_string();
     if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
-      if let Some(count) = comment.unvote(orc.as_ref(), &usr.id) {
+      if let Some(count) = comment.unvote(orc.as_ref(), &usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }

@@ -1366,9 +1366,10 @@ pub async fn upvote_writ(
   writ_id: web::Path<String>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(usr) = orc.user_by_session(&req) {
+  if let Some(raw) = orc.user_id_by_session(&req) {
+    let usr_id = raw.to_string();
     if let Some(writ) = orc.writ_by_id(&writ_id) {
-      if let Some(count) = writ.upvote(orc.as_ref(), &usr.id) {
+      if let Some(count) = writ.upvote(orc.as_ref(), &usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1385,9 +1386,10 @@ pub async fn downvote_writ(
   writ_id: web::Path<String>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(usr) = orc.user_by_session(&req) {
+  if let Some(raw) = orc.user_id_by_session(&req) {
+    let usr_id = raw.to_string();
     if let Some(writ) = orc.writ_by_id(&writ_id) {
-      if let Some(count) = writ.downvote(orc.as_ref(), &usr.id) {
+      if let Some(count) = writ.downvote(orc.as_ref(), &usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1404,9 +1406,10 @@ pub async fn unvote_writ(
   writ_id: web::Path<String>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(usr) = orc.user_by_session(&req) {
+  if let Some(raw) = orc.user_id_by_session(&req) {
+    let usr_id = raw.to_string();
     if let Some(writ) = orc.writ_by_id(&writ_id) {
-      if let Some(count) = writ.unvote(orc.as_ref(), &usr.id) {
+      if let Some(count) = writ.unvote(orc.as_ref(), &usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
