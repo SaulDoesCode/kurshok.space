@@ -135,6 +135,7 @@ async fn main() -> std::io::Result<()> {
             .service(comments::delete_comment)
             .service(comments::upvote_comment)
             .service(comments::unvote_comment)
+            .service(comments::downvote_comment)
             .service(posts::render_post)
             .service(posts::render_post_by_slug)
             .service(admin_functions::remote_http)
