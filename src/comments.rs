@@ -21,7 +21,7 @@ pub struct PublicComment {
   pub author_name: String,
   pub posted: i64,
   #[serde(skip_serializing_if = "i64_is_zero")]
-  pub votes: i64,
+  pub vote: i64,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub edited: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -126,7 +126,7 @@ impl Comment {
         },
         None => None,
       },
-      votes: if let Ok(Some(raw)) = orc.comment_votes.get(self.id.as_bytes()) {
+      vote: if let Ok(Some(raw)) = orc.comment_votes.get(self.id.as_bytes()) {
         raw.to_i64()
       } else {
         return None;
