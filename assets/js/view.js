@@ -84,7 +84,7 @@ app.view = {
     page: 0,
 }
 
-app.votesUI = (voteType, {id, vote, you_voted}) => parentEl => {
+app.votesUI = (voteType, {id, vote = 0, you_voted}) => parentEl => {
     const votesEl = div({
             class: 'votes',
             async onclick(e, el) {
@@ -106,32 +106,39 @@ app.votesUI = (voteType, {id, vote, you_voted}) => parentEl => {
                 const isDown = e.target.classList.contains('down')
                 if (!isDown && !isUp) return
                 e.target.classList.add('await-vote')
+                clearInterval(el.awaitAnimTimeout)
+                el.awaitAnimTimeout = setTimeout(() => {
+                    e.target.classList.remove('await-vote')
+                }, 2500)
                 const isSelected = e.target.classList.contains('selected')
                 // unvote
                 if (you_voted != null && isSelected) {
                     const res = await app.vote(voteType, id)
+                    clearInterval(el.awaitAnimTimeout)
+                    e.target.classList.remove('await-vote')
                     if (res != false) {
                         el.downvote.classList.remove('selected')
                         el.upvote.classList.remove('selected')
-                        e.target.classList.remove('await-vote')
                         app.formatVoteCount(el.voteCount, vote = res.data)
                         you_voted = null
                     }
                 } else if (isUp) {
                     const res = await app.vote(voteType, id, true)
+                    clearInterval(el.awaitAnimTimeout)
+                    e.target.classList.remove('await-vote')
                     if (res != false) {
                         el.downvote.classList.remove('selected')
                         el.upvote.classList.add('selected')
-                        e.target.classList.remove('await-vote')
                         app.formatVoteCount(el.voteCount, vote = res.data)
                         you_voted = true
                     }
                 } else if (isDown) {
                     const res = await app.vote(voteType, id, false)
+                    clearInterval(el.awaitAnimTimeout)
+                    e.target.classList.remove('await-vote')
                     if (res != false) {
                         el.upvote.classList.remove('selected')
                         el.downvote.classList.add('selected')
-                        e.target.classList.remove('await-vote')
                         app.formatVoteCount(el.voteCount, vote = res.data)
                         you_voted = false
                     }
