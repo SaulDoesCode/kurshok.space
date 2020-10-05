@@ -333,10 +333,10 @@ impl Comment {
   }
 
   pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: Option<bool>) -> Option<i64> {
-    let res: TransactionResult<(), ()> =
+    let res: TransactionResult<i64, ()> =
       (&orc.comment_votes, &orc.comment_voters).transaction(|(votes, voters)| {
         let vote_id = self.vote_id(usr_id);
-
+        let mut count: i64 = 0;
         if let Some(raw) = voters.get(vote_id.as_bytes())? {
           let old_vote = Vote::try_from_slice(&raw).unwrap();
           if let Some(up) = &up {
@@ -345,7 +345,7 @@ impl Comment {
               return Err(sled::transaction::ConflictableTransactionError::Abort(()));
             }
             // handle when they alreay voted and now vote the oposite way
-            let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+            count += votes.get(self.id.as_bytes())?.unwrap().to_i64();
             if *up {
               count += 2;
             } else {
@@ -356,7 +356,7 @@ impl Comment {
             // unvote
             voters.remove(vote_id.as_bytes())?;
 
-            let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+            count += votes.get(self.id.as_bytes())?.unwrap().to_i64();
             if old_vote.up {
               count -= 1;
             } else {
@@ -365,12 +365,12 @@ impl Comment {
 
             votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
 
-            return Ok(());
+            return Ok(count);
           }
         } else if up.is_none() {
           return Err(sled::transaction::ConflictableTransactionError::Abort(()));
         } else {
-          let mut count = votes.get(self.id.as_bytes())?.unwrap().to_i64();
+          count += votes.get(self.id.as_bytes())?.unwrap().to_i64();
           if up.clone().unwrap() {
             count += 1;
           } else {
@@ -386,17 +386,11 @@ impl Comment {
         };
         voters.insert(v.id.as_bytes(), v.try_to_vec().unwrap())?;
 
-        Ok(())
+        Ok(count)
       });
 
     match res {
-      Ok(_) => {
-        if let Ok(Some(raw)) = orc.votes.get(self.id.as_bytes()) {
-          Some(raw.to_i64())
-        } else {
-          Some(-2000000)
-        }
-      }
+      Ok(count) => Some(count),
       Err(e) => {
         if orc.dev_mode {
           println!("Something bad went down with voting - {:?}", e);
@@ -1150,6 +1144,7 @@ pub async fn upvote_comment(
   id: web::Path<String>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
+  let id = id.replace("-", "/");
   if let Some(raw) = orc.user_id_by_session(&req) {
     let usr_id = raw.to_string();
     if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
@@ -1170,6 +1165,7 @@ pub async fn downvote_comment(
   id: web::Path<String>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
+  let id = id.replace("-", "/");
   if let Some(raw) = orc.user_id_by_session(&req) {
     let usr_id = raw.to_string();
     if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
@@ -1190,6 +1186,7 @@ pub async fn unvote_comment(
   id: web::Path<String>,
   orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
+  let id = id.replace("-", "/");
   if let Some(raw) = orc.user_id_by_session(&req) {
     let usr_id = raw.to_string();
     if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
