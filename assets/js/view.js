@@ -84,7 +84,7 @@ app.view = {
     page: 0,
 }
 
-app.votesUI = ({id, vote, you_voted}) => parentEl => {
+app.votesUI = (voteType, {id, vote, you_voted}) => parentEl => {
     const votesEl = div({
             class: 'votes',
             async onclick(e, el) {
@@ -109,7 +109,7 @@ app.votesUI = ({id, vote, you_voted}) => parentEl => {
                 const isSelected = e.target.classList.contains('selected')
                 // unvote
                 if (you_voted != null && isSelected) {
-                    const res = await app.voteWrit(id)
+                    const res = await app.vote(voteType, id)
                     if (res != false) {
                         el.downvote.classList.remove('selected')
                         el.upvote.classList.remove('selected')
@@ -118,7 +118,7 @@ app.votesUI = ({id, vote, you_voted}) => parentEl => {
                         you_voted = null
                     }
                 } else if (isUp) {
-                    const res = await app.voteWrit(id, true)
+                    const res = await app.vote(voteType, id, true)
                     if (res != false) {
                         el.downvote.classList.remove('selected')
                         el.upvote.classList.add('selected')
@@ -127,7 +127,7 @@ app.votesUI = ({id, vote, you_voted}) => parentEl => {
                         you_voted = true
                     }
                 } else if (isDown) {
-                    const res = await app.voteWrit(id, false)
+                    const res = await app.vote(voteType, id, false)
                     if (res != false) {
                         el.upvote.classList.remove('selected')
                         el.downvote.classList.add('selected')
@@ -174,7 +174,7 @@ const publicPost = w => div({
         location.hash = w.id
     }
 },
-    app.votesUI(w),
+    app.votesUI('writ', w),
     header(
         div({class: 'title'},
             h4(w.title),
@@ -263,9 +263,9 @@ app.renderUXTimestamp = (ts, formater = app.dayjsUXTSformat, txt) => {
     return txt
 }
 
-app.voteWrit = async (id, up) => {
+app.vote = async (voteType, id, up) => {
     try {
-        const res = await fetch(`/writ/${id}/${up == null ? 'unvote' : up ? 'upvote' : 'downvote'}`)
+        const res = await fetch(`/${voteType}/${id}/${up == null ? 'unvote' : up ? 'upvote' : 'downvote'}`)
         return await res.json()
     } catch(e) {
         console.error('app.voteWrit error: ', e)
