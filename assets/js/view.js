@@ -84,7 +84,88 @@ app.view = {
     page: 0,
 }
 
-const publicPost = (w) => div({
+app.votesUI = ({id, vote, you_voted}) => parentEl => {
+    const votesEl = div({
+            class: 'votes',
+            async onclick(e, el) {
+                if (app.user == null) {
+                    e.preventDefault()
+                    app.oneTimeAuthLauncher.off()
+                    try {
+                        if (app.authViewToggle) {
+                            app.authViewToggle.toggleView()
+                        } else {
+                            await import('/js/auth.min.js')
+                        }
+                    } catch (e) {
+                        app.oneTimeAuthLauncher.on()
+                    }
+                    return
+                }
+                const isUp = e.target.classList.contains('up')
+                const isDown = e.target.classList.contains('down')
+                if (!isDown && !isUp) return
+                e.target.classList.add('await-vote')
+                const isSelected = e.target.classList.contains('selected')
+                // unvote
+                if (you_voted != null && isSelected) {
+                    const res = await app.voteWrit(id)
+                    if (res != false) {
+                        el.downvote.classList.remove('selected')
+                        el.upvote.classList.remove('selected')
+                        e.target.classList.remove('await-vote')
+                        app.formatVoteCount(el.voteCount, vote = res.data)
+                        you_voted = null
+                    }
+                } else if (isUp) {
+                    const res = await app.voteWrit(id, true)
+                    if (res != false) {
+                        el.downvote.classList.remove('selected')
+                        el.upvote.classList.add('selected')
+                        e.target.classList.remove('await-vote')
+                        app.formatVoteCount(el.voteCount, vote = res.data)
+                        you_voted = true
+                    }
+                } else if (isDown) {
+                    const res = await app.voteWrit(id, false)
+                    if (res != false) {
+                        el.upvote.classList.remove('selected')
+                        el.downvote.classList.add('selected')
+                        e.target.classList.remove('await-vote')
+                        app.formatVoteCount(el.voteCount, vote = res.data)
+                        you_voted = false
+                    }
+                }
+            }
+        }
+    )
+
+    votesEl.append(
+        votesEl.upvote = span({
+            class: {
+                up: true,
+                    vote: true,
+                    selected: you_voted === true,
+            }
+        }),
+
+        votesEl.voteCount = span({
+            class: 'vote-count'
+        }, vote),
+
+        votesEl.downvote = span({
+            class: {
+                down: true,
+                    vote: true,
+                    selected: you_voted === false,
+            }
+        })
+    )
+
+    return votesEl
+}
+
+const publicPost = w => div({
     $: contentDisplay,
     class: 'post',
     attr: {pid: w.id},
@@ -93,77 +174,7 @@ const publicPost = (w) => div({
         location.hash = w.id
     }
 },
-    div({
-        class: 'votes',
-        async onclick(e, el) {
-            if (app.user == null) {
-                e.preventDefault()
-                app.oneTimeAuthLauncher.off()
-                try {
-                    if (app.authViewToggle) {
-                        app.authViewToggle.toggleView()
-                    } else {
-                        await import('/js/auth.min.js')
-                    }
-                } catch(e) {
-                    app.oneTimeAuthLauncher.on()
-                }
-                return
-            }
-            const isUp = e.target.classList.contains('up')
-            const isDown = e.target.classList.contains('down')
-            if (!isDown && !isUp) return
-            e.target.classList.add('await-vote')
-            const isSelected = e.target.classList.contains('selected')
-            // unvote
-            if (w.you_voted != null && isSelected) {
-                const res = await app.voteWrit(w.id)
-                if (res != false) {
-                    el.downvote.classList.remove('selected')
-                    el.upvote.classList.remove('selected')
-                    e.target.classList.remove('await-vote')
-                    app.formatVoteCount(el.voteCount, w.vote = res.data)
-                    w.you_voted = null
-                }
-            } else if (isUp) {
-                const res = await app.voteWrit(w.id, true)
-                if (res != false) {
-                    el.downvote.classList.remove('selected')
-                    el.upvote.classList.add('selected')
-                    e.target.classList.remove('await-vote')
-                    app.formatVoteCount(el.voteCount, w.vote = res.data)
-                    w.you_voted = true
-                }
-            } else if(isDown) {
-                const res = await app.voteWrit(w.id, false)
-                if (res != false) {
-                    el.upvote.classList.remove('selected')
-                    el.downvote.classList.add('selected')
-                    e.target.classList.remove('await-vote')
-                    app.formatVoteCount(el.voteCount, w.vote = res.data)
-                    w.you_voted = false
-                }
-            }
-        }
-    },
-        votesEl => [
-            votesEl.upvote = span({
-                class: {
-                    up: true,
-                    vote: true,
-                    selected: w.you_voted === true,
-                }
-            }),
-            votesEl.voteCount = span({class: 'vote-count'}, w.vote),
-            votesEl.downvote = span({
-                class: {
-                    down: true,
-                    vote: true,
-                    selected: w.you_voted === false,
-                }
-            })
-        ]
-    ),
+    app.votesUI(w),
     header(
         div({class: 'title'},
             h4(w.title),
