@@ -161,8 +161,8 @@ app.on.postRendered(async post => {
 })
 
 app.formulateThread = (comment, children) => div({class: 'comment'},
-    app.votesUI('comment', (() => (comment.id = comment.id.replace('/','-'), comment))()),
     header(
+        app.votesUI('comment', (() => (comment.id = comment.id.replace('/','-'), comment))()),
         span({class: 'author-name'}, comment.author_name),
         span({class: 'txt-divider'}, ' - '),
         span({class: 'posted'}, 

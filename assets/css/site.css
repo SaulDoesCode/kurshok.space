@@ -260,8 +260,8 @@ main[route-active="posts"] .post>* {
   margin-bottom: 0;
 }
 
-.post .votes {
-  display: flex;
+.votes {
+  display: inline-flex;
   justify-content: space-around;
   align-content: center;
   align-items: center;
@@ -271,38 +271,42 @@ main[route-active="posts"] .post>* {
   font-size: 1.1em;
 }
 
-.post .votes .vote {
+.comment .votes {
+  flex-flow: row wrap;
+}
+
+.votes .vote {
   cursor: pointer;
   border: 3px solid transparent;
   transition: all 140ms ease-in;
 }
 
-.post .votes .vote.up:hover,
-.post .votes .vote.up.selected {
+.votes .vote.up:hover,
+.votes .vote.up.selected {
   color: #ffb638;
 }
 
-.post .votes .vote.down:hover,
-.post .votes .vote.down.selected {
+.votes .vote.down:hover,
+.votes .vote.down.selected {
   color: #ff145a;
 }
 
-.post .votes .vote.up::before {
+.votes .vote.up::before {
   content: '🡅';
 }
-.post .votes .vote.down::before {
+.votes .vote.down::before {
   content: '🡇';
 }
 
-.post .votes .vote-count {
+.votes .vote-count {
   white-space: nowrap;
   font-size: .95em;
 }
 
-.post .votes .vote-count .endbits {
+.votes .vote-count .endbits {
   font-size: .75em;
 }
-.post .votes .vote-count .marker {
+.votes .vote-count .marker {
   color: hsl(44, 68%, 80%);
 }
 
