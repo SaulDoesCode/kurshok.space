@@ -191,10 +191,10 @@ const publicPost = w => div({
         div(
             div({class: 'posted'}, app.renderUXTimestamp(w.posted)),
             div({class: 'tags'},
-                w.tags.map(t => {
-                    const small = t.length > 11
-                    return span({class: {tag: true, small}, attr: {title: t}}, t)
-                })
+                w.tags.map(t => span({
+                    class: 'tag',
+                    attr: {title: t}
+                }, t))
             )
         )
     )

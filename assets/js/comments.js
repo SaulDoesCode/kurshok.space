@@ -150,7 +150,6 @@ app.on.postRendered(async post => {
 
     const fcRes = await app.fetchComments(post.id)
     if (!fcRes.ok) return
-    console.log(fcRes)
     const commentTrees = fcRes.data
     const commentList = []
 
