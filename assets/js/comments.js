@@ -64,7 +64,7 @@ app.makeComment = async (
     return await res.json()
 }
 
-const commentsDisplay = section({
+const commentsDisplay = app.commentsDisplay = section({
     $: app.postDisplay,
     class: 'comments'
 }, cd => [

@@ -67,6 +67,7 @@ route.on.post(async hash => {
     post.tags.map(tag => df.span({$: tags, attr:{title: tag}, class:'tag'}, tag))
     author.textContent = 'By ' + post.author_name
     content.innerHTML = 'Content loading...'
+    if (app.commentsDisplay) df.remove(app.commentsDisplay)
     df.prepend(mainView, postNavView)
     const postContent = await app.fetchPostContent(post.id)
     content.innerHTML = ''
