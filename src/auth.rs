@@ -723,7 +723,7 @@ pub async fn logout(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> Http
   let mut status = "successfully logged out";
   if let Some(auth_cookie) = req.cookie("auth") {
     let sess_id = auth_cookie.value().to_string();
-    if orc.sessions.remove(sess_id.as_bytes()).is_ok() && orc.authcache.remove_session(&sess_id) {
+    if orc.sessions.remove(sess_id.as_bytes()).is_err() || !orc.authcache.remove_session(&sess_id) {
       status = "login was already bad or expired, no worries";
     }
   }
