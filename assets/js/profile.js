@@ -16,6 +16,7 @@ app.profileViewToggle = app.setupToggleSituation(profileLauncher, app.profileVie
 
 d.once.click(logoutBtn, async e => {
     const res = await (await fetch('/auth', {method: 'DELETE'})).json()
-    console.log(res)
-    window.location.reload()
+    df.remove(logoutBtn)
+    profileView.append(df.div(res.status))
+    setTimeout(() => window.location.reload(), 1000)
 })
