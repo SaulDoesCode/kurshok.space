@@ -297,6 +297,18 @@
     top: 5vh;
 }
 
+.profile-view button {
+    background: hsl(0, 0%, 98%);
+    color: hsl(0, 0%, 25%);
+    border: 1px solid hsl(0, 0%, 80%);
+    margin: .75em;
+    cursor: pointer;
+}
+
+.profile-view button:hover {
+    background: hsl(0, 0%, 92%);
+}
+
 @media all and (max-width: 500px) {
     .writ-writer-view {
         display: flex;
