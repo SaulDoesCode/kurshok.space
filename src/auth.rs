@@ -17,7 +17,7 @@ use std::sync::{
 };
 
 use super::CONF;
-use crate::orchestrator::Orchestrator;
+use crate::orchestrator::{Orchestrator, ORC};
 use crate::utils::{
   is_email_ok,
   // datetime_from_unix_timestamp,
@@ -719,11 +719,11 @@ pub struct AuthRequest {
 }
 
 #[delete("/auth")]
-pub async fn logout(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> HttpResponse {
+pub async fn logout(req: HttpRequest) -> HttpResponse {
   let mut status = "successfully logged out";
   if let Some(auth_cookie) = req.cookie("auth") {
     let sess_id = auth_cookie.value().to_string();
-    if orc.sessions.remove(sess_id.as_bytes()).is_err() || !orc.authcache.remove_session(&sess_id) {
+    if ORC.sessions.remove(sess_id.as_bytes()).is_err() || !ORC.authcache.remove_session(&sess_id) {
       status = "login was already bad or expired, no worries";
     }
   }
@@ -734,27 +734,26 @@ pub async fn logout(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> Http
 
 pub fn renew_session_cookie<'c>(
   req: &HttpRequest,
-  how_far_to_expiry: Duration,
-  orc: web::Data<Arc<Orchestrator>>,
+  how_far_to_expiry: Duration
 ) -> Option<Cookie<'c>> {
   if let Some(auth_cookie) = req.cookie("auth") {
     let sess_id = auth_cookie.value();
-    if let Ok(Some(raw)) = orc.sessions.get(sess_id.as_bytes()) {
+    if let Ok(Some(raw)) = ORC.sessions.get(sess_id.as_bytes()) {
       let session = UserSession::try_from_slice(&raw).unwrap();
       if session.close_to_expiry(how_far_to_expiry) {
-        if orc.sessions.remove(sess_id.as_bytes()).is_ok() {
-          if let Ok(sess_id) = orc.setup_session(session.usr_id) {
-            return Some(if !orc.dev_mode {
+        if ORC.sessions.remove(sess_id.as_bytes()).is_ok() {
+          if let Ok(sess_id) = ORC.setup_session(session.usr_id) {
+            return Some(if !ORC.dev_mode {
               Cookie::build("auth", sess_id.clone())
                 .domain(CONF.read().domain.clone())
-                .max_age(time::Duration::seconds(orc.expiry_tll))
+                .max_age(time::Duration::seconds(ORC.expiry_tll))
                 .http_only(true)
                 .secure(true)
                 .finish()
             } else {
               Cookie::build("auth", sess_id.clone())
                 .http_only(true)
-                .max_age(time::Duration::seconds(orc.expiry_tll))
+                .max_age(time::Duration::seconds(ORC.expiry_tll))
                 .finish()
             });
           }
@@ -765,29 +764,25 @@ pub fn renew_session_cookie<'c>(
   None
 }
 
-pub async fn login(
-  usr_id: String,
-  first_time: bool,
-  orc: web::Data<Arc<Orchestrator>>,
-) -> HttpResponse {
-  let token = match orc.setup_session(usr_id) {
+pub async fn login(usr_id: String, first_time: bool) -> HttpResponse {
+  let token = match ORC.setup_session(usr_id) {
     Ok(t) => t,
     Err(e) => {
       return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
     }
   };
 
-  let cookie = if !orc.dev_mode {
+  let cookie = if !ORC.dev_mode {
     Cookie::build("auth", token)
       .domain(CONF.read().domain.clone())
-      .max_age(time::Duration::seconds(orc.expiry_tll))
+      .max_age(time::Duration::seconds(ORC.expiry_tll))
       .http_only(true)
       .secure(true)
       .finish()
   } else {
     Cookie::build("auth", token)
       .http_only(true)
-      .max_age(time::Duration::seconds(orc.expiry_tll))
+      .max_age(time::Duration::seconds(ORC.expiry_tll))
       .finish()
   };
 
@@ -801,11 +796,8 @@ pub async fn login(
 }
 
 #[get("/auth")]
-pub async fn check_authentication(
-  req: HttpRequest,
-  orc: web::Data<Arc<Orchestrator>>,
-) -> HttpResponse {
-  if orc.is_valid_session(&req) {
+pub async fn check_authentication(req: HttpRequest) -> HttpResponse {
+  if ORC.is_valid_session(&req) {
     return crate::responses::Accepted("authenticated");
   }
   crate::responses::Forbidden("not authenticated")
@@ -815,7 +807,6 @@ pub async fn check_authentication(
 pub async fn auth_attempt(
   req: HttpRequest,
   ar: web::Json<AuthRequest>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   let (username, pwd) = (ar.username.as_str(), ar.password.as_str());
 
@@ -828,18 +819,16 @@ pub async fn auth_attempt(
     return crate::responses::BadRequest("malformed password");
   }
 
-  if let Some(usr) = orc.user_by_session(&req) {
+  if let Some(usr) = ORC.user_by_session(&req) {
     return crate::responses::Accepted(format!(
       "Hey {}, you're already authenticated.",
       usr.username
     ));
   }
 
-  let hitter = req
-    .peer_addr()
+  let hitter = req.peer_addr()
     .map_or(username.to_string(), |a| format!("{}{}", username, a));
-  if let Some(rl) = orc
-    .ratelimiter
+  if let Some(rl) = ORC.ratelimiter
     .hit(hitter.as_bytes(), 3, Duration::minutes(2))
   {
     if rl.is_timing_out() {
@@ -850,19 +839,19 @@ pub async fn auth_attempt(
     }
   }
 
-  if orc.username_taken(username) {
-    if let Some(usr) = orc.authenticate(username, pwd) {
-      orc.ratelimiter.forget(hitter.as_bytes());
-      return login(usr.id.clone(), false, orc.clone()).await;
+  if ORC.username_taken(username) {
+    if let Some(usr) = ORC.authenticate(username, pwd) {
+      ORC.ratelimiter.forget(hitter.as_bytes());
+      return login(usr.id.clone(), false).await;
     }
     return crate::responses::BadRequest(
       "either your password is wrong or the username is already taken.",
     );
   }
 
-  if let Some(usr) = orc.create_user(ar.into_inner()) {
-    orc.ratelimiter.forget(hitter.as_bytes());
-    return login(usr.id.clone(), true, orc).await;
+  if let Some(usr) = ORC.create_user(ar.into_inner()) {
+    ORC.ratelimiter.forget(hitter.as_bytes());
+    return login(usr.id.clone(), true).await;
   }
 
   crate::responses::Forbidden("not working, we might be under attack")
@@ -877,11 +866,10 @@ pub struct AdministralityRequest {
 pub async fn administer_administrality(
   req: HttpRequest,
   ar: web::Json<AdministralityRequest>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> impl Responder {
   if CONF.read().admin_key == ar.key {
-    if let Some(ref mut usr) = orc.user_by_session(&req) {
-      if orc.make_admin(&usr.id, 0, Some("passed administrality".to_string())) {
+    if let Some(ref mut usr) = ORC.user_by_session(&req) {
+      if ORC.make_admin(&usr.id, 0, Some("passed administrality".to_string())) {
         return crate::responses::Accepted("Congratulations, you are now an admin.");
       }
       return crate::responses::InternalServerError(format!(
@@ -890,8 +878,7 @@ pub async fn administer_administrality(
       ));
     } else if let Some(remote_addr) = req.connection_info().remote_addr() {
       let hitter = format!("aA{}", remote_addr);
-      if let Some(rl) = orc
-        .ratelimiter
+      if let Some(rl) = ORC.ratelimiter
         .hit(hitter.as_bytes(), 2, Duration::minutes(60))
       {
         if rl.is_timing_out() {
@@ -904,8 +891,7 @@ pub async fn administer_administrality(
     }
   } else if let Some(auth_cookie) = req.cookie("auth") {
     let hitter = format!("aA{}", auth_cookie.value());
-    if let Some(rl) = orc
-      .ratelimiter
+    if let Some(rl) = ORC.ratelimiter
       .hit(hitter.as_bytes(), 2, Duration::minutes(60))
     {
       if rl.is_timing_out() {
@@ -917,8 +903,7 @@ pub async fn administer_administrality(
     }
   } else if let Some(remote_addr) = req.connection_info().remote_addr() {
     let hitter = format!("aA{}", remote_addr);
-    if let Some(rl) = orc
-      .ratelimiter
+    if let Some(rl) = ORC.ratelimiter
       .hit(hitter.as_bytes(), 2, Duration::minutes(60))
     {
       if rl.is_timing_out() {
@@ -934,12 +919,9 @@ pub async fn administer_administrality(
 }
 
 #[delete("/administrality")]
-pub async fn remove_administrality(
-  req: HttpRequest,
-  orc: web::Data<Arc<Orchestrator>>,
-) -> HttpResponse {
-  if let Some(ref mut usr) = orc.admin_by_session(&req) {
-    if orc.revoke_admin(&usr.id) {
+pub async fn remove_administrality(req: HttpRequest) -> HttpResponse {
+  if let Some(ref mut usr) = ORC.admin_by_session(&req) {
+    if ORC.revoke_admin(&usr.id) {
       return crate::responses::Accepted(format!(
         "Sorry {}, you've lost your adminstrality.",
         usr.username
@@ -950,11 +932,8 @@ pub async fn remove_administrality(
 }
 
 #[get("/administrality")]
-pub async fn check_administrality(
-  req: HttpRequest,
-  orc: web::Data<Arc<Orchestrator>>,
-) -> HttpResponse {
-  if orc.is_valid_admin_session(&req) {
+pub async fn check_administrality(req: HttpRequest) -> HttpResponse {
+  if ORC.is_valid_admin_session(&req) {
     return crate::responses::Accepted("Genuine admin");
   }
   crate::responses::Forbidden("Silly impostor, you are not admin")

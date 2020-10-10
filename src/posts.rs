@@ -1,30 +1,27 @@
-use std::sync::Arc;
-
 use actix_web::{get, web, HttpRequest, HttpResponse};
 use tera::Context;
 use time::Duration;
 
 use super::TEMPLATES;
 
-use crate::orchestrator::Orchestrator;
+use crate::orchestrator::ORC;
 use crate::utils::FancyIVec;
 use crate::writs::WritQuery;
 
 #[get("/post/{author_id}:{writ_id}")]
 pub async fn render_post(
     id_parts: web::Path<(u64, u64)>,
-    orc: web::Data<Arc<Orchestrator>>,
     req: HttpRequest,
 ) -> HttpResponse {
     let (author_id, writ_unique_id) = id_parts.into_inner();
     let writ_id = format!("post:{}:{}", author_id, writ_unique_id);
 
-    let (o_usr, potential_renewal_cookie) = orc.user_by_session_renew(&req, Duration::days(3));
+    let (o_usr, potential_renewal_cookie) = ORC.user_by_session_renew(&req, Duration::days(3));
 
     let mut ctx = Context::new();
     if let Some(usr) = &o_usr {
         ctx.insert("username", &usr.username);
-        ctx.insert("dev_mode", &orc.dev_mode);
+        ctx.insert("dev_mode", &ORC.dev_mode);
     }
 
     let mut query = WritQuery::default();
@@ -32,13 +29,13 @@ pub async fn render_post(
     query.public = Some(true);
     query.amount = Some(1);
 
-    let public_writ = match orc.public_writ_query(query, o_usr.as_ref().map(|el| el.value())) {
+    let public_writ = match ORC.public_writ_query(query, o_usr.as_ref().map(|el| el.value())) {
         Some(mut writs) => writs.pop().unwrap(),
         None => {
             return render_404(
                 &mut ctx,
                 "We couldn't find any posts with that id.",
-                orc.dev_mode,
+                ORC.dev_mode,
             )
         }
     };
@@ -53,30 +50,29 @@ pub async fn render_post(
             Some(c) => res.cookie(c),
             None => &mut res,
         },
-        orc.dev_mode,
+        ORC.dev_mode,
     )
 }
 
 #[get("/post/{slug}")]
 pub async fn render_post_by_slug(
     slug: web::Path<String>,
-    orc: web::Data<Arc<Orchestrator>>,
     req: HttpRequest,
 ) -> HttpResponse {
     let mut ctx = Context::new();
 
     let slug_key = format!("post:{}", slug.into_inner());
-    let writ_id = if let Ok(Some(writ_id)) = orc.slugs.get(slug_key.as_bytes()) {
+    let writ_id = if let Ok(Some(writ_id)) = ORC.slugs.get(slug_key.as_bytes()) {
         writ_id.to_string()
     } else {
         return render_404(
             &mut ctx,
             "That's a bad slug, we couldn't find any posts matching it.",
-            orc.dev_mode,
+            ORC.dev_mode,
         );
     };
 
-    let (o_usr, potential_renewal_cookie) = orc.user_by_session_renew(&req, Duration::days(3));
+    let (o_usr, potential_renewal_cookie) = ORC.user_by_session_renew(&req, Duration::days(3));
 
     if let Some(usr) = &o_usr {
         ctx.insert("username", &usr.username);
@@ -87,7 +83,7 @@ pub async fn render_post_by_slug(
     query.public = Some(true);
     query.amount = Some(1);
 
-    let public_writ = match orc.public_writ_query(query, o_usr.as_ref().map(|el| el.value())) {
+    let public_writ = match ORC.public_writ_query(query, o_usr.as_ref().map(|el| el.value())) {
         Some(mut writs) => writs.pop().unwrap(),
         None => {
             return HttpResponse::NotFound()
@@ -106,7 +102,7 @@ pub async fn render_post_by_slug(
             Some(c) => res.cookie(c),
             None => &mut res,
         },
-        orc.dev_mode,
+        ORC.dev_mode,
     )
 }
 

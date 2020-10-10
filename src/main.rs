@@ -21,14 +21,14 @@ use actix_files::NamedFile;
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::BufReader, sync::Arc};
+use std::{fs::File, io::BufReader};
 use tera::{Context, Tera};
 use time::Duration;
 
 use rustls::internal::pemfile::{certs, pkcs8_private_keys};
 use rustls::{NoClientAuth, ServerConfig};
 
-use orchestrator::Orchestrator;
+use orchestrator::ORC;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -96,14 +96,9 @@ async fn main() -> std::io::Result<()> {
         std::process::exit(1);
     }
 
-    let orc = Arc::new(Orchestrator::new(60 * 60 * 24 * 7 * 2));
-
-    let orc_clone = orc.clone();
-
     let app_server = HttpServer::new(move || {
         App::new()
             .wrap(actix_web::middleware::Compress::default())
-            .data(orc_clone.clone())
             .service(index)
             .service(auth::check_authentication)
             .service(auth::auth_attempt)
@@ -177,15 +172,15 @@ lazy_static! {
 }
 
 #[get("/")]
-async fn index(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> impl Responder {
+async fn index(req: HttpRequest) -> impl Responder {
     let mut ctx = Context::new();
-    let (o_usr, potential_renewal_cookie) = orc.user_by_session_renew(&req, Duration::days(3));
+    let (o_usr, potential_renewal_cookie) = ORC.user_by_session_renew(&req, Duration::days(3));
     if let Some(usr) = o_usr {
         ctx.insert("username", &usr.username);
-        ctx.insert("dev_mode", &orc.dev_mode);
+        ctx.insert("dev_mode", &ORC.dev_mode);
         ctx.insert(
             "is_writer",
-            &orc.user_has_some_attrs(&usr.id, &["writer", "admin"])
+            &ORC.user_has_some_attrs(&usr.id, &["writer", "admin"])
                 .unwrap_or(false),
         );
     }
@@ -199,7 +194,7 @@ async fn index(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> impl Resp
             None => HttpResponse::Ok().content_type("text/html").body(s),
         },
         Err(err) => {
-            if orc.dev_mode {
+            if ORC.dev_mode {
                 HttpResponse::InternalServerError()
                     .content_type("text/plain")
                     .body(&format!("index.html template is broken - error : {}", err))
@@ -213,11 +208,11 @@ async fn index(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> impl Resp
 }
 
 #[get("/admin")]
-async fn admin_panel(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> HttpResponse {
+async fn admin_panel(req: HttpRequest) -> HttpResponse {
     let mut ctx = Context::new();
-    if let Some(usr) = orc.admin_by_session(&req) {
+    if let Some(usr) = ORC.admin_by_session(&req) {
         ctx.insert("username", &usr.username);
-        ctx.insert("dev_mode", &orc.dev_mode);
+        ctx.insert("dev_mode", &ORC.dev_mode);
     } else {
         return HttpResponse::Found()
             .header(actix_web::http::header::LOCATION, "/admin-gateway")
@@ -234,11 +229,11 @@ async fn admin_panel(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> Htt
 }
 
 #[get("/admin-gateway")]
-async fn admin_gateway(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> HttpResponse {
+async fn admin_gateway(req: HttpRequest) -> HttpResponse {
     let mut ctx = Context::new();
-    if let Some(usr) = orc.user_by_session(&req) {
+    if let Some(usr) = ORC.user_by_session(&req) {
         ctx.insert("username", &usr.username);
-        ctx.insert("dev_mode", &orc.dev_mode);
+        ctx.insert("dev_mode", &ORC.dev_mode);
     } else {
         return HttpResponse::Found()
             .header(actix_web::http::header::LOCATION, "/")
@@ -254,10 +249,7 @@ async fn admin_gateway(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> H
 }
 
 #[get("/*")]
-async fn serve_files_and_templates(
-    req: HttpRequest,
-    orc: web::Data<Arc<Orchestrator>>,
-) -> HttpResponse {
+async fn serve_files_and_templates(req: HttpRequest) -> HttpResponse {
     let path: &str = req.path();
     if path.ends_with("/") {
         return HttpResponse::Found()
@@ -270,7 +262,7 @@ async fn serve_files_and_templates(
     }
 
     if path.contains("admin") {
-        if let Some(usr) = orc.admin_by_session(&req) {
+        if let Some(usr) = ORC.admin_by_session(&req) {
             let asset_dir = format!("./assets{}", path);
             if let Ok(file) = NamedFile::open(&asset_dir) {
                 if let Ok(file_response) = file.into_response(&req) {
@@ -290,7 +282,7 @@ async fn serve_files_and_templates(
 
             let mut ctx = Context::new();
             ctx.insert("username", &usr.username);
-            ctx.insert("dev_mode", &orc.dev_mode);
+            ctx.insert("dev_mode", &ORC.dev_mode);
 
             if is_js && name.contains("admin-do-ddns") {
                 let do_token: String = CONF.read().do_token.clone();
@@ -322,7 +314,7 @@ async fn serve_files_and_templates(
         }
 
         let mut ctx = Context::new();
-        ctx.insert("dev_mode", &orc.dev_mode);
+        ctx.insert("dev_mode", &ORC.dev_mode);
 
         if let Ok(s) = TEMPLATES.read().render(&name, &ctx) {
             return HttpResponse::Ok()

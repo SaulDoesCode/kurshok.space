@@ -6,6 +6,10 @@ use super::CONF;
 use crate::ratelimiter::RateLimiter;
 use crate::utils::generate_random_bytes;
 
+lazy_static! {
+  pub static ref ORC: Orchestrator = Orchestrator::new(60 * 60 * 24 * 7 * 2);
+}
+
 pub struct Orchestrator {
   // auth
   pub db: Db,

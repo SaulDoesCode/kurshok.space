@@ -4,11 +4,11 @@ use itertools::Itertools;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sled::{transaction::*, IVec, Transactional};
-use std::{cell::Cell, collections::HashMap, sync::Arc};
+use std::{cell::Cell, collections::HashMap};
 use time::Duration;
 
 use crate::auth::User;
-use crate::orchestrator::Orchestrator;
+use crate::orchestrator::ORC;
 use crate::utils::{
   datetime_from_unix_timestamp, i64_is_zero, render_md, unix_timestamp, FancyBool, FancyIVec,
 };
@@ -54,38 +54,29 @@ impl Comment {
     }
   }
 
-  pub fn from_id(orc: &Orchestrator, id: &[u8]) -> Option<Comment> {
-    match orc.comments.get(id) {
+  pub fn from_id(id: &[u8]) -> Option<Comment> {
+    match ORC.comments.get(id) {
       Ok(c) => c.map(|raw| Comment::try_from_slice(&raw).unwrap()),
       Err(_) => None,
     }
   }
 
-  pub fn key_path(&self, orc: &Orchestrator) -> Option<String> {
-    if let Ok(Some(raw)) = orc.comment_key_path_index.get(self.id.as_bytes()) {
+  pub fn key_path(&self) -> Option<String> {
+    if let Ok(Some(raw)) = ORC.comment_key_path_index.get(self.id.as_bytes()) {
       return Some(raw.to_string());
     }
     None
   }
 
-  pub fn new_first_level_id(
-    orc: &Orchestrator,
-    writ_id: &str,
-    usr_id: &str,
-  ) -> Option<(String, String)> {
-    if let Ok(uid) = orc.generate_id(writ_id.as_bytes()) {
+  pub fn new_first_level_id(writ_id: &str, usr_id: &str) -> Option<(String, String)> {
+    if let Ok(uid) = ORC.generate_id(writ_id.as_bytes()) {
       let own_id = format!("{}:{}", usr_id, uid);
       return Some((format!("{}/{}", writ_id, own_id), own_id));
     }
     None
   }
-  pub fn new_subcomment_id(
-    orc: &Orchestrator,
-    writ_id: &str,
-    parent_id: &str,
-    usr_id: &str,
-  ) -> Option<(String, String)> {
-    if let Ok(uid) = orc.generate_id(writ_id.as_bytes()) {
+  pub fn new_subcomment_id(writ_id: &str, parent_id: &str, usr_id: &str) -> Option<(String, String)> {
+    if let Ok(uid) = ORC.generate_id(writ_id.as_bytes()) {
       let own_id = format!("{}:{}", usr_id, uid);
       return Some((format!("{}/{}", parent_id, own_id), own_id));
     }
@@ -114,19 +105,19 @@ impl Comment {
     format!("{}<{}", self.id, usr_id)
   }
 
-  pub fn public(self, orc: &Orchestrator, usr_id: &Option<String>) -> Option<PublicComment> {
+  pub fn public(self, usr_id: &Option<String>) -> Option<PublicComment> {
     Some(PublicComment {
       posted: self.posted,
       edited: self.edited.wrap(),
       author_only: self.author_only.wrap(),
       you_voted: match usr_id {
-        Some(id) => match orc.comment_voters.get(self.vote_id(id).as_bytes()) {
+        Some(id) => match ORC.comment_voters.get(self.vote_id(id).as_bytes()) {
           Ok(cv) => cv.map(|raw| Vote::try_from_slice(&raw).unwrap().up),
           Err(_) => None,
         },
         None => None,
       },
-      vote: if let Ok(Some(raw)) = orc.comment_votes.get(self.id.as_bytes()) {
+      vote: if let Ok(Some(raw)) = ORC.comment_votes.get(self.id.as_bytes()) {
         raw.to_i64()
       } else {
         return None;
@@ -149,19 +140,19 @@ impl Comment {
     }
   }
 
-  pub fn delete(&self, orc: &Orchestrator) -> bool {
+  pub fn delete(&self) -> bool {
     let deleted_comment = self.default_deleted();
     let res: TransactionResult<(), ()> = (
-      &orc.comment_voters,
-      &orc.comments,
-      &orc.comment_raw_content,
-      &orc.comment_votes,
+      &ORC.comment_voters,
+      &ORC.comments,
+      &ORC.comment_raw_content,
+      &ORC.comment_votes,
     )
       .transaction(|(voters, comments, comment_raw_content, votes)| {
         comments.insert(self.id.as_bytes(), deleted_comment.try_to_vec().unwrap())?;
         comment_raw_content.remove(self.id.as_bytes())?;
         votes.remove(self.id.as_bytes())?;
-        let mut iter = orc.comment_voters.scan_prefix(self.id.as_bytes());
+        let mut iter = ORC.comment_voters.scan_prefix(self.id.as_bytes());
         while let Some(pair) = iter.next() {
           voters.remove(pair?.1)?;
         }
@@ -174,11 +165,11 @@ impl Comment {
     self.id.matches(":").count() > 1
   }
 
-  pub fn get_root_comment_id(&self, orc: &Orchestrator) -> Option<String> {
+  pub fn get_root_comment_id(&self) -> Option<String> {
     if self.id.matches(":").count() > 1 {
       return Some(self.id.clone());
     }
-    if let Ok(Some(raw_key)) = orc.comment_key_path_index.get(self.id.as_bytes()) {
+    if let Ok(Some(raw_key)) = ORC.comment_key_path_index.get(self.id.as_bytes()) {
       let full_id = raw_key.to_string();
       let mut parts: Vec<&str> = full_id.split('/').filter(|&c| c != "").collect();
       let root_id = parts.drain(..2).join("/");
@@ -187,7 +178,7 @@ impl Comment {
     None
   }
 
-  pub fn get_root_comment_id_and_path(&self, orc: &Orchestrator) -> Option<(String, Vec<String>)> {
+  pub fn get_root_comment_id_and_path(&self) -> Option<(String, Vec<String>)> {
     if self.id.matches(":").count() > 1 {
       return Some((self.id.clone(), {
         self
@@ -199,7 +190,7 @@ impl Comment {
       }));
     }
 
-    if let Ok(Some(raw_key)) = orc.comment_key_path_index.get(self.id.as_bytes()) {
+    if let Ok(Some(raw_key)) = ORC.comment_key_path_index.get(self.id.as_bytes()) {
       let full_id = raw_key.to_string();
       let mut parts: Vec<&str> = full_id.split('/').filter(|&c| c != "").collect();
       let path = parts.iter().map(|p| p.to_string()).collect::<Vec<String>>();
@@ -209,15 +200,15 @@ impl Comment {
     None
   }
 
-  pub fn get_root_comment(&self, orc: &Orchestrator) -> Option<Comment> {
+  pub fn get_root_comment(&self) -> Option<Comment> {
     if self.id.matches(":").count() > 1 {
       return Some(self.clone());
     }
-    if let Ok(Some(raw_key)) = orc.comment_key_path_index.get(self.id.as_bytes()) {
+    if let Ok(Some(raw_key)) = ORC.comment_key_path_index.get(self.id.as_bytes()) {
       let full_id = raw_key.to_string();
       let mut parts: Vec<&str> = full_id.split('/').filter(|&c| c != "").collect();
       let root_id = parts.drain(..2).join("/");
-      if let Ok(c) = orc.comments.get(root_id.as_bytes()) {
+      if let Ok(c) = ORC.comments.get(root_id.as_bytes()) {
         return c.map(|raw| Comment::try_from_slice(&raw).unwrap());
       }
     }
@@ -226,7 +217,6 @@ impl Comment {
 
   pub fn remove_in_transaction(
     &self,
-    orc: &Orchestrator,
     kpi: &TransactionalTree,
     ctrees: &TransactionalTree,
     comments: &TransactionalTree,
@@ -267,7 +257,7 @@ impl Comment {
           if let Some(raw_child_comment) = comments.get(cidtree.comment.as_bytes())? {
             let child_comment: Comment = Comment::try_from_slice(&raw_child_comment).unwrap();
             child_comment.remove_in_transaction(
-              orc,
+              
               kpi,
               ctrees,
               comments,
@@ -282,7 +272,6 @@ impl Comment {
         if let Some(raw_child_comment) = comments.get(child_cidtree.comment.as_bytes())? {
           let child_comment = Comment::try_from_slice(&raw_child_comment).unwrap();
           child_comment.remove_in_transaction(
-            orc,
             kpi,
             ctrees,
             comments,
@@ -304,7 +293,7 @@ impl Comment {
       } else {
         return Err(sled::transaction::ConflictableTransactionError::Abort(()));
       }
-      let mut iter = orc.comment_voters.scan_prefix(self.id.as_bytes());
+      let mut iter = ORC.comment_voters.scan_prefix(self.id.as_bytes());
       while let Some(pair) = iter.next() {
         voters.remove(pair?.0)?;
       }
@@ -316,25 +305,25 @@ impl Comment {
     Err(sled::transaction::ConflictableTransactionError::Abort(()))
   }
 
-  pub fn remove(&self, orc: &Orchestrator) -> bool {
+  pub fn remove(&self) -> bool {
     (
-      &orc.comment_key_path_index,
-      &orc.comment_trees,
-      &orc.comments,
-      &orc.comment_raw_content,
-      &orc.comment_voters,
-      &orc.comment_votes,
+      &ORC.comment_key_path_index,
+      &ORC.comment_trees,
+      &ORC.comments,
+      &ORC.comment_raw_content,
+      &ORC.comment_voters,
+      &ORC.comment_votes,
     )
       .transaction(|(kpi, ctrees, comments, raw_contents, voters, votes)| {
-        self.remove_in_transaction(orc, kpi, ctrees, comments, raw_contents, voters, votes)?;
+        self.remove_in_transaction(kpi, ctrees, comments, raw_contents, voters, votes)?;
         Ok(())
       })
       .is_ok()
   }
 
-  pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: Option<bool>) -> Option<i64> {
+  pub fn vote(&self, usr_id: &str, up: Option<bool>) -> Option<i64> {
     let res: TransactionResult<i64, ()> =
-      (&orc.comment_votes, &orc.comment_voters).transaction(|(votes, voters)| {
+      (&ORC.comment_votes, &ORC.comment_voters).transaction(|(votes, voters)| {
         let vote_id = self.vote_id(usr_id);
         let mut count: i64 = 0;
         if let Some(raw) = voters.get(vote_id.as_bytes())? {
@@ -392,7 +381,7 @@ impl Comment {
     match res {
       Ok(count) => Some(count),
       Err(e) => {
-        if orc.dev_mode {
+        if ORC.dev_mode {
           println!("Something bad went down with voting - {:?}", e);
         }
         None
@@ -400,27 +389,26 @@ impl Comment {
     }
   }
 
-  pub fn upvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
-    self.vote(orc, usr_id, Some(true))
+  pub fn upvote(&self, usr_id: &str) -> Option<i64> {
+    self.vote(usr_id, Some(true))
   }
 
-  pub fn downvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
-    self.vote(orc, usr_id, Some(false))
+  pub fn downvote(&self, usr_id: &str) -> Option<i64> {
+    self.vote(usr_id, Some(false))
   }
 
-  pub fn unvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
-    self.vote(orc, usr_id, None)
+  pub fn unvote(&self, usr_id: &str) -> Option<i64> {
+    self.vote(usr_id, None)
   }
 }
 
 pub fn comment_on_writ(
-  orc: &Orchestrator,
   writ: &Writ,
   usr: &User,
   raw_content: String,
   author_only: bool,
 ) -> Option<Comment> {
-  if let Some(settings) = writ.comment_settings(orc) {
+  if let Some(settings) = writ.comment_settings() {
     if let Some(max_len) = settings.max_comment_length {
       if raw_content.len() > max_len as usize {
         return None;
@@ -434,7 +422,7 @@ pub fn comment_on_writ(
 
     let content = render_md(&raw_content);
 
-    let (id, _own_id) = match Comment::new_first_level_id(orc, &writ.id, &usr.id) {
+    let (id, _own_id) = match Comment::new_first_level_id(&writ.id, &usr.id) {
       Some(i) => i,
       None => return None,
     };
@@ -443,10 +431,10 @@ pub fn comment_on_writ(
     comment.author_only = author_only;
 
     let res: TransactionResult<(), ()> = (
-      &orc.comment_trees,
-      &orc.comments,
-      &orc.comment_raw_content,
-      &orc.comment_votes,
+      &ORC.comment_trees,
+      &ORC.comments,
+      &ORC.comment_raw_content,
+      &ORC.comment_votes,
     )
       .transaction(|(comment_trees, comments, comment_raw_content, votes)| {
         let cidtree = CommentIDTree {
@@ -469,7 +457,6 @@ pub fn comment_on_writ(
 }
 
 pub fn comment_on_comment(
-  orc: &Orchestrator,
   settings: &CommentSettings,
   parent_comment: &Comment,
   usr: &User,
@@ -490,7 +477,7 @@ pub fn comment_on_comment(
 
   let parent_id = if parent_comment.id.contains('/') {
     parent_comment.id.clone()
-  } else if let Some(id) = parent_comment.key_path(orc) {
+  } else if let Some(id) = parent_comment.key_path() {
     id
   } else {
     return None;
@@ -505,7 +492,7 @@ pub fn comment_on_comment(
 
   let content = render_md(&raw_content);
 
-  let (id, own_id) = match Comment::new_subcomment_id(orc, &writ_id, &parent_id, &usr.id) {
+  let (id, own_id) = match Comment::new_subcomment_id(&writ_id, &parent_id, &usr.id) {
     Some(i) => i,
     None => return None,
   };
@@ -514,11 +501,11 @@ pub fn comment_on_comment(
   comment.author_only = author_only;
 
   if (
-    &orc.comment_key_path_index,
-    &orc.comment_trees,
-    &orc.comments,
-    &orc.comment_raw_content,
-    &orc.comment_votes,
+    &ORC.comment_key_path_index,
+    &ORC.comment_trees,
+    &ORC.comments,
+    &ORC.comment_raw_content,
+    &ORC.comment_votes,
   )
     .transaction(
       |(kpi, comment_trees, comments, comment_raw_content, votes)| {
@@ -570,12 +557,11 @@ pub struct CommentTree {
 impl CommentTree {
   pub fn public(
     self,
-    orc: &Orchestrator,
     usr_id: &Option<String>,
     top_level: bool,
   ) -> Option<PublicCommentTree> {
     Some(PublicCommentTree {
-      comment: match self.comment.public(orc, usr_id) {
+      comment: match self.comment.public(usr_id) {
         Some(pc) => pc,
         None => return None,
       },
@@ -583,13 +569,13 @@ impl CommentTree {
         self
           .children
           .into_par_iter()
-          .filter_map(|c| c.public(orc, usr_id, false))
+          .filter_map(|c| c.public(usr_id, false))
           .collect()
       } else {
         self
           .children
           .into_iter()
-          .filter_map(|c| c.public(orc, usr_id, false))
+          .filter_map(|c| c.public(usr_id, false))
           .collect()
       },
     })
@@ -689,7 +675,6 @@ impl CommentIDTree {
 
   fn to_comment_tree(
     &self,
-    orc: &Orchestrator,
     query: &CommentQuery,
     is_top_level: bool,
   ) -> Option<CommentTree> {
@@ -727,7 +712,7 @@ impl CommentIDTree {
       }
     }
 
-    if let Ok(Some(val)) = orc.comments.get(self.comment.as_bytes()) {
+    if let Ok(Some(val)) = ORC.comments.get(self.comment.as_bytes()) {
       let comment = Comment::try_from_slice(&val).unwrap();
       if check_query_conditions(query, &comment, &author_id) {
         return Some(CommentTree {
@@ -736,13 +721,13 @@ impl CommentIDTree {
             self
               .children
               .par_iter()
-              .filter_map(|(_, child)| child.to_comment_tree(orc, query, false))
+              .filter_map(|(_, child)| child.to_comment_tree(query, false))
               .collect()
           } else {
             self
               .children
               .iter()
-              .filter_map(|(_, child)| child.to_comment_tree(orc, query, false))
+              .filter_map(|(_, child)| child.to_comment_tree(query, false))
               .collect()
           },
         });
@@ -751,8 +736,8 @@ impl CommentIDTree {
     None
   }
 
-  /*pub fn to_comment_tree_sans_query(&self, orc: &Orchestrator) -> Option<CommentTree> {
-    if let Ok(res) = orc.comments.get(self.comment.as_bytes()) {
+  /*pub fn to_comment_tree_sans_query(&self) -> Option<CommentTree> {
+    if let Ok(res) = ORC.comments.get(self.comment.as_bytes()) {
       if let Some(val) = res {
         let comment: Comment = Comment::try_from_slice(&val).unwrap();
         return Some(CommentTree {
@@ -760,7 +745,7 @@ impl CommentIDTree {
           children: self
             .children
             .iter()
-            .filter_map(|(_, child)| child.to_comment_tree_sans_query(orc))
+            .filter_map(|(_, child)| child.to_comment_tree_sans_query())
             .collect(),
         });
       }
@@ -870,25 +855,21 @@ pub fn check_query_conditions(query: &CommentQuery, comment: &Comment, author_id
   true
 }
 
-pub async fn comment_query(
-  o_usr: Option<&User>,
-  mut query: CommentQuery,
-  orc: &Orchestrator,
-) -> Option<Vec<CommentTree>> {
+pub async fn comment_query(o_usr: Option<&User>, mut query: CommentQuery) -> Option<Vec<CommentTree>> {
   query.path = query.path.trim_end_matches("/").to_string();
   if query.path.is_empty() {
     return None;
   }
   let is_admin = if let Some(usr) = &o_usr {
     query.requestor_id = Some(usr.id.clone());
-    orc.is_admin(&usr.id)
+    ORC.is_admin(&usr.id)
   } else {
     false
   };
 
   if !query.path.contains('/') {
     if query.path.matches(':').count() == 1 {
-      if let Ok(Some(raw)) = orc.comment_key_path_index.get(query.path.as_bytes()) {
+      if let Ok(Some(raw)) = ORC.comment_key_path_index.get(query.path.as_bytes()) {
         query.path = raw.to_string();
       } else {
         return None;
@@ -920,7 +901,7 @@ pub async fn comment_query(
     query.path.clone()
   };
 
-  if let Ok(Some(val)) = orc.comment_settings.get(writ_id.as_bytes()) {
+  if let Ok(Some(val)) = ORC.comment_settings.get(writ_id.as_bytes()) {
     let settings = CommentSettings::try_from_slice(&val).unwrap();
     if !settings.public {
       if let Some(requestor_id) = &query.requestor_id {
@@ -947,12 +928,10 @@ pub async fn comment_query(
   if let Some(authors) = &query.authors {
     let mut ids: Vec<String> = authors
       .par_iter()
-      .filter_map(|a| {
-        orc
-          .usernames
-          .get(a.as_bytes())
+      .filter_map(|a| 
+        ORC.usernames.get(a.as_bytes())
           .map_or(None, |id| id.map(|id| id.to_string()))
-      })
+      )
       .collect();
 
     if let Some(author_ids) = &mut query.author_ids {
@@ -962,13 +941,13 @@ pub async fn comment_query(
     }
   } else if query.author_id.is_none() {
     if let Some(name) = &query.author_name {
-      if let Ok(Some(id)) = orc.usernames.get(name.as_bytes()) {
+      if let Ok(Some(id)) = ORC.usernames.get(name.as_bytes()) {
         query.author_id = Some(id.to_string());
       } else {
         return None;
       }
     } else if let Some(handle) = &query.author_handle {
-      if let Ok(Some(id)) = orc.handles.get(handle.as_bytes()) {
+      if let Ok(Some(id)) = ORC.handles.get(handle.as_bytes()) {
         query.author_id = Some(id.to_string());
       } else {
         return None;
@@ -986,7 +965,7 @@ pub async fn comment_query(
     return None;
   }
   let (mut tx, mut rx) = tokio::sync::mpsc::channel::<CommentIDTree>(amount as usize);
-  let mut iter = orc.comment_trees.scan_prefix(path.as_bytes());
+  let mut iter = ORC.comment_trees.scan_prefix(path.as_bytes());
   let page = query.page;
 
   tokio::spawn(async move {
@@ -1020,7 +999,7 @@ pub async fn comment_query(
 
   let mut comment_trees = Vec::with_capacity(10);
   while let Some(cit) = rx.recv().await {
-    if let Some(ct) = cit.to_comment_tree(orc, &query, true) {
+    if let Some(ct) = cit.to_comment_tree(&query, true) {
       comment_trees.push(ct);
     }
   }
@@ -1030,10 +1009,9 @@ pub async fn comment_query(
 #[post("/comments")]
 pub async fn post_comment_query(
   req: HttpRequest,
-  query: web::Json<CommentQuery>,
-  orc: web::Data<Arc<Orchestrator>>,
+  query: web::Json<CommentQuery>
 ) -> HttpResponse {
-  let o_usr = orc.user_by_session(&req);
+  let o_usr = ORC.user_by_session(&req);
   let usr_id = match &o_usr {
     Some(el) => Some(el.id.clone()),
     None => None,
@@ -1041,15 +1019,12 @@ pub async fn post_comment_query(
 
   match comment_query(
     o_usr.as_ref().map(|el| el.value()),
-    query.into_inner(),
-    orc.as_ref(),
-  )
-  .await
-  {
+    query.into_inner()
+  ).await{
     Some(comments) => crate::responses::Ok(
       comments
         .into_par_iter()
-        .filter_map(|c| c.public(orc.as_ref(), &usr_id, true))
+        .filter_map(|c| c.public(&usr_id, true))
         .collect::<Vec<PublicCommentTree>>(),
     ),
     None => crate::responses::NotFoundEmpty(),
@@ -1068,9 +1043,8 @@ pub struct RawComment {
 pub async fn make_comment(
   req: HttpRequest,
   rc: web::Json<RawComment>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  let o_usr = orc.user_by_session(&req);
+  let o_usr = ORC.user_by_session(&req);
   let usr = match &o_usr {
     Some(el) => el.value(),
     None => return crate::responses::BadRequest("only authorized users may post comments"),
@@ -1079,10 +1053,10 @@ pub async fn make_comment(
   let mut rc = rc.into_inner();
   rc.raw_content = rc.raw_content.trim().to_string();
 
-  if !orc.dev_mode {
+  if !ORC.dev_mode {
     /* hash contents and ratelimit with it to prevent spam
-    let hitter = orc.hash(rc.raw_content.as_bytes());
-    if let Some(rl) = orc.ratelimiter.hit(&hitter, 1, Duration::minutes(60)) {
+    let hitter = ORC.hash(rc.raw_content.as_bytes());
+    if let Some(rl) = ORC.ratelimiter.hit(&hitter, 1, Duration::minutes(60)) {
       if rl.is_timing_out() {
         return crate::responses::TooManyRequests(
           format!("don't copy existing comments, write your own")
@@ -1091,8 +1065,7 @@ pub async fn make_comment(
     }*/
 
     let hitter = format!("cmnt{}", usr.id);
-    if let Some(rl) = orc
-      .ratelimiter
+    if let Some(rl) = ORC.ratelimiter
       .hit(hitter.as_bytes(), 3, Duration::minutes(2))
     {
       if rl.is_timing_out() {
@@ -1105,27 +1078,26 @@ pub async fn make_comment(
   }
 
   if rc.parent_id.matches(':').count() == 1 || rc.parent_id.contains('/') {
-    return make_comment_on_comment(usr, rc, orc.as_ref()).await;
+    return make_comment_on_comment(usr, rc).await;
   }
-  make_comment_on_writ(usr, rc, orc.as_ref()).await
+  make_comment_on_writ(usr, rc).await
 }
 
 #[delete("/comment")]
 pub async fn delete_comment(
   req: HttpRequest,
   ctd: web::Json<String>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  let usr = match orc.user_by_session(&req) {
+  let usr = match ORC.user_by_session(&req) {
     Some(usr) => usr,
     None => {
       return crate::responses::Forbidden("You can't delete your comments if you're not logged in")
     }
   };
 
-  if let Some(comment) = Comment::from_id(orc.as_ref(), ctd.as_bytes()) {
+  if let Some(comment) = Comment::from_id(ctd.as_bytes()) {
     if usr.username == comment.author_name {
-      if comment.delete(orc.as_ref()) {
+      if comment.delete() {
         return crate::responses::BadRequest("comment successfully deleted");
       }
     } else {
@@ -1142,13 +1114,12 @@ pub async fn delete_comment(
 pub async fn upvote_comment(
   req: HttpRequest,
   id: web::Path<String>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   let id = id.replace("-", "/");
-  if let Some(raw) = orc.user_id_by_session(&req) {
+  if let Some(raw) = ORC.user_id_by_session(&req) {
     let usr_id = raw.to_string();
-    if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
-      if let Some(count) = comment.upvote(orc.as_ref(), &usr_id) {
+    if let Some(comment) = Comment::from_id(id.as_bytes()) {
+      if let Some(count) = comment.upvote(&usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1163,13 +1134,12 @@ pub async fn upvote_comment(
 pub async fn downvote_comment(
   req: HttpRequest,
   id: web::Path<String>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   let id = id.replace("-", "/");
-  if let Some(raw) = orc.user_id_by_session(&req) {
+  if let Some(raw) = ORC.user_id_by_session(&req) {
     let usr_id = raw.to_string();
-    if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
-      if let Some(count) = comment.downvote(orc.as_ref(), &usr_id) {
+    if let Some(comment) = Comment::from_id(id.as_bytes()) {
+      if let Some(count) = comment.downvote(&usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1184,13 +1154,12 @@ pub async fn downvote_comment(
 pub async fn unvote_comment(
   req: HttpRequest,
   id: web::Path<String>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   let id = id.replace("-", "/");
-  if let Some(raw) = orc.user_id_by_session(&req) {
+  if let Some(raw) = ORC.user_id_by_session(&req) {
     let usr_id = raw.to_string();
-    if let Some(comment) = Comment::from_id(orc.as_ref(), id.as_bytes()) {
-      if let Some(count) = comment.unvote(orc.as_ref(), &usr_id) {
+    if let Some(comment) = Comment::from_id(id.as_bytes()) {
+      if let Some(count) = comment.unvote(&usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1201,10 +1170,10 @@ pub async fn unvote_comment(
   crate::responses::InternalServerError("failed to register vote")
 }
 
-pub async fn make_comment_on_writ(usr: &User, rc: RawComment, orc: &Orchestrator) -> HttpResponse {
-  if let Some(writ) = orc.writ_by_id(&rc.writ_id) {
+pub async fn make_comment_on_writ(usr: &User, rc: RawComment) -> HttpResponse {
+  if let Some(writ) = ORC.writ_by_id(&rc.writ_id) {
     if let Some(comment) = comment_on_writ(
-      orc,
+      
       &writ,
       usr,
       rc.raw_content,
@@ -1218,16 +1187,12 @@ pub async fn make_comment_on_writ(usr: &User, rc: RawComment, orc: &Orchestrator
   crate::responses::InternalServerError("troubles abound, couldn't make subcomment :(")
 }
 
-pub async fn make_comment_on_comment(
-  usr: &User,
-  rc: RawComment,
-  orc: &Orchestrator,
-) -> HttpResponse {
-  if let Ok(Some(val)) = orc.comment_settings.get(rc.writ_id.as_bytes()) {
+pub async fn make_comment_on_comment(usr: &User, rc: RawComment) -> HttpResponse {
+  if let Ok(Some(val)) = ORC.comment_settings.get(rc.writ_id.as_bytes()) {
     let settings = CommentSettings::try_from_slice(&val).unwrap();
-    if let Some(parent_comment) = Comment::from_id(orc, rc.parent_id.as_bytes()) {
+    if let Some(parent_comment) = Comment::from_id(rc.parent_id.as_bytes()) {
       if let Some(comment) = comment_on_comment(
-        orc,
+        
         &settings,
         &parent_comment,
         &usr,

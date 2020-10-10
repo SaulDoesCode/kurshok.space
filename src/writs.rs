@@ -5,14 +5,12 @@ use sled::{transaction::*, IVec, Transactional};
 use thiserror::Error;
 use time::OffsetDateTime;
 
-use std::sync::Arc;
-
 use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse};
 
 // use super::CONF;
 use crate::auth::User;
 use crate::comments::Comment;
-use crate::orchestrator::Orchestrator;
+use crate::orchestrator::{Orchestrator, ORC};
 use crate::utils::{datetime_from_unix_timestamp, render_md, unix_timestamp, FancyBool, FancyIVec};
 
 impl Orchestrator {
@@ -134,7 +132,7 @@ impl Orchestrator {
       while let Some(Ok(res)) = iter.next() {
         let comment = Comment::try_from_slice(&res.1).unwrap();
         // TODO: handle this in a safer way
-        comment.remove(self);
+        comment.remove();
       }
 
       return true;
@@ -454,7 +452,7 @@ impl Orchestrator {
     if let Some(writs) = self.writ_query(query, o_usr) {
       let public_writs = writs
         .into_par_iter()
-        .filter_map(|w| w.public(self, &usr_id, with_content))
+        .filter_map(|w| w.public(&usr_id, with_content))
         .collect::<Vec<PublicWrit>>();
 
       if public_writs.len() > 0 {
@@ -473,7 +471,7 @@ impl Orchestrator {
     self.writ_query(query, Some(&usr)).and_then(|writs| {
       let editable_writs = writs
         .into_par_iter()
-        .filter_map(|w| w.editable(self, &usr, with_content, with_raw_content))
+        .filter_map(|w| w.editable(&usr, with_content, with_raw_content))
         .collect::<Vec<EditableWrit>>();
 
       (editable_writs.len() > 0).qualify(editable_writs)
@@ -615,23 +613,23 @@ impl Writ {
     self.id.split(":").nth(2).unwrap()
   }
 
-  pub fn content(&self, orc: &Orchestrator) -> Option<String> {
-    if let Ok(Some(c)) = orc.content.get(self.id.as_bytes()) {
+  pub fn content(&self) -> Option<String> {
+    if let Ok(Some(c)) = ORC.content.get(self.id.as_bytes()) {
       return Some(c.to_string());
     }
     None
   }
 
-  pub fn raw_content(&self, orc: &Orchestrator) -> Option<String> {
-    if let Ok(c) = orc.raw_content.get(self.id.as_bytes()) {
+  pub fn raw_content(&self) -> Option<String> {
+    if let Ok(c) = ORC.raw_content.get(self.id.as_bytes()) {
       return c.map(|c| c.to_string());
     }
     None
   }
 
-  pub fn comment_settings(&self, orc: &Orchestrator) -> Option<CommentSettings> {
+  pub fn comment_settings(&self) -> Option<CommentSettings> {
     if self.commentable {
-      if let Ok(cs) = orc.comment_settings.get(self.id.as_bytes()) {
+      if let Ok(cs) = ORC.comment_settings.get(self.id.as_bytes()) {
         return cs.map(|raw| CommentSettings::try_from_slice(&raw).unwrap());
       }
     }
@@ -640,7 +638,6 @@ impl Writ {
 
   pub fn public(
     &self,
-    orc: &Orchestrator,
     requestor_id: &Option<String>,
     with_content: bool,
   ) -> Option<PublicWrit> {
@@ -656,16 +653,16 @@ impl Writ {
       }
     }
 
-    let author = if let Some(author) = orc.user_by_id(author_id) {
+    let author = if let Some(author) = ORC.user_by_id(author_id) {
       author
     } else {
-      if orc.dev_mode {
+      if ORC.dev_mode {
         println!("writ.public: no such author");
       }
       return None;
     };
 
-    let res: TransactionResult<PublicWrit, ()> = (&orc.content, &orc.votes, &orc.writ_voters)
+    let res: TransactionResult<PublicWrit, ()> = (&ORC.content, &ORC.votes, &ORC.writ_voters)
       .transaction(|(content_tree, votes, writ_voters)| {
         let vote: i64 = if let Some(res) = votes.get(self.id.as_bytes())? {
           res.to_i64()
@@ -677,7 +674,7 @@ impl Writ {
           if let Some(res) = content_tree.get(self.id.as_bytes())? {
             Some(res.to_string())
           } else {
-            if orc.dev_mode {
+            if ORC.dev_mode {
               println!("writ.public: could not retrieve content");
             }
             return Err(sled::transaction::ConflictableTransactionError::Abort(()));
@@ -710,7 +707,7 @@ impl Writ {
     match res {
       Ok(pw) => Some(pw),
       Err(e) => {
-        if orc.dev_mode {
+        if ORC.dev_mode {
           println!("writ.public crapped out with: {:?}", e);
         }
         None
@@ -720,7 +717,6 @@ impl Writ {
 
   pub fn editable(
     &self,
-    orc: &Orchestrator,
     author: &User,
     with_content: bool,
     with_raw_content: bool,
@@ -737,7 +733,7 @@ impl Writ {
       tags: self.tags.clone(),
       posted: self.posted,
       content: if with_content {
-        if let Ok(raw) = orc.content.get(self.id.as_bytes()) {
+        if let Ok(raw) = ORC.content.get(self.id.as_bytes()) {
           raw.map(|v| v.to_string())
         } else {
           return None;
@@ -746,7 +742,7 @@ impl Writ {
         None
       },
       raw_content: if with_raw_content {
-        if let Ok(raw) = orc.raw_content.get(self.id.as_bytes()) {
+        if let Ok(raw) = ORC.raw_content.get(self.id.as_bytes()) {
           raw.map(|v| v.to_string())
         } else {
           return None;
@@ -762,9 +758,9 @@ impl Writ {
     })
   }
 
-  pub fn vote(&self, orc: &Orchestrator, usr_id: &str, up: Option<bool>) -> Option<i64> {
+  pub fn vote(&self, usr_id: &str, up: Option<bool>) -> Option<i64> {
     let res: TransactionResult<(), ()> =
-      (&orc.votes, &orc.writ_voters).transaction(|(votes, writ_voters)| {
+      (&ORC.votes, &ORC.writ_voters).transaction(|(votes, writ_voters)| {
         let vote_id = self.vote_id(usr_id);
 
         if let Some(raw) = writ_voters.get(vote_id.as_bytes())? {
@@ -821,14 +817,14 @@ impl Writ {
 
     match res {
       Ok(_) => {
-        if let Ok(Some(raw)) = orc.votes.get(self.id.as_bytes()) {
+        if let Ok(Some(raw)) = ORC.votes.get(self.id.as_bytes()) {
           Some(raw.to_i64())
         } else {
           Some(-2000000)
         }
       }
       Err(e) => {
-        if orc.dev_mode {
+        if ORC.dev_mode {
           println!("Something bad went down with voting - {:?}", e);
         }
         None
@@ -836,20 +832,20 @@ impl Writ {
     }
   }
 
-  pub fn upvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
-    self.vote(orc, usr_id, Some(true))
+  pub fn upvote(&self, usr_id: &str) -> Option<i64> {
+    self.vote(usr_id, Some(true))
   }
 
-  pub fn downvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
-    self.vote(orc, usr_id, Some(false))
+  pub fn downvote(&self, usr_id: &str) -> Option<i64> {
+    self.vote(usr_id, Some(false))
   }
 
-  pub fn unvote(&self, orc: &Orchestrator, usr_id: &str) -> Option<i64> {
-    self.vote(orc, usr_id, None)
+  pub fn unvote(&self, usr_id: &str) -> Option<i64> {
+    self.vote(usr_id, None)
   }
 
-  pub fn usr_vote(&self, orc: &Orchestrator, usr_id: &str) -> Option<Vote> {
-    match orc.writ_voters.get(self.vote_id(usr_id).as_bytes()) {
+  pub fn usr_vote(&self, usr_id: &str) -> Option<Vote> {
+    match ORC.writ_voters.get(self.vote_id(usr_id).as_bytes()) {
       Ok(wv) => wv.map(|raw| Vote::try_from_slice(&raw).unwrap()),
       Err(_) => None,
     }
@@ -917,11 +913,10 @@ pub struct RawWrit {
 }
 
 impl RawWrit {
-  pub fn commit(&self, author_id: String, orc: &Orchestrator) -> Result<Writ, WritError> {
+  pub fn commit(&self, author_id: String) -> Result<Writ, WritError> {
     let is_md = self.is_md.unwrap_or(true);
-    if !is_md
-      && !orc
-        .user_has_some_attrs(&author_id, &["writer", "admin"])
+    if !is_md && 
+      !ORC.user_has_some_attrs(&author_id, &["writer", "admin"])
         .unwrap_or(false)
     {
       return Err(WritError::NoPermNoMD);
@@ -945,14 +940,14 @@ impl RawWrit {
           }
         }
 
-        if !orc.writs.contains_key(wi.as_bytes()).unwrap_or(true) {
+        if !ORC.writs.contains_key(wi.as_bytes()).unwrap_or(true) {
           return Err(WritError::BadID);
         }
 
         (wi.clone(), false)
       }
       None => {
-        if let Some(writ_id) = orc.new_writ_id(&author_id, &self.kind) {
+        if let Some(writ_id) = ORC.new_writ_id(&author_id, &self.kind) {
           (writ_id, true)
         } else {
           return Err(WritError::IDGenErr);
@@ -973,28 +968,23 @@ impl RawWrit {
       is_md,
     };
 
-    let author_attrs = orc.user_attributes(&author_id);
+    let author_attrs = ORC.user_attributes(&author_id);
     if !writ.viewable_by.iter().all(|t| author_attrs.contains(t)) {
       return Err(WritError::UsedUnavailableAttributes);
     }
 
-    if is_new_writ
-      && orc
-        .titles
-        .contains_key(writ.title_key().as_bytes())
-        .unwrap()
-    {
+    if is_new_writ && ORC.titles.contains_key(writ.title_key().as_bytes()).unwrap() {
       return Err(WritError::TitleTaken);
     }
 
     let raw_content = self.raw_content.trim();
 
-    /* if !orc.dev_mode && is_new_writ {
+    /* if !ORC.dev_mode && is_new_writ {
       // hash contents and ratelimit with it to prevent spam
-      let rc_hash = orc.hash(raw_content.as_bytes());
+      let rc_hash = ORC.hash(raw_content.as_bytes());
       let mut hitter = Vec::from("wr".as_bytes());
       hitter.extend_from_slice(&rc_hash);
-      if let Some(rl) = orc.ratelimiter.hit(&hitter, 1, Duration::minutes(360)) {
+      if let Some(rl) = ORC.ratelimiter.hit(&hitter, 1, Duration::minutes(360)) {
         if rl.is_timing_out() {
           return Err(WritError::DuplicateWrit);
         }
@@ -1004,16 +994,16 @@ impl RawWrit {
     } */
 
     let res: TransactionResult<(), ()> = (
-      &orc.content,
-      &orc.raw_content,
-      &orc.titles,
-      &orc.slugs,
-      &orc.dates,
-      &orc.votes,
-      &orc.writs,
-      &orc.tags_index,
-      &orc.tag_counter,
-      &orc.comment_settings,
+      &ORC.content,
+      &ORC.raw_content,
+      &ORC.titles,
+      &ORC.slugs,
+      &ORC.dates,
+      &ORC.votes,
+      &ORC.writs,
+      &ORC.tags_index,
+      &ORC.tag_counter,
+      &ORC.comment_settings,
     )
       .transaction(
         |(
@@ -1152,9 +1142,9 @@ impl RawWrit {
     })
   }
 
-  pub fn writ(&self, orc: &Orchestrator) -> Option<Writ> {
+  pub fn writ(&self) -> Option<Writ> {
     if let Some(id) = &self.id {
-      if let Ok(w) = orc.writs.get(id.as_bytes()) {
+      if let Ok(w) = ORC.writs.get(id.as_bytes()) {
         return w.map(|raw| Writ::try_from_slice(&raw).unwrap());
       }
     }
@@ -1230,13 +1220,12 @@ pub enum WritError {
 pub async fn writ_raw_content(
   req: HttpRequest,
   wid: web::Path<String>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   // TODO: ratelimiting
-  if let Some(usr) = orc.user_by_session(&req) {
+  if let Some(usr) = ORC.user_by_session(&req) {
     if let Some(author_id) = wid.split(":").nth(1) {
       if author_id == usr.id {
-        if let Ok(Some(raw_rw)) = orc.raw_content.get(wid.as_bytes()) {
+        if let Ok(Some(raw_rw)) = ORC.raw_content.get(wid.as_bytes()) {
           return crate::responses::Ok(raw_rw.to_string());
         } else {
           return crate::responses::NotFound("writ id either didn't match anything of yours");
@@ -1254,16 +1243,15 @@ pub async fn writ_raw_content(
 pub async fn post_content(
   req: HttpRequest,
   pid: web::Path<String>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   // TODO: ratelimiting
   if !pid.starts_with("post:") && pid.len() < 100 && pid.len() > 8 {
     return crate::responses::BadRequest("invalid post id");
   }
 
-  if let Some(writ) = orc.writ_by_id(&pid) {
+  if let Some(writ) = ORC.writ_by_id(&pid) {
     if !writ.public {
-      if let Some(usr) = orc.user_by_session(&req) {
+      if let Some(usr) = ORC.user_by_session(&req) {
         if !writ.id.starts_with(&format!("post:{}", usr.id)) {
           return crate::responses::Forbidden(
             "You can't load the contents of private writs that aren't yours",
@@ -1274,7 +1262,7 @@ pub async fn post_content(
       }
     }
 
-    if let Ok(Some(raw_c)) = orc.content.get(writ.id.as_bytes()) {
+    if let Ok(Some(raw_c)) = ORC.content.get(writ.id.as_bytes()) {
       return crate::responses::Ok(raw_c.to_string());
     }
   }
@@ -1286,11 +1274,10 @@ pub async fn post_content(
 pub async fn writ_query(
   req: HttpRequest,
   query: web::Json<WritQuery>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  let o_usr = orc.user_by_session(&req);
+  let o_usr = ORC.user_by_session(&req);
   if let Some(writs) =
-    orc.public_writ_query(query.into_inner(), o_usr.as_ref().map(|el| el.value()))
+    ORC.public_writ_query(query.into_inner(), o_usr.as_ref().map(|el| el.value()))
   {
     return HttpResponse::Ok().json(writs);
   }
@@ -1302,10 +1289,9 @@ pub async fn writ_query(
 pub async fn editable_writ_query(
   req: HttpRequest,
   query: web::Json<WritQuery>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(usr) = orc.user_by_session(&req) {
-    if let Some(writs) = orc.editable_writ_query(query.into_inner(), usr.value()) {
+  if let Some(usr) = ORC.user_by_session(&req) {
+    if let Some(writs) = ORC.editable_writ_query(query.into_inner(), usr.value()) {
       return HttpResponse::Ok().json(writs);
     }
   } else {
@@ -1319,7 +1305,6 @@ pub async fn editable_writ_query(
 pub async fn push_raw_writ(
   req: HttpRequest,
   rw: web::Json<RawWrit>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   if rw.raw_content.len() > 150_000 {
     return crate::responses::BadRequest(
@@ -1327,12 +1312,12 @@ pub async fn push_raw_writ(
     );
   }
 
-  if let Some(usr_id) = orc.user_id_by_session(&req) {
-    if orc
+  if let Some(usr_id) = ORC.user_id_by_session(&req) {
+    if ORC
       .user_has_some_attrs(&usr_id, &["writer", "admin"])
       .unwrap_or(false)
     {
-      return match rw.commit(usr_id, orc.as_ref()) {
+      return match rw.commit(usr_id) {
         Ok(w) => crate::responses::Ok(w),
         Err(e) => crate::responses::BadRequest(format!("error: {}", e)),
       };
@@ -1346,11 +1331,10 @@ pub async fn push_raw_writ(
 pub async fn delete_writ(
   req: HttpRequest,
   body: web::Bytes,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
   if let Ok(writ_id) = String::from_utf8(body.to_vec()) {
-    if let Some(usr_id) = orc.user_id_by_session(&req) {
-      return match orc.remove_writ(usr_id, writ_id) {
+    if let Some(usr_id) = ORC.user_id_by_session(&req) {
+      return match ORC.remove_writ(usr_id, writ_id) {
         true => crate::responses::Accepted("writ has been removed"),
         false => crate::responses::BadRequest("invalid data, could not remove writ"),
       };
@@ -1364,12 +1348,11 @@ pub async fn delete_writ(
 pub async fn upvote_writ(
   req: HttpRequest,
   writ_id: web::Path<String>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(raw) = orc.user_id_by_session(&req) {
+  if let Some(raw) = ORC.user_id_by_session(&req) {
     let usr_id = raw.to_string();
-    if let Some(writ) = orc.writ_by_id(&writ_id) {
-      if let Some(count) = writ.upvote(orc.as_ref(), &usr_id) {
+    if let Some(writ) = ORC.writ_by_id(&writ_id) {
+      if let Some(count) = writ.upvote(&usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1384,12 +1367,11 @@ pub async fn upvote_writ(
 pub async fn downvote_writ(
   req: HttpRequest,
   writ_id: web::Path<String>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(raw) = orc.user_id_by_session(&req) {
+  if let Some(raw) = ORC.user_id_by_session(&req) {
     let usr_id = raw.to_string();
-    if let Some(writ) = orc.writ_by_id(&writ_id) {
-      if let Some(count) = writ.downvote(orc.as_ref(), &usr_id) {
+    if let Some(writ) = ORC.writ_by_id(&writ_id) {
+      if let Some(count) = writ.downvote(&usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1404,12 +1386,11 @@ pub async fn downvote_writ(
 pub async fn unvote_writ(
   req: HttpRequest,
   writ_id: web::Path<String>,
-  orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-  if let Some(raw) = orc.user_id_by_session(&req) {
+  if let Some(raw) = ORC.user_id_by_session(&req) {
     let usr_id = raw.to_string();
-    if let Some(writ) = orc.writ_by_id(&writ_id) {
-      if let Some(count) = writ.unvote(orc.as_ref(), &usr_id) {
+    if let Some(writ) = ORC.writ_by_id(&writ_id) {
+      if let Some(count) = writ.unvote(&usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
