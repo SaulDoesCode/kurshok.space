@@ -3,19 +3,9 @@
 #[macro_use(lazy_static)]
 extern crate lazy_static;
 
-/*
-#[cfg(not(target_env = "msvc"))]
-use jemallocator::Jemalloc;
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]static GLOBAL: Jemalloc = Jemalloc;
-*/
 use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-/*
-#[global_allocator]
-static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
-*/
 
 mod admin_functions;
 mod auth;
@@ -149,15 +139,6 @@ async fn main() -> std::io::Result<()> {
     .run()
     .await;
 
-    tokio::spawn(async move {
-        orc.writ_db.flush().unwrap();
-        orc.db.flush().unwrap();
-        orc.ratelimiter.db.flush().unwrap();
-
-        drop(orc);
-    })
-    .await?;
-
     app_server
 }
 
@@ -219,11 +200,11 @@ async fn index(req: HttpRequest, orc: web::Data<Arc<Orchestrator>>) -> impl Resp
         },
         Err(err) => {
             if orc.dev_mode {
-                HttpResponse::Ok()
+                HttpResponse::InternalServerError()
                     .content_type("text/plain")
                     .body(&format!("index.html template is broken - error : {}", err))
             } else {
-                HttpResponse::Ok()
+                HttpResponse::InternalServerError()
                     .content_type("text/plain")
                     .body("The home page template is broken! :( We have failed you.")
             }
