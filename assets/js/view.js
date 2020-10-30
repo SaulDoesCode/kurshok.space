@@ -239,13 +239,14 @@ app.postPaginationView = section({
 },
     app.postPageBackBtn = div({
         class: 'page-back',
+        contingentVisibility: 'pageNot0',
         onclick(e) {
             app.fetchPosts(app.activePostPage - 1)
         }
     }, 
         '<<',
     ),
-    // app.pageNumberListView = div({class: 'page-numbers',}),
+    app.pageNumView = div({class: 'page-num'}),
     app.postPageForwardBtn = div({
             class: 'page-forward',
             onclick(e) {
@@ -256,15 +257,7 @@ app.postPaginationView = section({
     ),
 )
 
-app.on.activePostPage(page => {
-    if (page == 0) {
-        app.postPageBackBtn.setAttribute('hidden', true)
-    } else {
-        app.postPageBackBtn.removeAttribute('hidden')
-    }
-})
-
-app.fetchPosts = async (page = 0, amount = 2) => {
+app.fetchPosts = async (page = 0, amount = 3) => {
     let writs
     if (d.isArr(app.postPages[page])) {
         postListView.innerHTML = ''
@@ -274,13 +267,26 @@ app.fetchPosts = async (page = 0, amount = 2) => {
             if (++i >= amount) break
         }
     } else {
-        writs = await app.writQuery({
-            with_content: false,
-            kind: 'post',
-            amount,
-            page
-        })
-        if (!d.isArr(writs)) return console.error(writs)
+        try {
+            writs = await app.writQuery({
+                with_content: false,
+                kind: 'post',
+                amount,
+                page
+            })
+            if (!d.isArr(writs)) {
+                console.error(writs)
+                throw new Error(writs.status)
+            }
+        } catch(e) {
+            app.postPageForwardBtn.style.color = 'red'
+            app.postPageForwardBtn.textContent = '404'
+            setTimeout(() => {
+                app.postPageForwardBtn.style.color = ''
+                app.postPageForwardBtn.textContent = '>>'
+            }, 3000)
+            return
+        }
         app.postPages[page] = []
         postListView.innerHTML = ''
         writs.forEach(w => {
@@ -289,6 +295,8 @@ app.fetchPosts = async (page = 0, amount = 2) => {
         })
     }
     app.emit.activePostPage(app.activePostPage = page)
+    app.pageNumView.textContent = page
+    app.cv('pageNot0', page != 0)
     if (!app.postsInitialized) {
         app.emit.postsInitialized(app.postsInitialized = true)
         app.loadStyle('https://cdnjs.cloudflare.com/ajax/libs/prism/1.21.0/themes/prism-tomorrow.min.css', true)
