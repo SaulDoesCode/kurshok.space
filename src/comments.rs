@@ -631,8 +631,7 @@ impl CommentIDTree {
     }
     let p_len = path.len() - 1;
     let mut i = 0;
-    let next_layer: Cell<Option<&mut HashMap<String, CommentIDTree>>> =
-      Cell::new(Some(&mut self.children));
+    let next_layer: Cell<Option<&mut HashMap<String, CommentIDTree>>> = Cell::new(Some(&mut self.children));
     while let Some(children) = next_layer.take() {
       if let Some(child) = children.get_mut(&path[i]) {
         if i == p_len {
@@ -658,8 +657,7 @@ impl CommentIDTree {
     }
     let p_len = path.len() - 1;
     let mut i = 0;
-    let next_layer: Cell<Option<&mut HashMap<String, CommentIDTree>>> =
-      Cell::new(Some(&mut self.children));
+    let next_layer: Cell<Option<&mut HashMap<String, CommentIDTree>>> = Cell::new(Some(&mut self.children));
     while let Some(children) = next_layer.take() {
       if i == p_len && children.contains_key(&path[i]) {
         return children.remove(&path[i]);
@@ -964,6 +962,7 @@ pub async fn comment_query(o_usr: Option<&User>, mut query: CommentQuery) -> Opt
   if (is_admin && amount > 500) || amount > 50 {
     return None;
   }
+
   let (mut tx, mut rx) = tokio::sync::mpsc::channel::<CommentIDTree>(amount as usize);
   let mut iter = ORC.comment_trees.scan_prefix(path.as_bytes());
   let page = query.page;

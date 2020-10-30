@@ -63,9 +63,7 @@ impl Orchestrator {
       Err(_) => return None,
     };
 
-    let email = ar
-      .email
-      .and_then(|email| is_email_ok(&email).qualify(email));
+    let email = ar.email.and_then(|e| is_email_ok(&e).qualify(e));
 
     let usr = User {
       id: user_id.clone(),
