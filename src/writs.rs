@@ -145,11 +145,7 @@ impl Orchestrator {
 
     let amount = *query.amount.as_ref().unwrap_or(&20);
 
-    if !is_admin {
-      if amount > 50 {
-        return None;
-      }
-    } else if amount > 500 {
+    if (!is_admin && amount > 50) || amount > 500 {
       return None;
     }
 
@@ -162,11 +158,7 @@ impl Orchestrator {
         authors
           .par_iter()
           .filter_map(|a| {
-            if let Ok(Some(id)) = self.usernames.get(a.as_bytes()) {
-              Some(id)
-            } else {
-              None
-            }
+            self.usernames.get(a.as_bytes()).unwrap_or(None)
           })
           .collect(),
       );
@@ -302,16 +294,22 @@ impl Orchestrator {
 
       true
     };
-
+    
     if let Some(ids) = &query.ids {
-      for id in ids {
-        if query.page < 2 {
-          if count == amount {
-            break;
+      let mut id_iter = {
+        let mut iter = ids.iter();
+        if query.page > 0 {
+          let skip_n = (query.page * amount) as usize;
+          if ids.len() < skip_n || iter.advance_by(skip_n).is_err() {
+            return None;
           }
-        } else if count != (amount * query.page) {
-          count += 1;
-          continue;
+        }
+        iter
+      };
+
+      for id in id_iter {
+        if count == amount {
+          break;
         }
 
         if let Some(skip_ids) = &query.skip_ids {
@@ -392,15 +390,15 @@ impl Orchestrator {
         self.writs.scan_prefix(partial_id.as_bytes())
       };
 
-      while let Some(Ok(res)) = writ_iter.next_back() {
-        if query.page < 2 {
-          if count == amount {
-            break;
-          }
-        } else if count != (amount * query.page) {
-          count += 1;
-          continue;
+      if query.page > 0 {
+        let skip_n = (query.page * amount) as usize;
+        if writ_iter.advance_back_by(skip_n).is_err() {
+          return None;
         }
+      }
+
+      while let Some(Ok(res)) = writ_iter.next_back() {
+        if count == amount { break; }
 
         let writ: Writ = if date_scan {
           let id = res.1.to_string();
@@ -922,8 +920,7 @@ impl RawWrit {
       return Err(WritError::NoPermNoMD);
     }
 
-    let tags: Vec<String> = self
-      .tags
+    let tags: Vec<String> = self.tags
       .iter()
       .map(|t| t.trim().replace("  ", "-").replace(" ", "-"))
       .collect();

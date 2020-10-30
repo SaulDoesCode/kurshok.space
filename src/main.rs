@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+#![feature(iter_advance_by)]
+
 #[macro_use(lazy_static)]
 extern crate lazy_static;
 

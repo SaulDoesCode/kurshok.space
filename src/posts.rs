@@ -88,7 +88,7 @@ pub async fn render_post_by_slug(
         None => {
             return HttpResponse::NotFound()
                 .content_type("text/html")
-                .body("We couldn't find any posts with that id.");
+                .body("We couldn't find a post with that slug.");
         }
     };
 
