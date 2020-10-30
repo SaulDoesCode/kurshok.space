@@ -147,5 +147,26 @@ app.components.toggleBox = (name, {id, checked, ...ops} = {}) => df.div({
     df.span()
 )
 
+domlib.createElementPlugins.contingentVisibility = (event, el) => {
+    if (domlib.isArr(event)) var [event, fn] = event
+    if (!domlib.isStr(event)) return
+    app.on['cv:' + event](state => {
+        if (!state) {
+            el.setAttribute('hidden', true)
+        } else {
+            el.removeAttribute('hidden')
+        }
+        if (domlib.isFunc(fn)) fn(state)
+    })
+}
+
+app.cv = (event, state) => {
+    if (app.cv.map[event] == state) return false
+    else if (state === undefined) state = !app.cv.map[event]
+    app.emit['cv:' + event](app.cv.map[event] = !!state)
+}
+app.cv.check = event => !!app.cv.map[event]
+app.cv.map = Object.create(null)
+
 window.app = app
 export default app
