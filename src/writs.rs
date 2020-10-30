@@ -296,7 +296,7 @@ impl Orchestrator {
     };
     
     if let Some(ids) = &query.ids {
-      let mut id_iter = {
+      let id_iter = {
         let mut iter = ids.iter();
         if query.page > 0 {
           let skip_n = (query.page * amount) as usize;
