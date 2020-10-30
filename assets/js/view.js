@@ -5,8 +5,11 @@ const {div, h4, section, span, header} = df
 
 
 const mainView = d.query('main[route-active]')
-const contentDisplay = df.section({class: 'posts'})
-app.postDisplay = df.section({class: 'full post'}, pd => {
+const postListView = div({class: 'post-list'})
+const contentDisplay = section({class: 'posts'},
+    postListView
+)
+app.postDisplay = section({class: 'full post'}, pd => {
     pd.parts = d.h /* html */ `
         <header class="post-header">
             <div>
@@ -174,7 +177,7 @@ app.votesUI = (voteType, {id, vote = 0, you_voted}) => parentEl => {
 }
 
 const publicPost = w => div({
-    $: contentDisplay,
+    $: postListView,
     class: 'post',
     attr: {pid: w.id},
     onclick(e, el) {
@@ -228,14 +231,72 @@ app.fetchPostContent = async id => {
 }
 
 app.posts = Object.create(null)
+app.postPages = Object.create(null)
 
-app.writQuery({with_content: false, kind: 'post'}).then(async writs => {
-    if(!d.isArr(writs)) return console.error(writs)
-    writs.forEach(w => publicPost(app.posts[w.id] = w))
-    app.emit.postsInitialized(app.postsInitialized = true)
-    app.loadStyle('https://cdnjs.cloudflare.com/ajax/libs/prism/1.21.0/themes/prism-tomorrow.min.css', true)
-    await import('/js/comments.min.js')
+app.postPaginationView = section({
+    $: contentDisplay,
+    class: 'post-pagination',
+},
+    app.postPageBackBtn = div({
+        class: 'page-back',
+        onclick(e) {
+            app.fetchPosts(app.activePostPage - 1)
+        }
+    }, 
+        '<<',
+    ),
+    // app.pageNumberListView = div({class: 'page-numbers',}),
+    app.postPageForwardBtn = div({
+            class: 'page-forward',
+            onclick(e) {
+                app.fetchPosts(app.activePostPage + 1)
+            }
+        },
+        '>>',
+    ),
+)
+
+app.on.activePostPage(page => {
+    if (page == 0) {
+        app.postPageBackBtn.setAttribute('hidden', true)
+    } else {
+        app.postPageBackBtn.removeAttribute('hidden')
+    }
 })
+
+app.fetchPosts = async (page = 0, amount = 2) => {
+    let writs
+    if (d.isArr(app.postPages[page])) {
+        postListView.innerHTML = ''
+        let i = 0
+        for (const wid of app.postPages[page]) {
+            publicPost(app.posts[wid])
+            if (++i >= amount) break
+        }
+    } else {
+        writs = await app.writQuery({
+            with_content: false,
+            kind: 'post',
+            amount,
+            page
+        })
+        if (!d.isArr(writs)) return console.error(writs)
+        app.postPages[page] = []
+        postListView.innerHTML = ''
+        writs.forEach(w => {
+            app.postPages[page].push(w.id)
+            publicPost(app.posts[w.id] = w)
+        })
+    }
+    app.emit.activePostPage(app.activePostPage = page)
+    if (!app.postsInitialized) {
+        app.emit.postsInitialized(app.postsInitialized = true)
+        app.loadStyle('https://cdnjs.cloudflare.com/ajax/libs/prism/1.21.0/themes/prism-tomorrow.min.css', true)
+        await import('/js/comments.min.js')
+    }
+}
+
+app.fetchPosts()
 
 app.afterPostsInitialization = fn => app.postsInitialized ?
     (fn != null ? fn() : Promise.resolve(true)) : 
