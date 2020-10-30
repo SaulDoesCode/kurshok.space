@@ -744,6 +744,8 @@ export default (d => {
     }
   }
 
+  d.createElementPlugins = {}
+
   return d
 })(
   function d(tag, ops, ...children) {
@@ -778,6 +780,8 @@ export default (d => {
         } else if (key in d.actualDF) {
           val = d.isArr(val) ? d.actualDF[key](el, ...val) : d.actualDF[key](el, val)
           if (val !== el) ops[key] = val
+        } else if (key in d.createElementPlugins) {
+          d.createElementPlugins[key](val, el, ops)
         }
       }
 
