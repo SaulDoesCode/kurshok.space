@@ -359,6 +359,35 @@ main[route-active="posts"] .post>* {
   background: var(--primary-color);
 }
 
+.post-pagination {
+  display: flex;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+}
+
+.post-pagination>* {
+  color: hsl(0, 0%, 40%);
+  font-weight: 600;
+  font-size: 1.2em;
+  text-shadow: 0 1px 3px hsla(0, 12%, 63%, 0.25);
+  border-radius: 4px;
+  padding: .25em;
+  margin: .25em;
+  transition: all 140ms ease-in;
+}
+
+.post-pagination>.page-back,
+.post-pagination>.page-forward {
+  cursor: pointer;
+}
+
+.post-pagination>.page-back:hover,
+.post-pagination>.page-forward:hover {
+  color: #ffb638;
+}
+
 /*.tag.small {}*/
 
 .post .comments {
