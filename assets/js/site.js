@@ -20,7 +20,7 @@ app.txtPut = textHTTPMethod('PUT')
 app.txtDelete = textHTTPMethod('DELETE')
 
 const wq = endpoint => async (query = {}) => {
-    if (isNaN(query.page)) query.page = 1
+    if (isNaN(query.page)) query.page = 0
     if (!query.kind) query.kind = 'post'
     const res = await app.jsonPost(endpoint, query)
     return await res.json()
