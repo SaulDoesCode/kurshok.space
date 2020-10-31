@@ -536,6 +536,71 @@ footer a {
   height: 100%;
 }
 
+.toast-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  max-width: 280px;
+  min-height: 20vh;
+  display: flex;
+  justify-content: flex-end;
+  align-content: center;
+  align-items: center;
+  text-align: left;
+  flex-flow: column;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .25));
+}
+
+.toast-container > .toast {
+  display: flex;
+  justify-content: space-between;
+  align-content: center;
+  align-items: center;
+  text-align: left;
+  flex-flow: row nowrap;
+  padding: .25em .5em;
+  margin: .25em .75em;
+  min-height: 1cm;
+  width: 90%;
+  border-radius: .2em;
+  background: hsl(0, 0%, 25%);
+}
+
+.toast-container>.toast.error {
+  background: hsl(0, 79%, 59%);
+  color: #2b2b2b;
+}
+
+.toast-container>.toast.error>.dismiss-btn {
+  background: hsl(0, 0%, 42%);
+}
+
+.toast-container>.toast> *{
+  margin-left: .25em;
+  margin-right: .25em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .2);
+}
+
+.toast-container>.toast>.dismiss-btn {
+  display: inline-flex;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  flex-flow: row nowrap;
+  text-align: center;
+  cursor: pointer;
+  color: rgb(255, 66, 66);
+  margin: 0;
+  padding: .25em .25em;
+  height: 24px;
+  width: 24px;
+  border-radius: 100%;
+}
+
+.toast-container>.toast>.dismiss-btn > svg {
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .25));
+}
+
 @media all and (max-width: 760px) {
   main[route-active="posts"] .post > header {
     flex-direction: column;
