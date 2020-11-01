@@ -269,10 +269,10 @@ app.editorPushWrit = async () => {
         writFields.ops
     )
 
-    if (res != null && res.ok) {
-        console.log(res)
-        return res
+    if (res && res.title != null) {
+        app.toast.msg(`success, writ posted: ${res.title}`)
     }
+    return res
 }
 
 d.on.pointerup(saveLocallyBtn, async e => {
