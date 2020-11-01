@@ -549,6 +549,7 @@ footer a {
   text-align: left;
   flex-flow: column;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .25));
+  z-index: 5;
 }
 
 .toast-container > .toast {
