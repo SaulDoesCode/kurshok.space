@@ -93,6 +93,11 @@ const commentsDisplay = app.commentsDisplay = section({
                     cd.textarea.value = ''
                     if (cd.authorOnlyToggle.input.checked) cd.authorOnlyToggle.input.checked = false
                     app.editingComment = null
+                    if (app.editingCommentElement) {
+                        app.editingCommentElement.removeAttribute('hidden')
+                        app.editingCommentElement.style.position = ''
+                        app.editingCommentElement = null
+                    }
                 }
             },
                 'Cancel'
@@ -155,7 +160,7 @@ app.deleteComment = async cid => {
     }
 }
 
-app.editComment = async cid => {
+app.editComment = async (cid, author_only) => {
     const cEl = await d.queryAsync(`[id="comment-${cid.replace('-', '/')}"]`)
     const res = await (await fetch(`/comment/${cid}/raw-content`)).json()
     if (!res.ok) {
@@ -163,6 +168,7 @@ app.editComment = async cid => {
     }
     commentsDisplay.textarea.value = res.data
     commentsDisplay.postBtn.textContent = 'Confirm Edit'
+    commentsDisplay.authorOnlyToggle.input.checked = author_only
     commentsDisplay.classList.add('edit-mode')
     app.editingComment = {
         id: cid,
@@ -189,8 +195,11 @@ app.confirmCommentEdit = async editingComment => {
         throw new Error(`app.confirmCommentEdit: ` + res.status || "it didn't work :(")
     }
 
-    app.toast.msg('Comment successfully edited')
+    df.remove(app.editingCommentElement)
     app.editingCommentElement = null
+    app.editingCommentElement = null
+
+    app.toast.msg('Comment successfully edited')
 
     return res
 }
@@ -233,6 +242,12 @@ app.formulateThread = (comment, children) => div({
             app.renderUXTimestamp(comment.posted, app.commentDateFormat)
         ),
         span({class: 'divider'}),
+        (app.user.username != null && comment.author_name == app.user.username) && button({
+            class: 'edit-btn',
+            onclick() {
+                app.editComment(comment.id, comment.author_only)
+            }
+        }, 'edit'),
         span({
             class: 'delete',
             attr: {
@@ -245,12 +260,7 @@ app.formulateThread = (comment, children) => div({
     ),
     div({class: 'content'}, d.html(comment.content)),
     div({class: 'btn-rack'},
-        (app.user.username != null && comment.author_name == app.user.username) && button({
-            class: 'edit-btn',
-            onclick() {
-                app.editComment(comment.id)
-            }
-        }, 'edit')
+        button({class: 'reply-btn'}, 'reply')
     ),
     children == null || children.length > 0 && div({class: 'children'},
         children.map(c => app.formulateThread(c.comment, c.children))

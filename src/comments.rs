@@ -1339,7 +1339,10 @@ pub async fn make_comment_edit(usr_id: &str, rce: RawCommentEdit) -> HttpRespons
   if let Ok(Some(val)) = ORC.comment_settings.get(rce.writ_id.as_bytes()) {
     let settings = CommentSettings::try_from_slice(&val).unwrap();
     if let Some(comment) = edit_comment(&settings, rce) {
-      return crate::responses::AcceptedData(comment);
+      if let Some(pc) = comment.public(&Some(usr_id.to_string())) {
+        return crate::responses::AcceptedData(pc);
+      }
+      return crate::responses::Accepted("Comment edited succesfully, but retrieving the updated version hit a snag, no worries just reload the page");
     }
   }
   crate::responses::InternalServerError("troubles abound, couldn't edit comment :(")

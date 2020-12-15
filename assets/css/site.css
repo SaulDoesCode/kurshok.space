@@ -488,12 +488,35 @@ main[route-active="posts"] .post>* {
   font-size: .8em;
   color: hsl(0, 0%, 75%);
   margin: .2em 0;
+  padding-bottom: .4em;
+  border-bottom: 1px solid hsl(0, 0%, 13%);
 }
 
-.comment-list .comment > .content {
-  padding-left: .5em;
+.comment > .content {
+  padding-left: .25em;
   width: 100%;
   margin: 0;
+  margin-top: .2em;
+  padding-top: .25em;
+}
+
+.comment>.content h1 {
+  font-size: 2em;
+}
+.comment>.content h2 {
+  font-size: 1.8em;
+}
+.comment>.content h3 {
+  font-size: 1.6em;
+}
+.comment>.content h4 {
+  font-size: 1.4em;
+}
+.comment>.content h5 {
+  font-size: 1.2em;
+}
+.comment>.content h6 {
+  font-size: 1.1em;
 }
 
 .comment-list .comment p:last-of-type {
@@ -507,9 +530,27 @@ main[route-active="posts"] .post>* {
   margin: 0 .5em;
 }
 
-.comment button {
-  padding: .2em;
-  font-size: .9em;
+.comment > hr {
+  margin: .75em auto .2em auto;
+  max-width: 97%;
+}
+
+.btn-rack {
+  display: inline-flex;
+  justify-content: flex-start;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+  padding: .25em;
+  width: 97%;
+  margin: .5em auto 0 auto;
+}
+
+.btn-rack button, .edit-btn {
+  padding: 0 5px;
+  background: hsl(0, 0%, 20%);
+  color: hsl(0, 0%, 75%);
+  border: 0 !important;
 }
 
 .idle-animation {
