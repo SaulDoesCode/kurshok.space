@@ -142,6 +142,15 @@ impl Comment {
 
   pub fn delete(&self) -> bool {
     let deleted_comment = self.default_deleted();
+
+    let vlist: Vec<IVec> = ORC.comment_voters.scan_prefix(self.id.as_bytes())
+      .keys()
+      .filter_map(|res| match res {
+        Ok(key) => Some(key),
+        Err(_) => None,
+      })
+      .collect();
+
     let res: TransactionResult<(), ()> = (
       &ORC.comment_voters,
       &ORC.comments,
@@ -152,12 +161,13 @@ impl Comment {
         comments.insert(self.id.as_bytes(), deleted_comment.try_to_vec().unwrap())?;
         comment_raw_content.remove(self.id.as_bytes())?;
         votes.remove(self.id.as_bytes())?;
-        let mut iter = ORC.comment_voters.scan_prefix(self.id.as_bytes());
-        while let Some(pair) = iter.next() {
-          voters.remove(pair?.1)?;
+
+        for voter in vlist.iter() {
+          voters.remove(voter)?;
         }
         Ok(())
       });
+
     res.is_ok()
   }
 
@@ -1094,10 +1104,12 @@ pub async fn delete_comment(
     }
   };
 
+  
   if let Some(comment) = Comment::from_id(ctd.as_bytes()) {
     if usr.username == comment.author_name {
+      println!("Trying to delete comment - {}", ctd.as_str());
       if comment.delete() {
-        return crate::responses::BadRequest("comment successfully deleted");
+        return crate::responses::Ok("Comment successfully deleted");
       }
     } else {
       return crate::responses::Forbidden("You can't delete someone else's comment");
