@@ -660,8 +660,11 @@ impl Writ {
       return None;
     };
 
-    let res: TransactionResult<PublicWrit, ()> = (&ORC.content, &ORC.votes, &ORC.writ_voters)
-      .transaction(|(content_tree, votes, writ_voters)| {
+    let res: TransactionResult<PublicWrit, ()> = (
+      &ORC.content,
+      &ORC.votes,
+      &ORC.writ_voters
+    ).transaction(|(content_tree, votes, writ_voters)| {
         let vote: i64 = if let Some(res) = votes.get(self.id.as_bytes())? {
           res.to_i64()
         } else {
@@ -702,6 +705,7 @@ impl Writ {
           you_voted,
         })
       });
+
     match res {
       Ok(pw) => Some(pw),
       Err(e) => {

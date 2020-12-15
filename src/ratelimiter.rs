@@ -7,7 +7,7 @@ use std::sync::{
 use time::{Duration, OffsetDateTime};
 
 fn now() -> i64 {
-  OffsetDateTime::now_utc().timestamp()
+  OffsetDateTime::now_utc().unix_timestamp()
 }
 
 pub struct RateLimiter {

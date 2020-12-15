@@ -33,7 +33,7 @@ lazy_static! {
 }
 
 pub fn unix_timestamp() -> i64 {
-  OffsetDateTime::now_utc().timestamp()
+  OffsetDateTime::now_utc().unix_timestamp()
 }
 
 pub fn datetime_from_unix_timestamp(timestamp: i64) -> OffsetDateTime {

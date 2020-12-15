@@ -286,11 +286,6 @@ async fn serve_files_and_templates(req: HttpRequest) -> HttpResponse {
             ctx.insert("username", &usr.username);
             ctx.insert("dev_mode", &ORC.dev_mode);
 
-            if is_js && name.contains("admin-do-ddns") {
-                let do_token: String = CONF.read().do_token.clone();
-                ctx.insert("do_token", &do_token);
-            }
-
             if let Ok(s) = TEMPLATES.read().render(&name, &ctx) {
                 return HttpResponse::Ok()
                     .content_type(if is_js {
