@@ -257,7 +257,7 @@ app.postPaginationView = section({
     ),
 )
 
-app.fetchPosts = async (page = 0, amount = 3) => {
+app.fetchPosts = async (page = 0, amount = 5) => {
     let writs
     if (d.isArr(app.postPages[page])) {
         postListView.innerHTML = ''

@@ -273,6 +273,7 @@ main[route-active="posts"] .post>* {
 
 .comment .votes {
   flex-flow: row wrap;
+  padding: .2em;
 }
 
 .votes .vote {
@@ -478,6 +479,12 @@ main[route-active="posts"] .post>* {
 }
 
 .comment-list .comment > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  align-content: center;
+  flex-flow: row wrap;
+
   font-size: .8em;
   color: hsl(0, 0%, 75%);
   margin: .2em 0;
@@ -491,6 +498,43 @@ main[route-active="posts"] .post>* {
 
 .comment-list .comment p:last-of-type {
   margin-bottom: .25em;
+}
+
+.comment span.delete {
+  color:hsl(0, 79%, 59%);
+  cursor: pointer;
+  text-shadow: 0 1px 2px rgb(0,0,0,.12);
+  margin: 0 .5em;
+}
+
+.idle-animation {
+  cursor: wait;
+  animation: idle-anim 600ms infinite alternate-reverse;
+}
+
+@keyframes idle-anim {
+  from {
+    transform: rotateX(0deg) translateY(5px);
+    
+  }
+  to {
+    transform: rotate(360deg) translateY(-5px);
+  }
+}
+
+span.txt-divider, span.divider {
+  display: inline-flex;
+  align-content: center;
+  align-items: center;
+  align-content: center;
+  text-align: center;
+  margin: 0 .75em;
+}
+
+span.divider {
+  margin: 0 2em;
+  flex: 1 1 auto;
+  width: max-content;
 }
 
 footer {

@@ -135,6 +135,22 @@ app.commentDateFormat = ts => {
     return '  ' + date.fromNow()
 }
 
+app.deleteComment = async cid => {
+    cid = cid.replace('-', '/')
+    const cEl = await d.queryAsync(`[id="comment-${cid}"]`)
+    const delBtn = cEl.querySelector('span.delete')
+    delBtn.classList.add('idle-animation')
+    await (new Promise(res => {
+        setTimeout(res, 5000)
+    }));
+    const res = await (await app.jsonDelete('/comment', cid)).json()
+    console.log(res)
+    if (res.ok) {
+        df.remove(cEl)
+        app.toast.msg('Comment succesfully deleted')
+    }
+}
+
 app.on.postRendered(async post => {
     app.activePostDisplay = post
 
@@ -159,14 +175,29 @@ app.on.postRendered(async post => {
     d.render(commentList, commentsDisplay.list)
 })
 
-app.formulateThread = (comment, children) => div({class: 'comment'},
+app.formulateThread = (comment, children) => div({
+    class: 'comment',
+    attr: {
+        id: 'comment-' + comment.id,
+    },
+},
     header(
         app.votesUI('comment', (() => (comment.id = comment.id.replace('/','-'), comment))()),
         span({class: 'author-name'}, comment.author_name),
         span({class: 'txt-divider'}, ' - '),
         span({class: 'posted'}, 
             app.renderUXTimestamp(comment.posted, app.commentDateFormat)
-        )
+        ),
+        span({class: 'divider'}),
+        span({
+            class: 'delete',
+            attr: {
+                title: 'click to delete your comment'
+            },
+            onclick(e) {
+                app.deleteComment(comment.id)
+            }
+        }, app.dismissIcon())
     ),
     div({class: 'content'}, d.html(comment.content)),
     children == null || children.length > 0 && div({class: 'children'},
