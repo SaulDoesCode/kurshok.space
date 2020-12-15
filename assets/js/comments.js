@@ -1,6 +1,6 @@
 import app from '/js/site.min.js'
 const d = app.d, df = d.domfn
-const {div, h4, section, span, header} = df
+const {div, button, h4, section, span, header} = df
 const {toggleBox} = app.components
 
 app.fetchComments = async (wid, ops = {}) => {
@@ -87,18 +87,17 @@ const commentsDisplay = app.commentsDisplay = section({
                     }
                 })
             ),
-            cd.cancelBtn = df.button({
+            cd.cancelBtn = button({
                 class: 'cancel-btn',
                 onclick(e) {
                     cd.textarea.value = ''
                     if (cd.authorOnlyToggle.input.checked) cd.authorOnlyToggle.input.checked = false
+                    app.editingComment = null
                 }
             },
                 'Cancel'
             ),
-            cd.postBtn = df.button({
-                    class: 'post-btn',
-            },
+            cd.postBtn = button({class: 'post-btn'},
                 'Post'
             )
         )
@@ -117,17 +116,25 @@ app.gatherComment = () => {
 
 const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
     try {
-        const res = await app.makeComment(app.activePostDisplay.id)
-        if (!res.ok) throw res.status || 'very bad, comment post failed miserably'
-        commentsDisplay.textarea.value = ''
-        if (commentsDisplay.authorOnlyToggle.input.checked) commentsDisplay.authorOnlyToggle.input.checked = false
+        let res 
+        if (commentsDisplay.classList.contains('edit-mode')) {
+            app.editingComment.raw_content = commentsDisplay.textarea.value
+            app.editingComment.author_only = commentsDisplay.authorOnlyToggle.input.checked
+            res = await app.confirmCommentEdit(app.editingComment)
+        } else {
+            res = await app.makeComment(app.activePostDisplay.id)
+            if (!res.ok) throw res.status || 'very bad, comment post failed miserably'
+        }
         commentsDisplay.list.prepend(app.formulateThread(res.data))
     } catch(e) {
         console.error(e)
     } finally {
+        commentsDisplay.textarea.value = ''
+        if (commentsDisplay.authorOnlyToggle.input.checked) commentsDisplay.authorOnlyToggle.input.checked = false
+        commentsDisplay.postBtn.textContent = 'Post'
+
         commentPostHandler.on()
     }
-    // await app.fetchComments(app.activePostDisplay.id, {ids: []})
 })
 
 app.commentDateFormat = ts => {
@@ -140,15 +147,52 @@ app.deleteComment = async cid => {
     const cEl = await d.queryAsync(`[id="comment-${cid}"]`)
     const delBtn = cEl.querySelector('span.delete')
     delBtn.classList.add('idle-animation')
-    await (new Promise(res => {
-        setTimeout(res, 5000)
-    }));
     const res = await (await app.jsonDelete('/comment', cid)).json()
     console.log(res)
     if (res.ok) {
         df.remove(cEl)
         app.toast.msg('Comment succesfully deleted')
     }
+}
+
+app.editComment = async cid => {
+    const cEl = await d.queryAsync(`[id="comment-${cid.replace('-', '/')}"]`)
+    const res = await (await fetch(`/comment/${cid}/raw-content`)).json()
+    if (!res.ok) {
+        throw new Error('Could not retrieve comment raw_content')
+    }
+    commentsDisplay.textarea.value = res.data
+    commentsDisplay.postBtn.textContent = 'Confirm Edit'
+    commentsDisplay.classList.add('edit-mode')
+    app.editingComment = {
+        id: cid,
+        writ_id: app.activePostDisplay.id,
+    }
+
+    cEl.setAttribute('hidden', '')
+    cEl.style.position = 'fixed'
+    app.editingCommentElement = cEl
+}
+
+app.confirmCommentEdit = async editingComment => {
+    if (editingComment == null) throw new Error('Cannot edit a non-existent comment')
+    
+    const res = await (await app.jsonPost('/edit-comment', editingComment)).json()
+
+    if (!res.ok) {
+        app.toast.error('Failed to edit comment: ' + res.status)
+        if (app.editingCommentElement) {
+            app.editingCommentElement.removeAttribute('hidden')
+            app.editingCommentElement.style.position = ''
+            app.editingCommentElement = null
+        }
+        throw new Error(`app.confirmCommentEdit: ` + res.status || "it didn't work :(")
+    }
+
+    app.toast.msg('Comment successfully edited')
+    app.editingCommentElement = null
+
+    return res
 }
 
 app.on.postRendered(async post => {
@@ -200,6 +244,14 @@ app.formulateThread = (comment, children) => div({
         }, app.dismissIcon())
     ),
     div({class: 'content'}, d.html(comment.content)),
+    div({class: 'btn-rack'},
+        (app.user.username != null && comment.author_name == app.user.username) && button({
+            class: 'edit-btn',
+            onclick() {
+                app.editComment(comment.id)
+            }
+        }, 'edit')
+    ),
     children == null || children.length > 0 && div({class: 'children'},
         children.map(c => app.formulateThread(c.comment, c.children))
     )

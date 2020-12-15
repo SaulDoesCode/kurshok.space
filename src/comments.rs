@@ -36,7 +36,7 @@ pub struct Comment {
   pub author_name: String,
   pub content: String,
   pub posted: i64,
-  pub edited: bool,
+  pub edited: bool, // todo: Option<i64>
   pub public: bool,
   pub author_only: bool,
 }
@@ -94,11 +94,21 @@ impl Comment {
   pub fn author_id(&self) -> String {
     Self::get_author_id_from_id(&self.id).to_string()
   }
+
   pub fn get_author_id_from_id(id: &str) -> &str {
     if id.contains('/') {
       return id.split('/').last().unwrap().split(':').next().unwrap();
     }
     return id.split(':').next().unwrap();
+  }
+
+  pub fn get_author_id_from_uncertain_id(id: &str) -> Option<&str> {
+    if id.contains('/') {
+      if let Some(cid) = id.split('/').last() {
+        return cid.split(':').next();
+      }
+    }
+    id.split(':').next()
   }
 
   pub fn vote_id(&self, usr_id: &str) -> String {
@@ -143,13 +153,13 @@ impl Comment {
   pub fn delete(&self) -> bool {
     let deleted_comment = self.default_deleted();
 
-    let vlist: Vec<IVec> = ORC.comment_voters.scan_prefix(self.id.as_bytes())
+    let vlist = ORC.comment_voters.scan_prefix(self.id.as_bytes())
       .keys()
       .filter_map(|res| match res {
         Ok(key) => Some(key),
         Err(_) => None,
       })
-      .collect();
+      .collect::<Vec<IVec>>();
 
     let res: TransactionResult<(), ()> = (
       &ORC.comment_voters,
@@ -190,14 +200,13 @@ impl Comment {
 
   pub fn get_root_comment_id_and_path(&self) -> Option<(String, Vec<String>)> {
     if self.id.matches(":").count() > 1 {
-      return Some((self.id.clone(), {
-        self
-          .id
-          .split('/')
+      return Some((
+        self.id.clone(),
+        self.id.split('/')
           .filter(|&c| c != "")
-          .map(|part| part.to_string())
+          .map(|c| c.to_string())
           .collect()
-      }));
+      ));
     }
 
     if let Ok(Some(raw_key)) = ORC.comment_key_path_index.get(self.id.as_bytes()) {
@@ -236,12 +245,12 @@ impl Comment {
   ) -> ConflictableTransactionResult<(), ()> {
     let is_root_comment = self.is_root_comment();
     let (root_id, path) = if is_root_comment {
-      let path: Vec<String> = self
-        .id
+      let path: Vec<String> = self.id
         .split('/')
         .filter(|&c| c != "")
         .map(|c| c.to_string())
         .collect();
+
       (self.id.clone(), path)
     } else if let Some(raw_key) = kpi.get(self.id.as_bytes())? {
       let full_id = raw_key.to_string();
@@ -517,8 +526,7 @@ pub fn comment_on_comment(
     &ORC.comment_raw_content,
     &ORC.comment_votes,
   )
-    .transaction(
-      |(kpi, comment_trees, comments, comment_raw_content, votes)| {
+    .transaction(|(kpi, comment_trees, comments, comment_raw_content, votes)| {
         if let Some(raw) = comment_trees.get(tree_id.as_bytes())? {
           let mut parent_id_tree: CommentIDTree = bincode::deserialize(&raw).unwrap();
           let id_tree = CommentIDTree {
@@ -546,6 +554,41 @@ pub fn comment_on_comment(
       },
     )
     .is_ok()
+  {
+    return Some(comment);
+  }
+  None
+}
+
+pub fn edit_comment(settings: &CommentSettings, rce: RawCommentEdit) -> Option<Comment> {
+  if let Some(max_len) = settings.max_comment_length {
+    if rce.raw_content.len() > max_len as usize {
+      return None;
+    }
+  }
+  if let Some(min_len) = settings.min_comment_length {
+    if rce.raw_content.len() < min_len as usize {
+      return None;
+    }
+  }
+
+  if let Ok(comment) = (
+    &ORC.comments,
+    &ORC.comment_raw_content,
+  )
+    .transaction(|(comments, comment_raw_content)| {
+      if let Ok(Some(raw_comment)) = comments.get(rce.id.as_bytes()) {
+        let mut comment = Comment::try_from_slice(&raw_comment).unwrap();
+        comment.author_only = rce.author_only.unwrap_or(false);
+        comment.content = render_md(&rce.raw_content);
+        comment.edited = true;
+
+        comments.insert(rce.id.as_bytes(), comment.try_to_vec().unwrap())?;
+        comment_raw_content.insert(rce.id.as_bytes(), rce.raw_content.as_bytes())?;
+        return Ok(comment);
+      }
+      Err(sled::transaction::ConflictableTransactionError::Abort(()))
+    })
   {
     return Some(comment);
   }
@@ -1048,6 +1091,14 @@ pub struct RawComment {
   pub author_only: Option<bool>,
 }
 
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+pub struct RawCommentEdit {
+  pub id: String,
+  pub writ_id: String,
+  pub raw_content: String,
+  pub author_only: Option<bool>,
+}
+
 #[put("/comment")]
 pub async fn make_comment(
   req: HttpRequest,
@@ -1092,6 +1143,65 @@ pub async fn make_comment(
   make_comment_on_writ(usr, rc).await
 }
 
+#[post("/edit-comment")]
+pub async fn edit_comment_request(
+  req: HttpRequest,
+  rce: web::Json<RawCommentEdit>,
+) -> HttpResponse {
+  let o_usr = ORC.user_by_session(&req);
+  let usr = match &o_usr {
+    Some(el) => el.value(),
+    None => return crate::responses::Forbidden("Unauthorized comment edit attempt"),
+  };
+
+  let mut rce = rce.into_inner();
+  if rce.id.contains('-') {
+    rce.id = rce.id.replace('-', "/").to_string();
+  }
+
+  rce.raw_content = rce.raw_content.trim().to_string();
+
+  if !ORC.dev_mode {
+    let hitter = format!("ce{}", usr.id);
+    if let Some(rl) = ORC.ratelimiter
+      .hit(hitter.as_bytes(), 3, Duration::minutes(5))
+    {
+      if rl.is_timing_out() {
+        return crate::responses::TooManyRequests(format!(
+          "too many requests, timeout has {} minutes left.",
+          rl.minutes_left()
+        ));
+      }
+    }
+  }
+
+  make_comment_edit(&usr.id, rce).await
+}
+
+#[get("/comment/{id}/raw-content")]
+pub async fn fetch_comment_raw_content(
+  req: HttpRequest,
+  cid: web::Path<String>,
+) -> HttpResponse {
+  let cid = cid.replace("-", "/");
+  // TODO: ratelimiting
+  if let Some(usr) = ORC.user_by_session(&req) {
+    if let Some(author_id) = Comment::get_author_id_from_uncertain_id(cid.as_str()) {
+      if author_id == usr.id {
+        if let Ok(Some(raw_rc)) = ORC.comment_raw_content.get(cid.as_bytes()) {
+          return crate::responses::Ok(raw_rc.to_string());
+        } else {
+          return crate::responses::NotFound("comment id didn't match anything of yours");
+        }
+      }
+    }
+  }
+
+  crate::responses::Forbidden(
+    "You can't load the raw_contents of comments if you aren't logged in or if the contents in question aren't yours"
+  )
+}
+
 #[delete("/comment")]
 pub async fn delete_comment(
   req: HttpRequest,
@@ -1107,7 +1217,6 @@ pub async fn delete_comment(
   
   if let Some(comment) = Comment::from_id(ctd.as_bytes()) {
     if usr.username == comment.author_name {
-      println!("Trying to delete comment - {}", ctd.as_str());
       if comment.delete() {
         return crate::responses::Ok("Comment successfully deleted");
       }
@@ -1203,7 +1312,6 @@ pub async fn make_comment_on_comment(usr: &User, rc: RawComment) -> HttpResponse
     let settings = CommentSettings::try_from_slice(&val).unwrap();
     if let Some(parent_comment) = Comment::from_id(rc.parent_id.as_bytes()) {
       if let Some(comment) = comment_on_comment(
-        
         &settings,
         &parent_comment,
         &usr,
@@ -1217,6 +1325,24 @@ pub async fn make_comment_on_comment(usr: &User, rc: RawComment) -> HttpResponse
   }
 
   crate::responses::InternalServerError("troubles abound, couldn't make subcomment :(")
+}
+
+pub async fn make_comment_edit(usr_id: &str, rce: RawCommentEdit) -> HttpResponse {
+  if let Some(author_id) = Comment::get_author_id_from_uncertain_id(&rce.id) {
+    if author_id != usr_id {
+      return crate::responses::Forbidden("You cannot edit another user's comments.");
+    }
+  } else {
+    return crate::responses::BadRequest("Bad comment id");
+  }
+
+  if let Ok(Some(val)) = ORC.comment_settings.get(rce.writ_id.as_bytes()) {
+    let settings = CommentSettings::try_from_slice(&val).unwrap();
+    if let Some(comment) = edit_comment(&settings, rce) {
+      return crate::responses::AcceptedData(comment);
+    }
+  }
+  crate::responses::InternalServerError("troubles abound, couldn't edit comment :(")
 }
 
 fn get_prefix_and_parts(id: &str, prefix_parts: usize) -> (String, Vec<String>) {

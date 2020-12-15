@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-
 #![feature(iter_advance_by)]
 
 #[macro_use(lazy_static)]
@@ -118,6 +117,8 @@ async fn main() -> std::io::Result<()> {
             .service(writs::post_content)
             .service(writs::writ_raw_content)
             .service(comments::post_comment_query)
+            .service(comments::edit_comment_request)
+            .service(comments::fetch_comment_raw_content)
             .service(comments::make_comment)
             .service(comments::delete_comment)
             .service(comments::upvote_comment)
@@ -314,6 +315,11 @@ async fn serve_files_and_templates(req: HttpRequest) -> HttpResponse {
         ctx.insert("dev_mode", &ORC.dev_mode);
 
         if let Ok(s) = TEMPLATES.read().render(&name, &ctx) {
+            if s.len() == 0 {
+                return HttpResponse::NoContent()
+                    .content_type("text/html")
+                    .body("Take heed, this page is either broken, forbidden, or nonexistent :(");
+            }
             return HttpResponse::Ok()
                 .content_type(if is_js {
                     "application/javascript"

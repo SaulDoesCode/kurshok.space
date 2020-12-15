@@ -1229,7 +1229,7 @@ pub async fn writ_raw_content(
         if let Ok(Some(raw_rw)) = ORC.raw_content.get(wid.as_bytes()) {
           return crate::responses::Ok(raw_rw.to_string());
         } else {
-          return crate::responses::NotFound("writ id either didn't match anything of yours");
+          return crate::responses::NotFound("writ id didn't match anything of yours");
         }
       }
     }
