@@ -1317,7 +1317,7 @@ pub async fn make_comment_on_comment(usr: &User, rc: RawComment) -> HttpResponse
         &usr,
         rc.writ_id,
         rc.raw_content,
-        rc.author_only.unwrap_or(false),
+        parent_comment.author_only,
       ) {
         return crate::responses::AcceptedData(comment);
       }
@@ -1338,6 +1338,7 @@ pub async fn make_comment_edit(usr_id: &str, rce: RawCommentEdit) -> HttpRespons
 
   if let Ok(Some(val)) = ORC.comment_settings.get(rce.writ_id.as_bytes()) {
     let settings = CommentSettings::try_from_slice(&val).unwrap();
+    // TODO: proper error handling instead of do or fail generically
     if let Some(comment) = edit_comment(&settings, rce) {
       if let Some(pc) = comment.public(&Some(usr_id.to_string())) {
         return crate::responses::AcceptedData(pc);
