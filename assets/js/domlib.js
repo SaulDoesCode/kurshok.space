@@ -547,7 +547,11 @@ export default (d => {
     state = !node.hasAttribute(name),
     val = node.getAttribute(name) || ''
   ) => {
-    (state ? node.setAttribute : node.removeAttribute)(name, val);
+    if (state) {
+      node.setAttribute(name, val)
+    } else {
+      node.removeAttribute(name)
+    }
     return node
   }
 
