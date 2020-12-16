@@ -198,10 +198,7 @@ app.toast = new Proxy((kind, msg, displayTime = 15000) => {
         df.span(msg),
         df.span({
             class: 'dismiss-btn',
-            onceclick() {
-                console.log('moo')
-                dismiss()
-            }
+            onceclick() { dismiss() }
         },
             app.dismissIcon()
         )
