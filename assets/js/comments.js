@@ -149,12 +149,26 @@ const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
             if (!res.ok) throw res.status || 'very bad, comment post failed miserably'
         }
         if (app.replyingToComment != null) {
-            div({
-                $: `[id="comment-${app.replyingToComment.replace('-', '/')}"]`,
+            const cEl = commentsDisplay.list.querySelector(`[id="comment-${app.replyingToComment.replace('-', '/')}"]`)
+
+            cEl.childenContainer = div({
+                $: cEl,
                 class: 'children'
             },
                 app.formulateThread(res.data)
             )
+
+            const btnRack = cEl.querySelector('.btn-rack')
+
+            button({
+                $: btnRack,
+                class: 'hide-replies-btn',
+                onclick(e, el) {
+                    df.attrToggle(cEl.childenContainer, 'hidden')
+                    df.class(cEl, 'hidden-children')
+                    el.textContent = cEl.classList.contains('hidden-children') ? 'show replies' : 'hide replies'
+                }
+            }, 'hide replies')
         } else {
             let cEl
             if (app.editingCommentParent != null) {
