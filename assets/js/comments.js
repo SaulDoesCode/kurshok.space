@@ -164,7 +164,6 @@ const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
                 $: btnRack,
                 class: 'hide-replies-btn',
                 onclick(e, el) {
-                    df.attrToggle(cEl.childenContainer, 'hidden')
                     df.class(cEl, 'hidden-children')
                     el.textContent = cEl.classList.contains('hidden-children') ? 'show replies' : 'hide replies'
                 }
@@ -352,7 +351,6 @@ app.formulateThread = (comment, children, $) => div({
             children == null || children.length > 0 && button({
                 class: 'hide-replies-btn',
                 onclick(e, el) {
-                    df.attrToggle(cEl.childenContainer, 'hidden')
                     df.class(cEl, 'hidden-children')
                     el.textContent = cEl.classList.contains('hidden-children') ? 'show replies' : 'hide replies'
                 }

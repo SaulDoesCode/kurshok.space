@@ -532,6 +532,13 @@ main[route-active="posts"] .post>* {
   width: 99%;
 }
 
+.comment.hidden-children .children {
+  position: absolute;
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .comment .content h1 {
   font-size: 2em;
 }
