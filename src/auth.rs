@@ -664,7 +664,7 @@ pub enum AuthError {
   SessionErr,
   #[error("ran into trouble removing bad or expired sessions")]
   SessionRemovalErr,
-  #[error("unknown auth error")]
+  #[error("Unknown auth error")]
   Unknown,
 }
 
@@ -784,13 +784,15 @@ pub async fn login(usr_id: String, first_time: bool) -> HttpResponse {
       .finish()
   };
 
-  HttpResponse::Accepted().cookie(cookie).json(json!({
-    "ok": true,
-    "data": "successfully logged in",
-    "status": {
-      "first_time": first_time
-    }
-  }))
+  HttpResponse::Accepted()
+    .cookie(cookie)
+    .json(json!({
+      "ok": true,
+      "data": "successfully logged in",
+      "status": {
+        "first_time": first_time
+      }
+    }))
 }
 
 #[get("/auth")]
@@ -855,17 +857,12 @@ pub async fn auth_attempt(
   crate::responses::Forbidden("not working, we might be under attack")
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct AdministralityRequest {
-  key: String,
-}
-
 #[post("/administrality")]
 pub async fn administer_administrality(
   req: HttpRequest,
-  ar: web::Json<AdministralityRequest>,
+  key: web::Json<String>,
 ) -> impl Responder {
-  if CONF.read().admin_key == ar.key {
+  if CONF.read().admin_key == key.into_inner() {
     if let Some(ref mut usr) = ORC.user_by_session(&req) {
       if ORC.make_admin(&usr.id, 0, Some("passed administrality".to_string())) {
         return crate::responses::Accepted("Congratulations, you are now an admin.");
