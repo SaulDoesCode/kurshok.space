@@ -354,7 +354,7 @@ main[route-active="posts"] .post>* {
   line-height: 1.1;
   font-size: .88em;
   border-radius: .1em;
-  color: hsl(0, 0%, 25%);
+  color: hsl(0, 0%, 20%);
   text-shadow: 0 1px 2px rgb(0,0,0,.12);
   box-shadow: 0 2px 3px rgb(0,0,0,.12);
   background: var(--primary-color);
@@ -388,8 +388,6 @@ main[route-active="posts"] .post>* {
 .post-pagination>.page-forward:hover {
   color: #ffb638;
 }
-
-/*.tag.small {}*/
 
 .post .comments {
   flex-flow: column;
@@ -472,13 +470,27 @@ main[route-active="posts"] .post>* {
 .comment-list .comment {
   position: relative;
   display: block;
-  background: hsl(0,0%,15%);
-  border-radius: 4px;
-  padding: .25em .5em;
-  margin: .75em 0;
+  background: transparent;
+  margin: .5em 0;
+  overflow: hidden;
 }
 
-.comment-list .comment > header {
+.comment-list > .comment {
+  padding-top: 1.25em;
+  margin-top: .75em;
+  border-top: 1px solid hsl(0, 0%, 25%);
+}
+
+.comment-list>.comment:first-of-type {
+  border-top: 0;
+  padding-bottom: .5em;
+}
+
+.comment-content {
+  background: hsl(0, 0%, 15%);
+}
+
+.comment-content header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -492,7 +504,8 @@ main[route-active="posts"] .post>* {
   border-bottom: 1px solid hsl(0, 0%, 13%);
 }
 
-.comment > .content {
+.comment .content {
+  display: block;
   padding-left: .25em;
   width: 100%;
   margin: 0;
@@ -500,22 +513,41 @@ main[route-active="posts"] .post>* {
   padding-top: .25em;
 }
 
-.comment>.content h1 {
+.comment-content {
+  border-radius: 4px;
+  padding: .25em;
+}
+
+.comment .children {
+  display: flex;
+  justify-content: flex-start;
+  align-content: flex-start;
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.comment .children .comment {
+  margin-left: 1%;
+  border-left: 1px solid hsl(0, 0%, 30%);
+  width: 99%;
+}
+
+.comment .content h1 {
   font-size: 2em;
 }
-.comment>.content h2 {
+.comment .content h2 {
   font-size: 1.8em;
 }
-.comment>.content h3 {
+.comment .content h3 {
   font-size: 1.6em;
 }
-.comment>.content h4 {
+.comment .content h4 {
   font-size: 1.4em;
 }
-.comment>.content h5 {
+.comment .content h5 {
   font-size: 1.2em;
 }
-.comment>.content h6 {
+.comment .content h6 {
   font-size: 1.1em;
 }
 
@@ -530,7 +562,7 @@ main[route-active="posts"] .post>* {
   margin: 0 .5em;
 }
 
-.comment > hr {
+.comment-content > hr {
   margin: .75em auto .2em auto;
   max-width: 97%;
 }
@@ -561,7 +593,6 @@ main[route-active="posts"] .post>* {
 @keyframes idle-anim {
   from {
     transform: rotateX(0deg) translateY(5px);
-    
   }
   to {
     transform: rotate(360deg) translateY(-5px);

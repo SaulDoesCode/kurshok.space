@@ -90,14 +90,7 @@ const commentsDisplay = app.commentsDisplay = section({
             cd.cancelBtn = button({
                 class: 'cancel-btn',
                 onclick(e) {
-                    cd.textarea.value = ''
-                    if (cd.authorOnlyToggle.input.checked) cd.authorOnlyToggle.input.checked = false
-                    app.editingComment = null
-                    if (app.editingCommentElement) {
-                        app.editingCommentElement.removeAttribute('hidden')
-                        app.editingCommentElement.style.position = ''
-                        app.editingCommentElement = null
-                    }
+                    app.cancelCommentWriting()
                 }
             },
                 'Cancel'
@@ -119,25 +112,72 @@ app.gatherComment = () => {
     return {raw_content, author_only}
 }
 
+app.cancelCommentWriting = () => {
+    commentsDisplay.textarea.value = ''
+    if (commentsDisplay.authorOnlyToggle.input.checked) {
+        commentsDisplay.authorOnlyToggle.input.checked = false
+    }
+    commentsDisplay.postBtn.textContent = 'Post'
+    app.editingComment = null
+    app.replyingToComment = null
+    if (app.editingCommentElement) {
+        app.editingCommentElement.removeAttribute('hidden')
+        app.editingCommentElement.style.position = ''
+        app.editingCommentElement = null
+    }
+}
+
 const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
     try {
         let res 
         if (commentsDisplay.classList.contains('edit-mode')) {
-            app.editingComment.raw_content = commentsDisplay.textarea.value
+            app.editingComment.raw_content = commentsDisplay.textarea.value.trim()
             app.editingComment.author_only = commentsDisplay.authorOnlyToggle.input.checked
+
+            if (app.editingComment.raw_content == app.editingRawContent) {
+                app.toast.error(`Comment you're editing is unchanged`)
+                app.cancelCommentWriting()
+                return
+            }
+
             res = await app.confirmCommentEdit(app.editingComment)
         } else {
-            res = await app.makeComment(app.activePostDisplay.id)
+            res = await app.makeComment(
+                app.replyingToComment || app.activePostDisplay.id,
+                app.activePostDisplay.id
+            )
             if (!res.ok) throw res.status || 'very bad, comment post failed miserably'
         }
-        commentsDisplay.list.prepend(app.formulateThread(res.data))
+        if (app.replyingToComment != null) {
+            div({
+                $: `[id="comment-${app.replyingToComment.replace('-', '/')}"]`,
+                class: 'children'
+            },
+                app.formulateThread(res.data)
+            )
+        } else {
+            let cEl
+            if (app.editingCommentParent != null) {
+                cEl = app.formulateThread(res.data, null, app.editingCommentParent)
+            } else {
+                cEl = app.formulateThread(res.data)
+                commentsDisplay.list.prepend(cEl)
+            }
+
+            if (app.editingCommentElementChildren != null) {
+                d.render(app.editingCommentElementChildren, cEl, 'prepend')
+                app.editingCommentElementChildren = null
+            }
+        }
     } catch(e) {
+        app.toast.error(`Commenting went wrong: ${e}`)
         console.error(e)
     } finally {
         commentsDisplay.textarea.value = ''
         if (commentsDisplay.authorOnlyToggle.input.checked) commentsDisplay.authorOnlyToggle.input.checked = false
         commentsDisplay.postBtn.textContent = 'Post'
-
+        app.replyingToComment = null
+        app.editingCommentParent = null
         commentPostHandler.on()
     }
 })
@@ -168,11 +208,18 @@ app.editComment = async (cid, author_only) => {
     }
     commentsDisplay.textarea.value = res.data
     commentsDisplay.postBtn.textContent = 'Confirm Edit'
+    commentsDisplay.textarea.focus()
     commentsDisplay.authorOnlyToggle.input.checked = author_only
     commentsDisplay.classList.add('edit-mode')
+
+    app.editingRawContent = res.data
     app.editingComment = {
         id: cid,
         writ_id: app.activePostDisplay.id,
+    }
+
+    if (cEl.parentElement.classList.contains('children')) {
+        app.editingCommentParent = cEl.parentElement
     }
 
     cEl.setAttribute('hidden', '')
@@ -195,8 +242,10 @@ app.confirmCommentEdit = async editingComment => {
         throw new Error(`app.confirmCommentEdit: ` + res.status || "it didn't work :(")
     }
 
+    app.editingCommentElementChildren = app.editingCommentElement.querySelector('.children')
+
     df.remove(app.editingCommentElement)
-    app.editingCommentElement = null
+
     app.editingCommentElement = null
 
     app.toast.msg('Comment successfully edited')
@@ -223,46 +272,80 @@ app.on.postRendered(async post => {
     const commentList = []
 
     for (const {comment, children} of commentTrees) {
-        commentList.push(app.formulateThread(comment, children))
+        commentList.push(app.formulateThread(comment, children, commentsDisplay.list))
     }
-    d.render(commentList, commentsDisplay.list)
 })
 
-app.formulateThread = (comment, children) => div({
+const randomColor = () => {
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += randomColor.letters[Math.floor(Math.random() * 16)];
+    }
+    return color
+}
+randomColor.letters = '0123456789ABCDEF'
+
+
+const randHSLColor = () => `hsl(${Math.random()*360|0}, ${Math.random()*100|30}%, 30%)`
+
+app.formulateThread = (comment, children, $) => div({
+    $,
     class: 'comment',
+    css: {
+        borderLeftColor: randHSLColor(),
+    },
     attr: {
         id: 'comment-' + comment.id,
     },
-},
-    header(
-        app.votesUI('comment', (() => (comment.id = comment.id.replace('/','-'), comment))()),
-        span({class: 'author-name'}, comment.author_name),
-        span({class: 'txt-divider'}, ' - '),
-        span({class: 'posted'}, 
-            app.renderUXTimestamp(comment.posted, app.commentDateFormat)
+}, cEl => [
+    div({class: 'comment-content'},
+        header(
+            app.votesUI('comment', (() => (comment.id = comment.id.replace('/','-'), comment))()),
+            span({class: 'author-name'}, comment.author_name),
+            span({class: 'txt-divider'}, ' - '),
+            span({class: 'posted'}, 
+                app.renderUXTimestamp(comment.posted, app.commentDateFormat)
+            ),
+            span({class: 'divider'}),
+            (app.user.username != null && comment.author_name == app.user.username) && button({
+                class: 'edit-btn',
+                onclick() {
+                    app.editComment(comment.id, comment.author_only)
+                }
+            }, 'edit'),
+            span({
+                class: 'delete',
+                attr: {
+                    title: 'click to delete your comment'
+                },
+                onclick(e) {
+                    app.deleteComment(comment.id)
+                }
+            }, app.dismissIcon())
         ),
-        span({class: 'divider'}),
-        (app.user.username != null && comment.author_name == app.user.username) && button({
-            class: 'edit-btn',
-            onclick() {
-                app.editComment(comment.id, comment.author_only)
-            }
-        }, 'edit'),
-        span({
-            class: 'delete',
-            attr: {
-                title: 'click to delete your comment'
-            },
-            onclick(e) {
-                app.deleteComment(comment.id)
-            }
-        }, app.dismissIcon())
+        div({class: 'content'}, d.html(comment.content)),
+        div({class: 'btn-rack'},
+            button({
+                class: 'reply-btn',
+                onclick() {
+                    app.replyingToComment = ('' + comment.id).replace('-', '/')
+                    commentsDisplay.authorOnlyToggle.input.checked = comment.author_only
+                    commentsDisplay.postBtn.textContent = 'Reply'
+                    commentsDisplay.textarea.focus()
+                }
+            }, 'reply'),
+            
+            children == null || children.length > 0 && button({
+                class: 'hide-replies-btn',
+                onclick(e, el) {
+                    df.attrToggle(cEl.childenContainer, 'hidden')
+                    df.class(cEl, 'hidden-children')
+                    el.textContent = cEl.classList.contains('hidden-children') ? 'show replies' : 'hide replies'
+                }
+            }, 'hide replies')
+        )
     ),
-    div({class: 'content'}, d.html(comment.content)),
-    div({class: 'btn-rack'},
-        button({class: 'reply-btn'}, 'reply')
-    ),
-    children == null || children.length > 0 && div({class: 'children'},
+    children == null || children.length > 0 && (cEl.childenContainer = div({class: 'children'},
         children.map(c => app.formulateThread(c.comment, c.children))
-    )
-)
+    ))
+])
