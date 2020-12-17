@@ -132,13 +132,17 @@ const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
         let res 
         if (commentsDisplay.classList.contains('edit-mode')) {
             app.editingComment.raw_content = commentsDisplay.textarea.value.trim()
-            app.editingComment.author_only = commentsDisplay.authorOnlyToggle.input.checked
 
-            if (app.editingComment.raw_content == app.editingRawContent) {
+            if (
+                app.editingComment.raw_content == app.editingRawContent &&
+                app.editingComment.author_only == commentsDisplay.authorOnlyToggle.input.checked
+            ) {
                 app.toast.error(`Comment you're editing is unchanged`)
                 app.cancelCommentWriting()
                 return
             }
+
+            app.editingComment.author_only = commentsDisplay.authorOnlyToggle.input.checked
 
             res = await app.confirmCommentEdit(app.editingComment)
         } else {
@@ -178,7 +182,7 @@ const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
             }
 
             if (app.editingCommentElementChildren != null) {
-                d.render(app.editingCommentElementChildren, cEl, 'prepend')
+                d.render(app.editingCommentElementChildren, cEl)
                 app.editingCommentElementChildren = null
             }
         }
@@ -229,6 +233,7 @@ app.editComment = async (cid, author_only) => {
     app.editingComment = {
         id: cid,
         writ_id: app.activePostDisplay.id,
+        author_only,
     }
 
     if (cEl.parentElement.classList.contains('children')) {
@@ -320,7 +325,7 @@ app.formulateThread = (comment, children, $) => div({
                 app.renderUXTimestamp(comment.posted, app.commentDateFormat)
             ),
             span({class: 'divider'}),
-            (app.user.username != null && comment.author_name == app.user.username) && button({
+            (app.user != null && comment.author_name == app.user.username) && button({
                 class: 'edit-btn',
                 onclick() {
                     app.editComment(comment.id, comment.author_only)
