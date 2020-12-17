@@ -130,10 +130,10 @@ impl RemoteHttpRequest {
                     if let Ok(v) = HeaderValue::from_str(value.as_str()) {
                         builder = builder.header(k, v);
                     } else {
-                        print!("headers value fucky");
+                        print!("header value fucky");
                     }
                 } else {
-                    print!("headers name fucky");
+                    print!("header name fucky");
                 }
             }
         }

@@ -10,6 +10,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 mod admin_functions;
 mod auth;
+mod email;
 mod comments;
 mod orchestrator;
 mod posts;
@@ -146,7 +147,9 @@ pub struct Config {
     pub db_location: String,
     pub admin_key: String,
     pub dev_mode: bool,
-    do_token: String,
+    pub mail_server: String,    
+    pub smtp_username: String,    
+    pub smtp_password: String,
     cert_path: String,
     privkey_path: String,
 }
