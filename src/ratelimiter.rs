@@ -59,12 +59,13 @@ impl RateLimiter {
   }
 
   pub fn forget(&self, data: &[u8]) -> bool {
-    if self.store.remove(data).is_err() {
-      return false;
+    if if let Ok(Some(_)) = self.store.remove(data).is_err() {
+      return true;
+      self.count.fetch_sub(1, SeqCst);
     }
-    self.count.fetch_sub(1, SeqCst);
-    true
+    false
   }
+
   pub fn insert(&self, data: &[u8], entry: Vec<u8>) -> bool {
     if self.store.insert(data, entry).is_ok()
       && self.count.fetch_add(1, SeqCst) == self.limit
