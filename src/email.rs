@@ -11,23 +11,26 @@ use super::CONF;
 // use crate::orchestrator::ORC;
 
 pub fn send_email(email: &Message) -> bool {
-    let conf = CONF.read();
-    if let Ok(transport) = SmtpTransport::starttls_relay(&conf.mail_server) {
-        let creds = Credentials::new(
+    let (mail_server, smtp_username, smtp_password, dev_mode) = {
+        let conf = CONF.read();
+        (
+            conf.mail_server.clone(),
             conf.smtp_username.clone(),
-            conf.smtp_password.clone()
-        );
-
-        let mailer = transport
-            .credentials(creds)
-            .build();
+            conf.smtp_password.clone(),
+            conf.dev_mode
+        )
+    };
+    if let Ok(transport) = SmtpTransport::starttls_relay(&mail_server) {
+        let mailer = transport.credentials(
+            Credentials::new(smtp_username, smtp_password)
+        ).build();
 
         match mailer.send(&email) {
             Ok(response) => {
                 return response.is_positive();
             },
             Err(e) => {
-                if conf.dev_mode {
+                if dev_mode {
                     println!("Could not send email: {:?}", e);
                 }
                 return false;
