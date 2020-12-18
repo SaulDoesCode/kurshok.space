@@ -59,9 +59,9 @@ impl RateLimiter {
   }
 
   pub fn forget(&self, data: &[u8]) -> bool {
-    if if let Ok(Some(_)) = self.store.remove(data).is_err() {
-      return true;
+    if let Ok(Some(_)) = self.store.remove(data).is_err() {
       self.count.fetch_sub(1, SeqCst);
+      return true;
     }
     false
   }
