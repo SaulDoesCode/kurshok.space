@@ -6,8 +6,6 @@ use time::OffsetDateTime;
 
 use std::convert::TryInto;
 
-// use crate::files::{MetaData};
-
 lazy_static! {
   static ref COMRAK_OPTS: ComrakOptions = {
     let mut md_opts = ComrakOptions::default();
@@ -135,12 +133,6 @@ pub fn is_char_number_or_uppercase(c: char) -> bool {
 
 pub fn is_char_username_unfriendly(c: char) -> bool {
   !c.is_alphanumeric() && c != '_' && c != '-' && c != ' '
-}
-
-#[inline]
-pub fn is_password_ok(pwd: &str) -> bool {
-  let len = pwd.len();
-  len > 7 && len < 257 && pwd.find(is_char_number_or_uppercase).is_some()
 }
 
 #[inline]

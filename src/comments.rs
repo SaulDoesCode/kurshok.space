@@ -23,7 +23,7 @@ pub struct PublicComment {
   #[serde(skip_serializing_if = "i64_is_zero")]
   pub vote: i64,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub edited: Option<bool>,
+  pub edited: Option<i64>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub you_voted: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -36,7 +36,7 @@ pub struct Comment {
   pub author_name: String,
   pub content: String,
   pub posted: i64,
-  pub edited: bool, // todo: Option<i64>
+  pub edited: Option<i64>,
   pub public: bool,
   pub author_only: bool,
 }
@@ -48,7 +48,7 @@ impl Comment {
       author_name,
       content,
       posted: unix_timestamp(),
-      edited: false,
+      edited: None,
       public: false,
       author_only: false,
     }
@@ -118,7 +118,7 @@ impl Comment {
   pub fn public(self, usr_id: &Option<String>) -> Option<PublicComment> {
     Some(PublicComment {
       posted: self.posted,
-      edited: self.edited.wrap(),
+      edited: self.edited,
       author_only: self.author_only.wrap(),
       you_voted: match usr_id {
         Some(id) => match ORC.comment_voters.get(self.vote_id(id).as_bytes()) {
@@ -145,7 +145,7 @@ impl Comment {
       content: "[deleted]".to_string(),
       posted: self.posted,
       public: self.public,
-      edited: self.edited,
+      edited: None,
       author_only: self.author_only,
     }
   }
@@ -581,7 +581,7 @@ pub fn edit_comment(settings: &CommentSettings, rce: RawCommentEdit) -> Option<C
         let mut comment = Comment::try_from_slice(&raw_comment).unwrap();
         comment.author_only = rce.author_only.unwrap_or(false);
         comment.content = render_md(&rce.raw_content);
-        comment.edited = true;
+        comment.edited = Some(unix_timestamp());
 
         comments.insert(rce.id.as_bytes(), comment.try_to_vec().unwrap())?;
         comment_raw_content.insert(rce.id.as_bytes(), rce.raw_content.as_bytes())?;

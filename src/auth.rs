@@ -1,9 +1,9 @@
 use actix_web::{
   cookie::Cookie, delete, get, post, web, HttpMessage, HttpRequest, HttpResponse, Responder,
 };
-use argon2::Config;
 use borsh::{BorshDeserialize, BorshSerialize};
 use dashmap::{DashMap, ElementGuard};
+use lettre::{Message, message::{header, MultiPart, SinglePart}};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sled::{transaction::*, IVec, Transactional};
@@ -16,16 +16,15 @@ use std::sync::{
   Arc,
 };
 
-use super::CONF;
+use super::{CONF, TEMPLATES};
+
 use crate::orchestrator::{Orchestrator, ORC};
 use crate::utils::{
   is_email_ok,
-  // datetime_from_unix_timestamp,
-  is_password_ok,
   is_username_ok,
   random_string,
   unix_timestamp,
-  FancyBool,
+  // FancyBool,
   FancyIVec,
 };
 
@@ -45,53 +44,71 @@ impl Orchestrator {
     })
   }
 
-  pub fn create_user(&self, ar: AuthRequest) -> Option<User> {
-    if !is_username_ok(ar.username.as_str()) {
+  pub fn create_user(&self, username: String, email: String, handle: Option<String>) -> Option<User> {
+    if !is_username_ok(&username) {
       return None;
     }
-    if !is_password_ok(ar.password.as_str()) {
+    if !is_email_ok(&email) {
       return None;
     }
-
-    let pwd = match self.hash_pwd(&ar.password) {
-      Some(p) => p,
-      None => return None,
-    };
 
     let user_id = match self.generate_id("usr".as_bytes()) {
       Ok(id) => format!("{}", id),
       Err(_) => return None,
     };
 
-    let email = ar.email.and_then(|e| is_email_ok(&e).qualify(e));
+    let mut handle = handle.unwrap_or(slugify(&username));
+
+    if let Some(taken) = self.handle_taken(&handle) {
+      if taken {
+        let mut num = 1u32;
+        let mut new_handle = format!("{}-{}", handle, num);
+        while let Some(taken) = self.handle_taken(&handle) {
+          if taken {
+            if num > 10 {
+              return None;
+            }
+            num = num + 1;
+            new_handle = format!("{}-{}", handle, num);
+          } else {
+            handle = new_handle.clone();
+            break;
+          }
+        }
+        if handle != new_handle {
+          return None;
+        }
+      }
+    } else {
+      return None;
+    }
 
     let usr = User {
       id: user_id.clone(),
-      username: ar.username.clone(),
-      handle: ar.handle.unwrap_or(slugify(ar.username)),
+      username: username.clone(),
+      handle,
       reg: unix_timestamp(),
     };
 
     if (
       &self.users,
       &self.usernames,
-      &self.user_secrets,
-      &self.user_emails,
+      &self.emails,
+      &self.user_email_index,
       &self.handles,
     )
-      .transaction(|(users, usernames, usr_secrets, usr_emails, handles)| {
+      .transaction(|(users, usernames, emails, user_email_index, handles)| {
         if usernames.get(usr.username.as_bytes())?.is_some()
           || handles.get(usr.handle.as_bytes())?.is_some()
+          || emails.get(email.as_bytes())?.is_some()
         {
           return Err(sled::transaction::ConflictableTransactionError::Abort(()));
         }
 
         users.insert(user_id.as_bytes(), usr.try_to_vec().unwrap())?;
-        usr_secrets.insert(user_id.as_bytes(), pwd.as_bytes())?;
-        if let Some(email) = &email {
-          usr_emails.insert(user_id.as_bytes(), email.as_bytes())?;
-        }
         usernames.insert(usr.username.as_bytes(), user_id.as_bytes())?;
+        emails.insert(email.as_bytes(), user_id.as_bytes())?;
+        user_email_index.insert(user_id.as_bytes(), email.as_bytes())?;
         handles.insert(usr.handle.as_bytes(), user_id.as_bytes())?;
         Ok(())
       })
@@ -103,15 +120,155 @@ impl Orchestrator {
     None
   }
 
-  pub fn authenticate(&self, username: &str, pwd: &str) -> Option<ElementGuard<String, User>> {
-    if let Ok(Some(usr_id)) = self.usernames.get(username.as_bytes()) {
-      if let Ok(Some(usr_pwd)) = self.user_secrets.get(&usr_id) {
-        if verify_password(pwd, usr_pwd.to_str()) {
-          return self.user_by_id(usr_id.to_str());
-        }
+  pub fn create_magic_link_email(
+    &self,
+    first_time: bool,
+    usr_id: String,
+    username: String,
+    email: String,
+  ) -> Option<lettre::Message> {
+    let ml = MagicLink::new(usr_id);
+
+    let ml_res: TransactionResult<(), ()> = self.magic_links.transaction(|magic_links| {
+      magic_links.insert(ml.code.as_bytes(), ml.try_to_vec().unwrap())?;
+      Ok(())
+    });
+
+    if ml_res.is_err() {
+      if ORC.dev_mode {
+        println!("create_magic_link_email: db transaction failed");
       }
+      return None;
+    }
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("magic_code", &ml.code);
+    ctx.insert("username", &username);
+    ctx.insert("domain", &CONF.read().domain);
+    if first_time {
+      ctx.insert("email_type", "Verification");
+    } else {
+      ctx.insert("email_type", "Authentication");
+    }
+
+    let html_body = match TEMPLATES.read().render("magic-link-email.html", &ctx) {
+      Ok(s) => s,
+      Err(e) => {
+        if ORC.dev_mode {
+          println!("magic-link email template had errors: {}", e);
+        }
+        return None;
+      },
+    };
+    let txt_body = match TEMPLATES.read().render("magic-link-email-text-version.txt", &ctx) {
+      Ok(s) => s,
+      Err(e) => {
+        if ORC.dev_mode {
+          println!("magic-link email template had errors: {}", e);
+        }
+        return None;
+      },
+    };
+
+    if let Ok(msg) = Message::builder()
+      .from("Grimstack Auth <admin@grimstack.io>".parse().unwrap())
+      .to(format!("{} <{}>", username, email).parse().unwrap())
+      .subject("Grimstack Auth email")
+      .multipart(
+        MultiPart::alternative()
+          .singlepart(
+            SinglePart::builder()
+              .header(header::ContentType(
+                "text/plain; charset=utf8".parse().unwrap(),
+              ))
+              .body(txt_body)
+          )
+          .singlepart(
+            SinglePart::builder()
+              .header(header::ContentType(
+                "text/html; charset=utf8".parse().unwrap(),
+              ))
+              .body(html_body),
+          ),
+      ) {
+      return Some(msg);
+    }
+
+    if ORC.dev_mode {
+      println!("sending magic-link email failed");
+    }
+
+    return None;
+  }
+
+  fn handle_magic_link(&self, code: String) -> Option<ElementGuard<String, User>> {
+    if code.len() != 20 {
+      return None;
+    }
+
+    let res: TransactionResult<User, ()> = (
+      &self.magic_links,
+      &self.users,
+      &self.user_verifications,
+    ).transaction(|(
+        magic_links,
+        users,
+        user_verifications,
+    )| {
+      if let Some(raw) = magic_links.get(code.as_bytes())? {
+        let ml = MagicLink::try_from_slice(&raw).unwrap();
+        magic_links.remove(code.as_bytes())?;
+        if !ml.has_expired() {
+          if let Some(raw) = users.get(ml.usr_id.as_bytes())? {
+            let usr = User::try_from_slice(&raw).unwrap();
+            if user_verifications.get(usr.id.as_bytes())?.is_none() {
+              let v = UserVerification::new();
+              user_verifications.insert(usr.id.as_bytes(), v.try_to_vec().unwrap())?;
+            }
+            return Ok(usr);
+          } else if self.dev_mode {
+            println!("could not find user associated with magic-link");
+          }
+        } else if self.dev_mode {
+          println!("someone tried to use an expired magic-link");
+        }
+      } else if self.dev_mode {
+        println!("could not find this {} - magic-link code", &code);
+      }
+      Err(sled::transaction::ConflictableTransactionError::Abort(()))
+    });
+
+    if let Ok(user) = res {
+      let el = self.authcache.cache_user(user);
+      return Some(el);
+    }
+    if self.dev_mode {
+      println!("handle_magic_link: db transaction failed");
     }
     None
+  }
+
+  pub fn create_preauth_token(&self, usr_id: &str) -> Option<String> {
+    let res: TransactionResult<String, ()> = self.preauth_tokens.transaction(|preauth_tokens| {
+      let token = random_string(22);
+      preauth_tokens.insert(token.as_bytes(), usr_id.as_bytes())?;
+
+      Ok(token)
+    });
+
+    if let Ok(token) = res {
+      return Some(token);
+    }
+    None
+  }
+
+  pub fn destroy_preauth_token(&self, preauth_token: &str) -> bool {
+    let res: TransactionResult<(), ()> = self.preauth_tokens.transaction(|preauth_tokens| {
+      preauth_tokens.remove(preauth_token.as_bytes())?;
+      Ok(())
+    });
+
+    res.is_ok()
   }
 
   pub fn setup_session(&self, usr_id: String) -> Result<String, AuthError> {
@@ -217,11 +374,13 @@ impl Orchestrator {
                 Cookie::build("auth", sess_id)
                   .domain(CONF.read().domain.clone())
                   .max_age(time::Duration::seconds(self.expiry_tll))
+                  .path("/")
                   .http_only(true)
                   .secure(true)
                   .finish()
               } else {
                 Cookie::build("auth", sess_id)
+                  .path("/")
                   .http_only(true)
                   .max_age(time::Duration::seconds(self.expiry_tll))
                   .finish()
@@ -272,8 +431,7 @@ impl Orchestrator {
     if let Some(el) = self.authcache.users.get(&id.to_string()) {
       return Some(el);
     } else if let Ok(Some(raw)) = self.users.get(id.as_bytes()) {
-      let el = self
-        .authcache
+      let el = self.authcache
         .cache_user(User::try_from_slice(&raw).unwrap());
       return Some(el);
     }
@@ -301,16 +459,22 @@ impl Orchestrator {
     None
   }
 
-  pub fn username_taken(&self, username: &str) -> bool {
-    (&self.usernames).contains_key(username.as_bytes()).unwrap()
+  pub fn username_taken(&self, username: &str) -> Option<bool> {
+    if let Ok(taken) = self.usernames.contains_key(username.as_bytes()) {
+      return Some(taken);
+    }
+    None
   }
 
-  pub fn handle_taken(&self, handle: &str) -> bool {
-    (&self.handles).contains_key(handle.as_bytes()).unwrap()
+  pub fn handle_taken(&self, handle: &str) -> Option<bool> {
+    if let Ok(taken) = self.handles.contains_key(handle.as_bytes()) {
+      return Some(taken);
+    }
+    None
   }
 
   pub fn change_username(&self, usr: &mut User, new_username: &str) -> bool {
-    if self.username_taken(new_username) {
+    if self.username_taken(new_username).unwrap_or(true) {
       return false;
     }
 
@@ -328,7 +492,7 @@ impl Orchestrator {
   }
 
   pub fn change_handle(&self, usr: &mut User, new_handle: &str) -> bool {
-    if self.handle_taken(new_handle) {
+    if self.handle_taken(new_handle).unwrap_or(true) {
       return false;
     }
 
@@ -346,24 +510,9 @@ impl Orchestrator {
 
   pub fn change_description(&self, usr: &mut User, new_desc: &str) -> bool {
     new_desc.len() > 1
-      && self
-        .user_descriptions
+    && self.user_descriptions
         .insert(usr.id.as_bytes(), new_desc.as_bytes())
         .is_ok()
-  }
-
-  pub fn change_password(&self, usr: &mut User, new_pwd: &str) -> bool {
-    if !is_password_ok(new_pwd) {
-      return false;
-    }
-    self.hash_pwd(new_pwd).map_or(false, |p| {
-      let res: TransactionResult<(), ()> =
-        (&self.user_secrets, &self.users).transaction(|(user_secrets, _users)| {
-          user_secrets.insert(usr.id.as_bytes(), p.as_bytes())?;
-          Ok(())
-        });
-      res.is_ok()
-    })
   }
 
   pub fn make_admin(&self, usr_id: &str, level: u8, reason: Option<String>) -> bool {
@@ -543,37 +692,6 @@ impl Orchestrator {
     }
     None
   }
-
-  pub fn hash_pwd(&self, pwd: &str) -> Option<String> {
-    hash_pwd(&self.pwd_secret, pwd)
-  }
-}
-
-lazy_static! {
-  static ref ARGON_CONFIG: argon2::Config<'static> = {
-    Config {
-      variant: argon2::Variant::Argon2i,
-      version: argon2::Version::Version13,
-      mem_cost: 65536,
-      time_cost: 5,
-      lanes: 2,
-      thread_mode: argon2::ThreadMode::Sequential,
-      secret: &[],
-      ad: &[],
-      hash_length: 32,
-    }
-  };
-}
-
-pub fn hash_pwd(pwd_secret: &Vec<u8>, pwd: &str) -> Option<String> {
-  if let Ok(hash) = argon2::hash_encoded(pwd.as_bytes(), pwd_secret, &ARGON_CONFIG) {
-    return Some(hash);
-  }
-  None
-}
-
-pub fn verify_password(pwd: &str, hash: &str) -> bool {
-  argon2::verify_encoded(hash, pwd.as_bytes()).unwrap_or(false)
 }
 
 pub struct AuthCache {
@@ -708,12 +826,46 @@ impl UserSession {
   }
 }
 
+#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
+pub struct UserVerification {
+  pub date: i64,
+}
+
+impl UserVerification {
+  fn new() -> Self {
+    UserVerification{
+      date: unix_timestamp(),
+    }
+  }
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
+pub struct MagicLink {
+  pub code: String,
+  pub usr_id: String,
+  pub expiry: i64,
+}
+
+impl MagicLink {
+  fn new(usr_id: String) -> Self {
+    MagicLink{
+      code: random_string(20),
+      usr_id,
+      // 5 minutes in the future + 30 seconds for possible delivery time
+      expiry: unix_timestamp() + (1000 * 60 * 5) + (1000 * 30)
+    }
+  }
+
+  fn has_expired(&self) -> bool {
+    unix_timestamp() > self.expiry
+  }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct AuthRequest {
   username: String,
-  password: String,
+  email: String,
   handle: Option<String>,
-  email: Option<String>,
 }
 
 #[delete("/auth")]
@@ -732,7 +884,7 @@ pub async fn logout(req: HttpRequest) -> HttpResponse {
 
 pub fn renew_session_cookie<'c>(
   req: &HttpRequest,
-  how_far_to_expiry: Duration
+  how_far_to_expiry: Duration,
 ) -> Option<Cookie<'c>> {
   if let Some(auth_cookie) = req.cookie("auth") {
     let sess_id = auth_cookie.value();
@@ -745,11 +897,13 @@ pub fn renew_session_cookie<'c>(
               Cookie::build("auth", sess_id.clone())
                 .domain(CONF.read().domain.clone())
                 .max_age(time::Duration::seconds(ORC.expiry_tll))
+                .path("/")
                 .http_only(true)
                 .secure(true)
                 .finish()
             } else {
               Cookie::build("auth", sess_id.clone())
+                .path("/")
                 .http_only(true)
                 .max_age(time::Duration::seconds(ORC.expiry_tll))
                 .finish()
@@ -762,39 +916,6 @@ pub fn renew_session_cookie<'c>(
   None
 }
 
-pub async fn login(usr_id: String, first_time: bool) -> HttpResponse {
-  let token = match ORC.setup_session(usr_id) {
-    Ok(t) => t,
-    Err(e) => {
-      return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
-    }
-  };
-
-  let cookie = if !ORC.dev_mode {
-    Cookie::build("auth", token)
-      .domain(CONF.read().domain.clone())
-      .max_age(time::Duration::seconds(ORC.expiry_tll))
-      .http_only(true)
-      .secure(true)
-      .finish()
-  } else {
-    Cookie::build("auth", token)
-      .http_only(true)
-      .max_age(time::Duration::seconds(ORC.expiry_tll))
-      .finish()
-  };
-
-  HttpResponse::Accepted()
-    .cookie(cookie)
-    .json(json!({
-      "ok": true,
-      "data": "successfully logged in",
-      "status": {
-        "first_time": first_time
-      }
-    }))
-}
-
 #[get("/auth")]
 pub async fn check_authentication(req: HttpRequest) -> HttpResponse {
   if ORC.is_valid_session(&req) {
@@ -803,20 +924,106 @@ pub async fn check_authentication(req: HttpRequest) -> HttpResponse {
   crate::responses::Forbidden("not authenticated")
 }
 
-#[post("/auth")]
-pub async fn auth_attempt(
-  req: HttpRequest,
-  ar: web::Json<AuthRequest>,
-) -> HttpResponse {
-  let (username, pwd) = (ar.username.as_str(), ar.password.as_str());
+#[get("/auth/{code}")]
+pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpResponse {
+  /*if let Some(rl) = ORC.ratelimiter.hit(
+    hitter.as_bytes(), 3, Duration::minutes(2)
+  ) {
+  if rl.is_timing_out() {
+    return crate::responses::TooManyRequests(format!(
+      "Too many requests, timeout has {} minutes left.",
+      rl.minutes_left()
+    ));
+  }*/
 
-  if !is_username_ok(username) {
+  if let Some(usr) = ORC.handle_magic_link(code.into_inner()) {
+    let hitter = req.peer_addr().map_or(
+      usr.username.to_string(),
+      |a| format!("{}{}", &usr.username, a)
+    );
+    ORC.ratelimiter.forget(hitter.as_bytes());
+    
+    if let Some(preauth_cookie) = req.cookie("preauth") {
+      let preauth_token = preauth_cookie.value().to_string();
+      if preauth_token.len() == 22 {
+        if let Ok(res) = ORC.preauth_tokens.get(preauth_token.as_bytes()) {
+          if let Some(raw) = res {
+            let usr_id = raw.to_string();
+            if usr_id == usr.id {
+              ORC.destroy_preauth_token(&preauth_token);
+  
+              let token = match ORC.setup_session(usr_id) {
+                Ok(t) => t,
+                Err(e) => {
+                  return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
+                }
+              };
+  
+              let cookie = if !ORC.dev_mode {
+                Cookie::build("auth", token)
+                  .domain(CONF.read().domain.clone())
+                  .max_age(time::Duration::seconds(ORC.expiry_tll))
+                  .path("/")
+                  .http_only(true)
+                  .secure(true)
+                  .finish()
+              } else {
+                Cookie::build("auth", token)
+                  .max_age(time::Duration::seconds(ORC.expiry_tll))
+                  .http_only(true)
+                  .path("/")
+                  .finish()
+              };
+
+              let mut ctx = tera::Context::new();
+              ctx.insert("dev_mode", &ORC.dev_mode);
+              return match TEMPLATES.read().render("magic-link-verification-page.html", &ctx) {
+                Ok(s) => HttpResponse::Accepted()
+                  .cookie(cookie)
+                  .del_cookie(&preauth_cookie)
+                  .content_type("text/html")
+                  .body(s),
+                Err(err) => {
+                    if ORC.dev_mode {
+                        HttpResponse::InternalServerError()
+                            .content_type("text/plain")
+                            .body(&format!("magic-link-verification-page.html template is broken - error : {}", err))
+                    } else {
+                        HttpResponse::InternalServerError()
+                            .content_type("text/plain")
+                            .body("The magic-link verification page template is broken! :( We have failed you.")
+                    }
+                }
+              }
+            } else {
+              return crate::responses::Forbidden("Where did you get this link? It does not match your account.");
+            }
+          } else {
+            return crate::responses::Forbidden("Invalid preauth token");
+          }
+        } else {
+          return crate::responses::InternalServerError("Failed to read preauth token from database");
+        }
+      }
+    } else {
+      println!("Still figuring this one out");
+    }
+  }
+  crate::responses::Forbidden("authentication failed")
+}
+
+#[post("/auth")]
+pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpResponse {
+  if !is_username_ok(&ar.username) {
     return crate::responses::BadRequest(
-      "username is no good, it's either too long, too short, or has weird characters in it, fix it up and try again."
+      "username is no good, it's either too long, too short, or has weird characters in it, fix it up and try again"
     );
   }
-  if !is_password_ok(pwd) {
-    return crate::responses::BadRequest("malformed password");
+  
+  if !is_email_ok(&ar.email) {
+    return crate::responses::BadRequest(
+      "email is invalid"
+    );
   }
 
   if let Some(usr) = ORC.user_by_session(&req) {
@@ -826,32 +1033,139 @@ pub async fn auth_attempt(
     ));
   }
 
-  let hitter = req.peer_addr()
-    .map_or(username.to_string(), |a| format!("{}{}", username, a));
-  if let Some(rl) = ORC.ratelimiter
-    .hit(hitter.as_bytes(), 3, Duration::minutes(2))
-  {
-    if rl.is_timing_out() {
-      return crate::responses::TooManyRequests(format!(
-        "Too many requests, timeout has {} minutes left.",
-        rl.minutes_left()
-      ));
+  if !ORC.dev_mode {
+    let hitter = req.peer_addr().map_or(
+      ar.username.clone(),
+      |a| format!("{}{}", &ar.username, a)
+    );
+    
+      if let Some(rl) = ORC.ratelimiter.hit(
+        hitter.as_bytes(), 3, Duration::minutes(2)
+      ) {
+      if rl.is_timing_out() {
+        return crate::responses::TooManyRequests(format!(
+          "Too many requests, timeout has {} minutes left.",
+          rl.minutes_left()
+        ));
+      }
     }
   }
 
-  if ORC.username_taken(username) {
-    if let Some(usr) = ORC.authenticate(username, pwd) {
-      ORC.ratelimiter.forget(hitter.as_bytes());
-      return login(usr.id.clone(), false).await;
+  if let Ok(res) = ORC.usernames.get(ar.username.as_bytes()) {
+    if let Some(raw) = res {
+      let usr_id = raw.to_string();
+      if let Ok(Some(raw)) = ORC.user_email_index.get(usr_id.as_bytes()) {
+        if raw.to_string() != usr_id {
+          return crate::responses::Forbidden(
+            "Username or email are either mistaken or already taken"
+          );
+        }
+      }
+
+      if let Some(msg) = ORC.create_magic_link_email(
+        false,
+        usr_id.clone(),
+        ar.username.clone(),
+        ar.email.clone(),
+      ) {
+        if let Some(preauth_token) = ORC.create_preauth_token(&usr_id) {
+          if crate::email::send_email(&msg) {
+            let cookie = if !ORC.dev_mode {
+              Cookie::build("preauth", preauth_token)
+                .domain(CONF.read().domain.clone())
+                .max_age(time::Duration::seconds(ORC.expiry_tll))
+                .path("/")
+                .http_only(true)
+                .secure(true)
+                .finish()
+            } else {
+              Cookie::build("preauth", preauth_token)
+                .http_only(true)
+                .max_age(time::Duration::seconds(ORC.expiry_tll))
+                .path("/")
+                .finish()
+            };
+  
+            return HttpResponse::Accepted()
+            .cookie(cookie)
+            .json(json!({
+                "ok": true,
+                "status": "Auth email was sent, please check your inbox and also the spam section just in case.",
+                "data": {
+                  "first_time": false,
+                }
+            }));
+          } else {
+            if ORC.dev_mode {
+              println!("Auth email failed to send for: {}", &ar.email);
+            }
+            ORC.destroy_preauth_token(&preauth_token);
+            return crate::responses::InternalServerError("Auth email failed to send, are you sure your email is in good order?");
+          }
+        } else {
+          return crate::responses::InternalServerError("Failed to setup pre-auth token");
+        }
+      }
     }
-    return crate::responses::BadRequest(
-      "either your password is wrong or the username is already taken.",
+  } else {
+    return crate::responses::InternalServerError(
+      "Server had an error when checking the username"
     );
   }
 
-  if let Some(usr) = ORC.create_user(ar.into_inner()) {
-    ORC.ratelimiter.forget(hitter.as_bytes());
-    return login(usr.id.clone(), true).await;
+  if let Some(usr) = ORC.create_user(
+    ar.username.clone(),
+    ar.email.clone(),
+    ar.handle.clone()
+  ) {
+    if ORC.dev_mode {
+      println!("registered new user");
+    }
+
+    if let Some(msg) = ORC.create_magic_link_email(
+      true,
+      usr.id.clone(),
+      ar.username.clone(),
+      ar.email.clone(),
+    ) {
+      if let Some(preauth_token) = ORC.create_preauth_token(&usr.id) {
+        if crate::email::send_email(&msg) {
+          let cookie = if !ORC.dev_mode {
+            Cookie::build("preauth", preauth_token)
+              .domain(CONF.read().domain.clone())
+              .max_age(time::Duration::seconds(ORC.expiry_tll))
+              .path("/")
+              .http_only(true)
+              .secure(true)
+              .finish()
+          } else {
+            Cookie::build("preauth", preauth_token)
+              .max_age(time::Duration::seconds(ORC.expiry_tll))
+              .path("/")
+              .http_only(true)
+              .finish()
+          };
+
+          return HttpResponse::Accepted()
+            .cookie(cookie)
+            .json(json!({
+                "ok": true,
+                "status": "Auth email was sent, please check your inbox and also the spam section just in case.",
+                "data": {
+                  "first_time": false,
+                }
+            }));
+        } else {
+          if ORC.dev_mode {
+            println!("Auth email failed to send for: {}", &ar.email);
+          }
+          ORC.destroy_preauth_token(&preauth_token);
+          return crate::responses::InternalServerError("Auth email failed to send, are you sure your email is in good order?");
+        }
+      }
+    } else {
+      return crate::responses::InternalServerError("magic-link creation failed");
+    }
   }
 
   crate::responses::Forbidden("not working, we might be under attack")

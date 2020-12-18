@@ -1,10 +1,9 @@
 use rand::{thread_rng, RngCore};
-use sled::{transaction::*, Db, Tree};
+use sled::{Db, Tree};
 use sthash::*;
 
 use super::CONF;
 use crate::ratelimiter::RateLimiter;
-use crate::utils::generate_random_bytes;
 
 lazy_static! {
   pub static ref ORC: Orchestrator = Orchestrator::new(60 * 60 * 24 * 7 * 2);
@@ -16,11 +15,14 @@ pub struct Orchestrator {
   pub id_counter: Tree,
   pub users: Tree,
   pub usernames: Tree,
+  pub emails: Tree,
+  pub user_email_index: Tree,
   pub user_descriptions: Tree,
   pub user_attributes: Tree,
   pub user_attributes_data: Tree,
-  pub user_emails: Tree,
-  pub user_secrets: Tree,
+  pub user_verifications: Tree,
+  pub magic_links: Tree,
+  pub preauth_tokens: Tree,
   pub handles: Tree,
   pub sessions: Tree,
   pub session_data: Tree,
@@ -29,7 +31,6 @@ pub struct Orchestrator {
   pub expiry_tll: i64,
   pub dev_mode: bool,
   pub hasher: Hasher,
-  pub pwd_secret: Vec<u8>,
 
   pub authcache: crate::auth::AuthCache,
 
@@ -74,29 +75,21 @@ impl Orchestrator {
     let users = db.open_tree(b"users").unwrap();
     let usernames = db.open_tree(b"usernames").unwrap();
     let user_descriptions = db.open_tree(b"user_descriptions").unwrap();
-    let user_emails = db.open_tree(b"user_emails").unwrap();
-    let user_secrets = db.open_tree(b"user_secrets").unwrap();
+    let user_verifications = db.open_tree(b"user_verifications").unwrap();
+
+    let emails = db.open_tree(b"emails").unwrap();
+    let user_email_index = db.open_tree(b"user_email_index").unwrap();
+
     let user_attributes = db.open_tree(b"user_attributes").unwrap();
     let user_attributes_data = db.open_tree(b"user_attributes_data").unwrap();
     let handles = db.open_tree(b"handles").unwrap();
     let admins = db.open_tree(b"admins").unwrap();
+    let magic_links = db.open_tree(b"magic_links").unwrap();
+    let preauth_tokens = db.open_tree(b"preauth_tokens").unwrap();
     let sessions = db.open_tree(b"sessions").unwrap();
     let session_data = db.open_tree(b"session_data").unwrap();
+    
     let secrets = db.open_tree(b"secrets").unwrap();
-
-    let pwd_secret = {
-      let scrt_res: TransactionResult<Vec<u8>, ()> = secrets.transaction(|s| {
-        Ok(match s.get(b"pwd_secret")? {
-          Some(scrt) => scrt.to_vec(),
-          None => {
-            let scrt = generate_random_bytes(64);
-            s.insert(b"pwd_secret", scrt.clone())?;
-            scrt
-          }
-        })
-      });
-      scrt_res.unwrap()
-    };
 
     let hasher = if secrets.contains_key(b"hasher_seed").unwrap() {
       let seed = secrets.get(b"hasher_seed").unwrap().unwrap();
@@ -119,7 +112,7 @@ impl Orchestrator {
       .use_compression(true)
       .compression_factor(20)
       .mode(sled::Mode::LowSpace)
-      .flush_every_ms(Some(1000))
+      .flush_every_ms(Some(1500))
       .open()
       .expect("failed to open writs.db");
 
@@ -150,11 +143,14 @@ impl Orchestrator {
       id_counter,
       users,
       usernames,
+      emails,
+      user_email_index,
+      user_verifications,
       user_descriptions,
-      user_emails,
-      user_secrets,
       user_attributes,
       user_attributes_data,
+      magic_links,
+      preauth_tokens,
       sessions,
       session_data,
       handles,
@@ -163,7 +159,6 @@ impl Orchestrator {
       expiry_tll,
       dev_mode,
       hasher,
-      pwd_secret,
 
       authcache,
 

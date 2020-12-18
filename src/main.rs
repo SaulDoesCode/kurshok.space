@@ -104,6 +104,7 @@ async fn main() -> std::io::Result<()> {
             .service(index)
             .service(auth::check_authentication)
             .service(auth::auth_attempt)
+            .service(auth::auth_link)
             .service(auth::logout)
             .service(auth::administer_administrality)
             .service(auth::remove_administrality)

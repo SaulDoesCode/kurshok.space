@@ -6,7 +6,7 @@ const authLauncher = d.query('.auth-launcher')
 const {
   authView,
   usernameInput,
-  passwordInput,
+  emailInput,
   authBtn
 } = d.h `
 <section class="auth-view" ref="authView">
@@ -14,8 +14,8 @@ const {
     <div class="auth-form-field">
       <label for="auth-username">Username</label>
       <input type="text" name="username" id="auth-username" ref="usernameInput">
-      <label for="auth-pwd">Password</label>
-      <input type="password" name="password" id="auth-pwd" ref="passwordInput">
+      <label for="auth-email">Email</label>
+      <input type="text" name="email" id="auth-email" ref="emailInput">
     </div>
     <button class="submit" ref="authBtn">authenticate</button>
   </div>
@@ -25,15 +25,21 @@ app.authViewToggle = app.setupToggleSituation(authLauncher, app.authView = authV
 
 app.authenticate = async (
   username = usernameInput.value.trim(),
-  password = passwordInput.value.trim()
+  email = emailInput.value.trim()
 ) => {
   if (username == '') throw new Error('username is invalid')
-  if (password == '') throw new Error('password is invalid')
-  console.log('attempting authentication')
-  const res = await app.jsonPost('/auth', { username, password })
+  if (email == '' || !email.includes('@')) throw new Error('email is invalid')
+  console.log('attempting authentication...')
+  const res = await app.jsonPost('/auth', { username, email })
   const data = await res.json()
   console.log(data)
-  if (data.ok) location.reload()
+  if (data.ok) {
+    app.toast.msg(`auth went through: ` + data.status)
+    return true
+  } else {
+    app.toast.error(`auth failed: ` + data.status)
+    throw new Error('authentication failed: ' + data.status)
+  }
 }
 
 const authClickHandle = d.once.click(authBtn, async e => {

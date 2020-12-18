@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grimstack Magic-link Verification Page</title>
+</head>
+<body>
+    <h1>Grimstack Magic-link Verification Page</h1>
+    <script>
+        {% if dev_mode %}
+        setTimeout(() => {
+            window.location = '/'
+        }, 25000)
+        {% else %}
+        window.location = '/'
+        {% endif %}
+    </script>
+</body>
+</html>

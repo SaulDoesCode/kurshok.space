@@ -1,0 +1,9 @@
+Hi, {{username}}!
+
+To login at grimstack.io,
+just follow this magic link:
+
+https://{{domain}}/auth/{{magic_code}}
+
+Note, this link will expire in about 5 minutes.
+If it doesn't work try to logging in again on the website.
