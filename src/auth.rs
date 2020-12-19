@@ -592,17 +592,19 @@ impl Orchestrator {
     usr_id: &str,
     attrs: Vec<(String, UserAttribute, Option<Vec<u8>>)>,
   ) -> bool {
-    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.user_attributes_data)
-      .transaction(|(usr_attrs, usr_attrs_data)| {
-        for (name, attr, data) in &attrs {
-          let key = format!("{}:{}", usr_id, name);
-          usr_attrs.insert(key.as_bytes(), attr.try_to_vec().unwrap())?;
-          if let Some(data) = data {
-            usr_attrs_data.insert(key.as_bytes(), data.as_slice())?;
-          }
+    let res: TransactionResult<(), ()> = (
+      &self.user_attributes,
+      &self.user_attributes_data
+    ).transaction(|(usr_attrs, usr_attrs_data)| {
+      for (name, attr, data) in &attrs {
+        let key = format!("{}:{}", usr_id, name);
+        usr_attrs.insert(key.as_bytes(), attr.try_to_vec().unwrap())?;
+        if let Some(data) = data {
+          usr_attrs_data.insert(key.as_bytes(), data.as_slice())?;
         }
-        Ok(())
-      });
+      }
+      Ok(())
+    });
     res.is_ok()
   }
 

@@ -114,7 +114,10 @@ pub fn generate_random_bytes(len: usize) -> Vec<u8> {
 }
 
 pub fn random_string(len: usize) -> String {
-  thread_rng().sample_iter(&Alphanumeric).take(len).collect()
+  thread_rng()
+  .sample_iter(&Alphanumeric)
+  .map(char::from)
+  .take(len).collect()
 }
 
 #[inline]
