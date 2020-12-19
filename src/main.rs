@@ -107,9 +107,6 @@ async fn main() -> std::io::Result<()> {
             .service(auth::indirect_auth_verification)
             .service(auth::auth_link)
             .service(auth::logout)
-            .service(auth::administer_administrality)
-            .service(auth::remove_administrality)
-            .service(auth::check_administrality)
             .service(writs::editable_writ_query)
             .service(writs::writ_query)
             .service(writs::push_raw_writ)
@@ -147,10 +144,10 @@ async fn main() -> std::io::Result<()> {
 pub struct Config {
     pub domain: String,
     pub db_location: String,
-    pub admin_key: String,
     pub dev_mode: bool,
+    pub admin_emails: Vec<String>,
     pub mail_server: String,    
-    pub smtp_username: String,    
+    pub smtp_username: String,   
     pub smtp_password: String,
     cert_path: String,
     privkey_path: String,

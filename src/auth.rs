@@ -1,5 +1,5 @@
 use actix_web::{
-  cookie::Cookie, delete, get, post, web, HttpMessage, HttpRequest, HttpResponse, Responder,
+  cookie::Cookie, delete, get, post, web, HttpMessage, HttpRequest, HttpResponse,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use dashmap::{DashMap, ElementGuard};
@@ -44,7 +44,12 @@ impl Orchestrator {
     })
   }
 
-  pub fn create_user(&self, username: String, email: String, handle: Option<String>) -> Option<User> {
+  pub fn create_user(
+    &self,
+    username: String,
+    email: String,
+    handle: Option<String>,
+  ) -> Option<User> {
     if !is_username_ok(&username) {
       return None;
     }
@@ -58,7 +63,6 @@ impl Orchestrator {
     };
 
     let mut handle = handle.unwrap_or(slugify(&username));
-
     if let Some(taken) = self.handle_taken(&handle) {
       if taken {
         let mut num = 1u32;
@@ -114,6 +118,10 @@ impl Orchestrator {
       })
       .is_ok()
     {
+      if CONF.read().admin_emails.contains(&email) {
+        ORC.make_admin(&usr.id, 0, Some("blessed email".to_string()));
+      }
+
       return Some(usr);
     }
 
@@ -1263,81 +1271,4 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
   }
 
   crate::responses::Forbidden("not working, we might be under attack")
-}
-
-#[post("/administrality")]
-pub async fn administer_administrality(
-  req: HttpRequest,
-  key: web::Json<String>,
-) -> impl Responder {
-  if CONF.read().admin_key == key.into_inner() {
-    if let Some(ref mut usr) = ORC.user_by_session(&req) {
-      if ORC.make_admin(&usr.id, 0, Some("passed administrality".to_string())) {
-        return crate::responses::Accepted("Congratulations, you are now an admin.");
-      }
-      return crate::responses::InternalServerError(format!(
-        "Sorry {}, you got it right, but there was a database error. Try again later. ;D",
-        usr.username
-      ));
-    } else if let Some(remote_addr) = req.connection_info().remote_addr() {
-      let hitter = format!("aA{}", remote_addr);
-      if let Some(rl) = ORC.ratelimiter
-        .hit(hitter.as_bytes(), 2, Duration::minutes(60))
-      {
-        if rl.is_timing_out() {
-          return crate::responses::TooManyRequests(format!(
-            "too many requests, timeout has {} minutes left.",
-            rl.minutes_left()
-          ));
-        }
-      }
-    }
-  } else if let Some(auth_cookie) = req.cookie("auth") {
-    let hitter = format!("aA{}", auth_cookie.value());
-    if let Some(rl) = ORC.ratelimiter
-      .hit(hitter.as_bytes(), 2, Duration::minutes(60))
-    {
-      if rl.is_timing_out() {
-        return crate::responses::TooManyRequests(format!(
-          "too many requests, timeout has {} minutes left.",
-          rl.minutes_left()
-        ));
-      }
-    }
-  } else if let Some(remote_addr) = req.connection_info().remote_addr() {
-    let hitter = format!("aA{}", remote_addr);
-    if let Some(rl) = ORC.ratelimiter
-      .hit(hitter.as_bytes(), 2, Duration::minutes(60))
-    {
-      if rl.is_timing_out() {
-        return crate::responses::TooManyRequests(format!(
-          "too many requests, timeout has {} minutes left.",
-          rl.minutes_left()
-        ));
-      }
-    }
-  }
-
-  crate::responses::Forbidden("Sorry, no administrality for you.")
-}
-
-#[delete("/administrality")]
-pub async fn remove_administrality(req: HttpRequest) -> HttpResponse {
-  if let Some(ref mut usr) = ORC.admin_by_session(&req) {
-    if ORC.revoke_admin(&usr.id) {
-      return crate::responses::Accepted(format!(
-        "Sorry {}, you've lost your adminstrality.",
-        usr.username
-      ));
-    }
-  }
-  crate::responses::Forbidden("To lose administrality one needs to have some in the first place!")
-}
-
-#[get("/administrality")]
-pub async fn check_administrality(req: HttpRequest) -> HttpResponse {
-  if ORC.is_valid_admin_session(&req) {
-    return crate::responses::Accepted("Genuine admin");
-  }
-  crate::responses::Forbidden("Silly impostor, you are not admin")
 }
