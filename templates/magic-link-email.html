@@ -14,6 +14,11 @@
       Login
     </a>
     <br>
+
+    {% if dev_mode %}
+      <a href="https://192.168.8.102/auth/{{magic_code}}">Dev link for indirect auth</a>
+    {% endif %}
+
     <footer>
       Note, this link will expire in about 5 minutes, just log in again from <a href="https://{{domain}}" style="color: inherit;">{{domain}}</a>
       if it doesn't work.

@@ -7,14 +7,33 @@
 </head>
 <body>
     <h1>Grimstack Magic-link Verification Page</h1>
+{% if indirect is defined %}
+    <main>
+        <h3>Indirect Authentication</h3>
+        <p>
+            <b>All good!</b><br/>
+            This page will close itself in 5 seconds.
+
+            You should be logged in now on the same screen
+            where you entered your username and email.
+        </p>
+    </main>
     <script>
-        {% if dev_mode %}
+        setTimeout(() => {
+            window.close()
+        }, 5000)    
+    </script>
+{% else %}
+    <script>
+{% if dev_mode %}
         setTimeout(() => {
             window.location = '/'
         }, 25000)
-        {% else %}
+{% else %}
         window.location = '/'
-        {% endif %}
+{% endif %}
     </script>
+{% endif %}
+
 </body>
 </html>

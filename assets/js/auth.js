@@ -35,12 +35,44 @@ app.authenticate = async (
   console.log(data)
   if (data.ok) {
     app.toast.msg(`auth went through: ` + data.status)
+
+    try {
+      await app.try_auth_verify()
+    } catch(e) {}
+
     return true
   } else {
     app.toast.error(`auth failed: ` + data.status)
     throw new Error('authentication failed: ' + data.status)
   }
 }
+
+app.try_auth_verify = () => new Promise((resolve, reject) => {
+  let keepTrying = true
+  let to = setTimeout(() => {
+    keepTrying = false
+    clearInterval(ti)
+    reject()
+  }, 600000)
+  let ti = setInterval(async () => {
+    if (!keepTrying) {
+      clearInterval(ti)
+      clearTimeout(to)
+      reject()
+      return
+    }
+    const res = await (await fetch('/auth/verification')).json();
+    if (res.ok) {
+      app.toast.msg("Auth: " + res.status)
+      clearInterval(ti)
+      clearTimeout(to)
+      resolve()
+      setTimeout(() => {
+        window.location.reload()
+      }, 3000)
+    }
+  }, 1500)
+})
 
 const authClickHandle = d.once.click(authBtn, async e => {
   try {

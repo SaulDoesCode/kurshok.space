@@ -144,6 +144,7 @@ impl Orchestrator {
     let mut ctx = tera::Context::new();
     ctx.insert("magic_code", &ml.code);
     ctx.insert("username", &username);
+    ctx.insert("dev_mode", &ORC.dev_mode);
     ctx.insert("domain", &CONF.read().domain);
     if first_time {
       ctx.insert("email_type", "Verification");
@@ -924,6 +925,74 @@ pub async fn check_authentication(req: HttpRequest) -> HttpResponse {
   crate::responses::Forbidden("not authenticated")
 }
 
+
+#[get("/auth/verification")]
+pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
+  if let Some(preauth_cookie) = req.cookie("preauth") {
+    let preauth_token = preauth_cookie.value().to_string();
+    if preauth_token.len() == 22 {
+      if let Ok(res) = ORC.preauth_tokens.get(preauth_token.as_bytes()) {
+          if let Some(raw) = res {
+            let usr_id = raw.to_string();
+            if let Ok(res) = ORC.users_primed_for_auth.remove(raw) {
+              let forbidden = if let Some(raw) = res {
+                ORC.destroy_preauth_token(&preauth_token);
+                unix_timestamp() > raw.to_i64()
+              } else {
+                true
+              };
+
+              if forbidden {
+                return crate::responses::Forbidden("Sorry, your auth attempt expired or was invalid, you'll have to try again");
+              }
+
+              let token = match ORC.setup_session(usr_id) {
+                Ok(t) => t,
+                Err(e) => {
+                  return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
+                }
+              };
+  
+              let cookie = if !ORC.dev_mode {
+                Cookie::build("auth", token)
+                    .domain(CONF.read().domain.clone())
+                    .max_age(time::Duration::seconds(ORC.expiry_tll))
+                    .path("/")
+                    .http_only(true)
+                    .secure(true)
+                    .finish()
+              } else {
+                Cookie::build("auth", token)
+                  .max_age(time::Duration::seconds(ORC.expiry_tll))
+                  .http_only(true)
+                  .path("/")
+                  .finish()
+              };
+
+              return HttpResponse::Accepted()
+                .cookie(cookie)
+                .del_cookie(&preauth_cookie)
+                .content_type("application/json")
+                .json(json!({
+                  "ok": true,
+                  "status": "Authentication succesful!"
+                }));
+            } else {
+              return crate::responses::InternalServerError("Database error encountered during auth");
+            }
+          } else {
+            return crate::responses::Forbidden("Authentication failed, expired preauth cookie");
+          }
+      } else {
+        return crate::responses::InternalServerError("Failed to read preauth token from database");
+      }
+    } else {
+      return crate::responses::BadRequest("invalid preauth cookie, are you trying to hack your way in?");
+    }
+  }
+  crate::responses::Forbidden("authentication failed, missing preauth cookie")
+}
+
 #[get("/auth/{code}")]
 pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpResponse {
   /*if let Some(rl) = ORC.ratelimiter.hit(
@@ -994,7 +1063,7 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
                             .body("The magic-link verification page template is broken! :( We have failed you.")
                     }
                 }
-              }
+              };
             } else {
               return crate::responses::Forbidden("Where did you get this link? It does not match your account.");
             }
@@ -1006,7 +1075,32 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
         }
       }
     } else {
-      println!("Still figuring this one out");
+      let priming_expiry_time: i64 = unix_timestamp() + (1000 * 60);
+
+      if ORC.users_primed_for_auth.insert(
+        usr.id.as_bytes(),
+        &priming_expiry_time.to_be_bytes()
+      ).is_ok() {
+        let mut ctx = tera::Context::new();
+        ctx.insert("dev_mode", &ORC.dev_mode);
+        ctx.insert("indirect", &true);
+        return match TEMPLATES.read().render("magic-link-verification-page.html", &ctx) {
+          Ok(s) => HttpResponse::Accepted()
+            .content_type("text/html")
+            .body(s),
+          Err(err) => {
+              if ORC.dev_mode {
+                  HttpResponse::InternalServerError()
+                      .content_type("text/plain")
+                      .body(&format!("magic-link-verification-page.html template is broken - error : {}", err))
+              } else {
+                  HttpResponse::InternalServerError()
+                      .content_type("text/plain")
+                      .body("The magic-link verification page template is broken! :( We have failed you.")
+              }
+          }
+        };
+      }
     }
   }
   crate::responses::Forbidden("authentication failed")

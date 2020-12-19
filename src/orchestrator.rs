@@ -23,6 +23,7 @@ pub struct Orchestrator {
   pub user_verifications: Tree,
   pub magic_links: Tree,
   pub preauth_tokens: Tree,
+  pub users_primed_for_auth:Tree,
   pub handles: Tree,
   pub sessions: Tree,
   pub session_data: Tree,
@@ -86,6 +87,7 @@ impl Orchestrator {
     let admins = db.open_tree(b"admins").unwrap();
     let magic_links = db.open_tree(b"magic_links").unwrap();
     let preauth_tokens = db.open_tree(b"preauth_tokens").unwrap();
+    let users_primed_for_auth = db.open_tree(b"users_primed_for_auth").unwrap();
     let sessions = db.open_tree(b"sessions").unwrap();
     let session_data = db.open_tree(b"session_data").unwrap();
     
@@ -151,6 +153,7 @@ impl Orchestrator {
       user_attributes_data,
       magic_links,
       preauth_tokens,
+      users_primed_for_auth,
       sessions,
       session_data,
       handles,
