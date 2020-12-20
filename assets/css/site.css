@@ -271,8 +271,7 @@ main[route-active="posts"] .post>* {
   align-items: center;
   flex-direction: column;
   margin-right: .5em;
-  padding: .5em;
-  font-size: 1.1em;
+  padding: 0 .25em;
 }
 
 .comment .votes {
@@ -281,9 +280,11 @@ main[route-active="posts"] .post>* {
 }
 
 .votes .vote {
+  font-family: 'fontello';
   cursor: pointer;
-  border: 3px solid transparent;
+  /*border: 3px solid transparent;*/
   transition: all 140ms ease-in;
+  margin: 0px 0px 0px 0px !important;
 }
 
 .votes .vote.up:hover,
@@ -297,15 +298,15 @@ main[route-active="posts"] .post>* {
 }
 
 .votes .vote.up::before {
-  content: '🡅';
+  /*content: '🡅';*/
 }
 .votes .vote.down::before {
-  content: '🡇';
+  /*content: '🡇';*/
 }
 
 .votes .vote-count {
   white-space: nowrap;
-  font-size: .95em;
+  padding: 0 .25em;
 }
 
 .votes .vote-count .endbits {
@@ -632,8 +633,8 @@ footer {
   align-content: center;
   flex-flow: row wrap;
   margin: .5em 0 0 0;
-  padding: .5em .25em;
-  background: hsl(0, 0%, 8%);
+  padding: 1em 5em;
+  background: hsl(0, 0%, 6%);
   font-size: .8em;
 }
 

@@ -155,8 +155,9 @@ app.votesUI = (voteType, {id, vote = 0, you_voted}) => parentEl => {
         votesEl.upvote = span({
             class: {
                 up: true,
-                    vote: true,
-                    selected: you_voted === true,
+                vote: true,
+                selected: you_voted === true,
+                'icon-up-open': true,
             }
         }),
 
@@ -167,8 +168,9 @@ app.votesUI = (voteType, {id, vote = 0, you_voted}) => parentEl => {
         votesEl.downvote = span({
             class: {
                 down: true,
-                    vote: true,
-                    selected: you_voted === false,
+                vote: true,
+                selected: you_voted === false,
+                'icon-down-open': true,
             }
         })
     )
