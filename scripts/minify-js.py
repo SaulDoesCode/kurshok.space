@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import os
+import pathlib
 import sys
 
 found_syncthing = False
@@ -18,9 +19,12 @@ if found_syncthing:
 # MAKE SURE that terser & csso is installed locally
 os.getcwd()
 
+script_dir = str(pathlib.Path(__file__).parent)
+
 if len(sys.argv) > 1 and ".js" in sys.argv[1]:
     print("\ntrying to minify " + sys.argv[1] + " ...")
-    os.system("exec ../../scripts/node_modules/.bin/terser " + sys.argv[1] + " -c -m --source-map \"root='https://grimstack.io/js/',url='" + sys.argv[1][:-3] + ".min.js.map'\" -o " + sys.argv[1][:-3] + ".min.js")
+
+    os.system("exec " + script_dir + "/node_modules/.bin/terser " + sys.argv[1] + " -c -m --source-map \"root='https://grimstack.io/js/',url='" + sys.argv[1][:-3] + ".min.js.map'\" -o " + sys.argv[1][:-3] + ".min.js")
     
     print("done minifying, did it work? ")
 else:

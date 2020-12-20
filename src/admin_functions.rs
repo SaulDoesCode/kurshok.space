@@ -7,9 +7,15 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use std::{collections::HashMap, process::Command, sync::Arc, thread};
+use std::{
+    collections::HashMap,
+    process::Command,
+    sync::Arc,
+    thread,
+    io::{self, Write}
+};
 
-use crate::orchestrator::Orchestrator;
+use crate::orchestrator::{ORC, Orchestrator};
 
 use super::TEMPLATES;
 
@@ -29,12 +35,21 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
         watcher
             .watch("./templates", RecursiveMode::Recursive)
             .expect("watcher failed to watch ./templates");
-        watcher
-            .watch("./assets/js", RecursiveMode::Recursive)
-            .expect("watcher failed to watch ./assets/js");
-        watcher
-            .watch("./assets/css", RecursiveMode::Recursive)
-            .expect("watcher failed to watch ./assets/css");
+
+        if ORC.dev_mode {
+            watcher
+                .watch("./assets/js", RecursiveMode::Recursive)
+                .expect("watcher failed to watch ./assets/js");
+            watcher
+                .watch("./assets/css", RecursiveMode::Recursive)
+                .expect("watcher failed to watch ./assets/css");
+        }
+
+        let current_dir = {
+            let p = std::env::current_dir().unwrap();
+            let d = p.to_str().unwrap();
+            d.to_string()
+        };
         while let Ok(event) = rx.recv() {
             match event.kind {
                 notify::EventKind::Modify(_) => {
@@ -58,25 +73,43 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
                             }
                             if ext == "js" {
                                 let res = Command::new("python")
-                                    .current_dir("./assets/js")
-                                    .arg("../../scripts/minify-js.py")
+                                    .current_dir(path.parent().unwrap())
+                                    .arg(
+                                        format!("{}/scripts/minify-js.py", current_dir)
+                                    )
                                     .arg(&filename)
                                     .output();
-                                if let Ok(_) = res {
-                                    println!("minified {}", &filename);
-                                } else if let Err(err) = res {
-                                    println!("failed to minify {}, error: {:?}", &filename, err);
+                                match res {
+                                    Ok(out) => {
+                                        println!("minified {}", &filename);
+                                        if ORC.dev_mode {
+                                            io::stdout().write_all(&out.stdout).unwrap();
+                                            io::stderr().write_all(&out.stderr).unwrap();
+                                        }
+                                    },
+                                    Err(e) => {
+                                        println!("failed to minify {}, error: {:?}", &filename, e);
+                                    },
                                 }
                             } else if ext == "css" {
                                 let res = Command::new("python")
-                                    .current_dir("./assets/css")
-                                    .arg("../../scripts/minify-css.py")
+                                    .current_dir(path.parent().unwrap())
+                                    .arg(
+                                        format!("{}/scripts/minify-css.py", current_dir)
+                                    )
                                     .arg(&filename)
                                     .output();
-                                if let Ok(_) = res {
-                                    println!("minified {}", &filename);
-                                } else if let Err(err) = res {
-                                    println!("failed to minify {}, error: {:?}", &filename, err);
+                                match res {
+                                    Ok(out) => {
+                                        println!("minified {} \n", &filename);
+                                        if ORC.dev_mode {
+                                            io::stdout().write_all(&out.stdout).unwrap();
+                                            io::stderr().write_all(&out.stderr).unwrap();
+                                        }
+                                    },
+                                    Err(e) => {
+                                        println!("failed to minify {}, error: {:?}", &filename, e);
+                                    },
                                 }
                             }
                         }
