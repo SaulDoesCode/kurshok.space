@@ -133,6 +133,10 @@ main[route-active="posts"] {
   max-width: 920px;
 }
 
+.post-list {
+  min-height: 85vh;
+}
+
 .post, .post > * {
   display: flex;
   justify-content: space-between;
