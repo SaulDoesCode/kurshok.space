@@ -379,21 +379,7 @@ impl Orchestrator {
           self.authcache.remove_session(&sess_id);
           if self.sessions.remove(sess_id.as_bytes()).is_ok() {
             if let Ok(sess_id) = self.setup_session(usr_id) {
-              cookie = Some(if !self.dev_mode {
-                Cookie::build("auth", sess_id)
-                  .domain(CONF.read().domain.clone())
-                  .max_age(time::Duration::seconds(self.expiry_tll))
-                  .path("/")
-                  .http_only(true)
-                  .secure(true)
-                  .finish()
-              } else {
-                Cookie::build("auth", sess_id)
-                  .path("/")
-                  .http_only(true)
-                  .max_age(time::Duration::seconds(self.expiry_tll))
-                  .finish()
-              })
+              cookie = Some(build_the_usual_cookie("auth", sess_id));
             }
           }
         }
@@ -904,21 +890,7 @@ pub fn renew_session_cookie<'c>(
       if session.close_to_expiry(how_far_to_expiry) {
         if ORC.sessions.remove(sess_id.as_bytes()).is_ok() {
           if let Ok(sess_id) = ORC.setup_session(session.usr_id) {
-            return Some(if !ORC.dev_mode {
-              Cookie::build("auth", sess_id.clone())
-                .domain(CONF.read().domain.clone())
-                .max_age(time::Duration::seconds(ORC.expiry_tll))
-                .path("/")
-                .http_only(true)
-                .secure(true)
-                .finish()
-            } else {
-              Cookie::build("auth", sess_id.clone())
-                .path("/")
-                .http_only(true)
-                .max_age(time::Duration::seconds(ORC.expiry_tll))
-                .finish()
-            });
+            return Some(build_the_usual_cookie("auth", sess_id));
           }
         }
       }
@@ -962,26 +934,12 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
                   return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
                 }
               };
-  
-              let cookie = if !ORC.dev_mode {
-                Cookie::build("auth", token)
-                    .domain(CONF.read().domain.clone())
-                    .max_age(time::Duration::seconds(ORC.expiry_tll))
-                    .path("/")
-                    .http_only(true)
-                    .secure(true)
-                    .finish()
-              } else {
-                Cookie::build("auth", token)
-                  .max_age(time::Duration::seconds(ORC.expiry_tll))
-                  .http_only(true)
-                  .path("/")
-                  .finish()
-              };
 
               return HttpResponse::Accepted()
-                .cookie(cookie)
                 .del_cookie(&preauth_cookie)
+                .cookie(
+                  build_the_usual_cookie("auth", &token)
+                )
                 .content_type("application/json")
                 .json(json!({
                   "ok": true,
@@ -1005,22 +963,27 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
 
 #[get("/auth/{code}")]
 pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpResponse {
-  /*if let Some(rl) = ORC.ratelimiter.hit(
-    hitter.as_bytes(), 3, Duration::minutes(2)
-  ) {
-  if rl.is_timing_out() {
-    return crate::responses::TooManyRequests(format!(
-      "Too many requests, timeout has {} minutes left.",
-      rl.minutes_left()
-    ));
-  }*/
+  if let Some(addr) = req.peer_addr() {
+    let hitter = format!("ml{}", addr);
+    if let Some(rl) = ORC.ratelimiter.hit(
+      hitter.as_bytes(), 3, Duration::minutes(2)
+    ) {
+      if rl.is_timing_out() {
+        return crate::responses::TooManyRequests(format!(
+          "Too many requests, timeout has {} minutes left.",
+          rl.minutes_left()
+        ));
+      }
+    }
+  }
 
   if let Some(usr) = ORC.handle_magic_link(code.into_inner()) {
-    let hitter = req.peer_addr().map_or(
-      usr.username.to_string(),
-      |a| format!("{}{}", &usr.username, a)
-    );
-    ORC.ratelimiter.forget(hitter.as_bytes());
+    if let Some(addr) = req.peer_addr() {
+      let mut hitter = format!("ml{}", addr);
+      ORC.ratelimiter.forget(hitter.as_bytes());
+      hitter = format!("{}{}", &usr.username, addr);
+      ORC.ratelimiter.forget(hitter.as_bytes());
+    }
     
     if let Some(preauth_cookie) = req.cookie("preauth") {
       let preauth_token = preauth_cookie.value().to_string();
@@ -1037,29 +1000,15 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
                   return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
                 }
               };
-  
-              let cookie = if !ORC.dev_mode {
-                Cookie::build("auth", token)
-                  .domain(CONF.read().domain.clone())
-                  .max_age(time::Duration::seconds(ORC.expiry_tll))
-                  .path("/")
-                  .http_only(true)
-                  .secure(true)
-                  .finish()
-              } else {
-                Cookie::build("auth", token)
-                  .max_age(time::Duration::seconds(ORC.expiry_tll))
-                  .http_only(true)
-                  .path("/")
-                  .finish()
-              };
 
               let mut ctx = tera::Context::new();
               ctx.insert("dev_mode", &ORC.dev_mode);
               return match TEMPLATES.read().render("magic-link-verification-page.html", &ctx) {
                 Ok(s) => HttpResponse::Accepted()
-                  .cookie(cookie)
                   .del_cookie(&preauth_cookie)
+                  .cookie(
+                    build_the_usual_cookie("auth", &token)
+                  )
                   .content_type("text/html")
                   .body(s),
                 Err(err) => {
@@ -1174,24 +1123,10 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
       ) {
         if let Some(preauth_token) = ORC.create_preauth_token(&usr_id) {
           if crate::email::send_email(&msg) {
-            let cookie = if !ORC.dev_mode {
-              Cookie::build("preauth", preauth_token)
-                .domain(CONF.read().domain.clone())
-                .max_age(time::Duration::seconds(ORC.expiry_tll))
-                .path("/")
-                .http_only(true)
-                .secure(true)
-                .finish()
-            } else {
-              Cookie::build("preauth", preauth_token)
-                .http_only(true)
-                .max_age(time::Duration::seconds(ORC.expiry_tll))
-                .path("/")
-                .finish()
-            };
-  
             return HttpResponse::Accepted()
-            .cookie(cookie)
+            .cookie(
+              build_cookie_with_ttl("preauth", &preauth_token, 60 * 10)
+            )
             .json(json!({
                 "ok": true,
                 "status": "Auth email was sent, please check your inbox and also the spam section just in case.",
@@ -1234,24 +1169,10 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
     ) {
       if let Some(preauth_token) = ORC.create_preauth_token(&usr.id) {
         if crate::email::send_email(&msg) {
-          let cookie = if !ORC.dev_mode {
-            Cookie::build("preauth", preauth_token)
-              .domain(CONF.read().domain.clone())
-              .max_age(time::Duration::seconds(ORC.expiry_tll))
-              .path("/")
-              .http_only(true)
-              .secure(true)
-              .finish()
-          } else {
-            Cookie::build("preauth", preauth_token)
-              .max_age(time::Duration::seconds(ORC.expiry_tll))
-              .path("/")
-              .http_only(true)
-              .finish()
-          };
-
           return HttpResponse::Accepted()
-            .cookie(cookie)
+            .cookie(
+              build_cookie_with_ttl("preauth", &preauth_token, 60 * 10)
+            )
             .json(json!({
                 "ok": true,
                 "status": "Auth email was sent, please check your inbox and also the spam section just in case.",
@@ -1273,4 +1194,53 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
   }
 
   crate::responses::Forbidden("not working, we might be under attack")
+}
+
+fn build_the_usual_cookie<'c, N, V>(
+  name: N,
+  value: V
+) -> Cookie<'c> where
+  N: Into<std::borrow::Cow<'c, str>>,
+  V: Into<std::borrow::Cow<'c, str>>
+{
+  if !ORC.dev_mode {
+    Cookie::build(name, value)
+      .domain(CONF.read().domain.clone())
+      .max_age(time::Duration::seconds(ORC.expiry_tll))
+      .path("/")
+      .http_only(true)
+      .secure(true)
+      .finish()
+  } else {
+    Cookie::build(name, value)
+      .max_age(time::Duration::seconds(ORC.expiry_tll))
+      .path("/")
+      .http_only(true)
+      .finish()
+  }
+}
+
+fn build_cookie_with_ttl<'c, N, V>(
+  name: N,
+  value: V,
+  seconds: i64
+) -> Cookie<'c> where
+  N: Into<std::borrow::Cow<'c, str>>,
+  V: Into<std::borrow::Cow<'c, str>>,
+{
+  if !ORC.dev_mode {
+    Cookie::build(name, value)
+      .domain(CONF.read().domain.clone())
+      .max_age(time::Duration::seconds(seconds))
+      .path("/")
+      .http_only(true)
+      .secure(true)
+      .finish()
+  } else {
+    Cookie::build(name, value)
+      .max_age(time::Duration::seconds(ORC.expiry_tll))
+      .path("/")
+      .http_only(true)
+      .finish()
+  }
 }
