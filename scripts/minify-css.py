@@ -25,9 +25,7 @@ script_dir = str(pathlib.Path(__file__).parent)
 
 if len(sys.argv) > 1 and ".css" in sys.argv[1]:
     print("\ntrying to minify " + sys.argv[1] + " ...")
-
     arg = "exec " + script_dir + "/node_modules/.bin/csso " + sys.argv[1] + " -o " + sys.argv[1][:-3] + "min.css"
-    print(arg)
     os.system(arg)
     
     print("done minifying, did it work? ")
