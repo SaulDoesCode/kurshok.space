@@ -26,6 +26,26 @@ body > * > header {
   font-weight: 600;
 }
 
+body > .background-cover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  background: rgb(0, 0, 0, .6);
+  animation: bgc-fade-in 400ms ease-in;
+}
+
+@keyframes bgc-fade-in {
+  from {
+    background: rgb(0, 0, 0, .0);
+  }
+  to {
+    background: rgb(0, 0, 0, .6);
+  }
+}
+
 main {
   margin-top: 1em;
   min-height: 75vh;
@@ -199,11 +219,12 @@ nav.quick-scroll > div {
   justify-content: flex-start;
   min-height: 60vh;
   background: rgba(255, 255, 255, 1.0);
-  background: linear-gradient(to bottom, hsl(0, 0%, 100%) 70%, hsl(36, 67%, 78%));
+  background: linear-gradient(175deg, hsl(0, 0%, 100%) 90%, hsl(36, 67%, 78%));
 }
 
 .post.full.with-comments {
   justify-content: space-between;
+  background: linear-gradient(to bottom, hsl(0, 0%, 100%) 70%, hsl(36, 67%, 78%));
 }
 
 .post > .post-header > * {
@@ -711,13 +732,14 @@ footer a {
 .toast-container {
   position: fixed;
   top: 0;
-  left: 0;
+  right: 0;
+  width: fit-content;
   max-width: 280px;
   min-height: auto;
   display: flex;
   justify-content: flex-end;
   align-content: center;
-  align-items: flex-start;
+  align-items: flex-end;
   text-align: left;
   flex-flow: column;
   margin: 1em 0 0 0;
@@ -731,7 +753,7 @@ footer a {
   align-content: center;
   align-items: center;
   text-align: left;
-  flex-flow: row-reverse nowrap;
+  flex-flow: row nowrap;
   padding: .25em .5em;
   margin: .25em .75em;
   min-height: 1cm;
