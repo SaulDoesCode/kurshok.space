@@ -919,6 +919,11 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
             if let Ok(res) = ORC.users_primed_for_auth.remove(raw) {
               let forbidden = if let Some(raw) = res {
                 ORC.destroy_preauth_token(&preauth_token);
+                if ORC.dev_mode {
+                  let now = unix_timestamp();
+                  let expiry = raw.to_i64();
+                  println!("/auth/verification - now = {} > expiry = {} == {}", now, expiry, now > expiry);
+                }
                 unix_timestamp() > raw.to_i64()
               } else {
                 true
@@ -935,6 +940,10 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
                 }
               };
 
+              if ORC.dev_mode {
+                println!("/auth/verification - new token generated");
+              }
+
               return HttpResponse::Accepted()
                 .del_cookie(&preauth_cookie)
                 .cookie(
@@ -949,7 +958,7 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
               return crate::responses::InternalServerError("Database error encountered during auth");
             }
           } else {
-            return crate::responses::Forbidden("Authentication failed, expired preauth cookie");
+            return crate::responses::BadRequest("Authentication failed, expired preauth cookie");
           }
       } else {
         return crate::responses::InternalServerError("Failed to read preauth token from database");
@@ -1107,8 +1116,8 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
   if let Ok(res) = ORC.usernames.get(ar.username.as_bytes()) {
     if let Some(raw) = res {
       let usr_id = raw.to_string();
-      if let Ok(Some(raw)) = ORC.user_email_index.get(usr_id.as_bytes()) {
-        if raw.to_string() != usr_id {
+      if let Ok(Some(raw)) = ORC.user_email_index.get(raw) {
+        if raw.to_string() != ar.email {
           return crate::responses::Forbidden(
             "Username or email are either mistaken or already taken"
           );
@@ -1220,11 +1229,8 @@ fn build_the_usual_cookie<'c, N, V>(
   }
 }
 
-fn build_cookie_with_ttl<'c, N, V>(
-  name: N,
-  value: V,
-  seconds: i64
-) -> Cookie<'c> where
+fn build_cookie_with_ttl<'c, N, V>(name: N, value: V, seconds: i64) -> Cookie<'c>
+where
   N: Into<std::borrow::Cow<'c, str>>,
   V: Into<std::borrow::Cow<'c, str>>,
 {
@@ -1238,7 +1244,7 @@ fn build_cookie_with_ttl<'c, N, V>(
       .finish()
   } else {
     Cookie::build(name, value)
-      .max_age(time::Duration::seconds(ORC.expiry_tll))
+      .max_age(time::Duration::seconds(seconds))
       .path("/")
       .http_only(true)
       .finish()
