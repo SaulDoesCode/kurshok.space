@@ -1136,9 +1136,8 @@ impl RawWrit {
 
   pub fn are_tags_valid(tags: &Vec<String>) -> bool {
     tags.par_iter().all(|t| {
-      t.len() <= 20
-        && t
-          .chars()
+      t.len() >= 1 && t.len() <= 22 && 
+      t.chars()
           .all(|c| c.is_alphanumeric() || c.is_whitespace() || c == '-')
     })
   }
