@@ -9,7 +9,8 @@ const postListView = div({class: 'post-list'})
 const contentDisplay = section({class: 'posts'},
     postListView
 )
-app.postDisplay = section({class: 'full post'}, pd => {
+app.postDisplay = section({class: 'full post'},
+pd => {
     pd.parts = d.h /* html */ `
         <header class="post-header">
             <div>
@@ -20,14 +21,7 @@ app.postDisplay = section({class: 'full post'}, pd => {
                 <div class="tags" ref="tags"></div>
             </div>
         </header>
-    
         <article class="content" ref="content"></article>
-
-        <aside class="post-comments" hidden ref="commentContainer">
-            <header>Comments</header>
-            <div ref="commentMaker"></div>
-            <div ref="comments"></div>
-        </aside>
     `.renderCollect(pd)
 })
 
@@ -54,10 +48,19 @@ d.run(async () => {
 const postNavView = d.html(/* html */`
     <nav class="post-nav">
         <button class="post-back-btn" onclick="location.hash = app.fancyHash || 'posts'">
-           🡄 Back to Post List
+            <span class="icon-left-open"></span>
+            Back to Post List
         </button>
     </nav>
 `)
+
+const quickScroll = d.html( /* html */ `
+<nav class="quick-scroll">
+    <div class="to-top icon-up-open" onclick="window.scrollTo({top: 0, left: 0, behavior: 'smooth'})">
+    </div>
+    <div class="to-comments icon-comment" onclick="document.querySelector('#comments').scrollIntoView({behavior: 'smooth'})">
+    </div>
+</nav>`)
 
 route.on.post(async hash => {
     await app.afterPostsInitialization()
@@ -79,14 +82,16 @@ route.on.post(async hash => {
         setTimeout(() => d.queryAll('.content code', content).forEach(el => {
             el.classList.add('language-rust')
         }), 60)
+        d.render(quickScroll)
     }
     app.emit.postRendered(post, hash)
 })
 
-// TODO: pagination
-app.view = {
-    page: 0,
-}
+route.on.change(() => {
+    if (!location.hash.includes('post:')) {
+        df.remove(quickScroll)
+    }
+})
 
 app.votesUI = (voteType, {id, vote = 0, you_voted}) => parentEl => {
     const votesEl = div({
@@ -291,6 +296,11 @@ app.fetchPosts = async (page = 0, amount = 5) => {
         }
         app.postPages[page] = []
         postListView.innerHTML = ''
+
+        if (writs.length < 5) {
+            df.remove(app.postPaginationView)
+        }
+
         writs.forEach(w => {
             app.postPages[page].push(w.id)
             publicPost(app.posts[w.id] = w)
