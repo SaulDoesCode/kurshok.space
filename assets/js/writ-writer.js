@@ -59,6 +59,7 @@ writingPad.value = ''
 ;(app.wwTS = app.setupToggleSituation(wwLauncher, wwView, 'body', {
     viewOutAnimation: 'fade-out 220ms ease-out',
     delayRemoveMS: 220,
+    background: true,
 })).toggleView()
 
 const writListEntry = (title, id) => div({
@@ -99,6 +100,7 @@ const writListEntry = (title, id) => div({
                             df.remove(parent)
                             if (app.ww.active && app.ww.active.id == id) app.clearEditor()
                             delete app.ww.writs[id]
+                            app.emit('postEdit:' + id, false)
                         }
                     } else {
                         await localforage.removeItem('unpushed:' + title)
@@ -120,6 +122,10 @@ const writListEntry = (title, id) => div({
 app.ww = {writs: {}, unpushed: {}}
 
 app.pushWrit = async (title, raw_content, tags, ops = {}) => {
+    if (tags.length === 1 && tags[0] === "") {
+        throw new Error('posts need at least one tag')
+    }
+
     const raw_writ = {
         title,
         raw_content: raw_content.trim(),
@@ -132,7 +138,33 @@ app.pushWrit = async (title, raw_content, tags, ops = {}) => {
     const res = await app.jsonPut('/writ', raw_writ)
     const data = await res.json()
 
-    return data.ok ? Promise.resolve(data.data) : Promise.reject(data)
+    if (data.ok) {
+        if (raw_writ.id != null) {
+            const wle = writList.querySelector(`[wid="${raw_writ.id}"]`)
+            if (wle) {
+                app.editableWritQuery({
+                    author_name: app.user.username,
+                    with_raw_content: false,
+                    ids: [raw_writ.id],
+                }).then(async writs => {
+                    if (!d.isArr(writs)) {
+                        app.toast.error('Failed to fetch your editable writs')
+                        return console.error("failed to fetch user's editable writs")
+                    }
+                    for (const w of writs) {
+                        w.raw_content = raw_writ.raw_content
+                        app.ww.writs[w.id] = w
+                        wle.titleSpan.textContent = w.title
+                        app.emit('postEdit:' + w.id, w)
+                    }
+                })
+            }
+        } else {
+            app.emit.newPost(raw_writ.id)
+        }
+        return Promise.resolve(data.data)
+    }
+    return Promise.reject(data)
 }
 
 app.deleteWritRequest = writID => app.txtDelete('/writ', writID)
@@ -146,7 +178,10 @@ app.editableWritQuery({
     with_raw_content: false,
 }).then(async writs => {
     // TODO: Error toasts
-    if (!d.isArr(writs)) return console.error("failed to fetch user's editable writs")
+    if (!d.isArr(writs)) {
+        app.toast.error('Failed to fetch your editable writs')
+        return console.error("failed to fetch user's editable writs")
+    }
     for (const w of writs) {
         app.ww.writs[w.id] = w
         writListEntry(w.title, w.id)
@@ -223,8 +258,8 @@ d.on.pointerup(writList, e => {
             }
         }, 220)
         tagInput.value = writ.tags.join(', ')
-        isPublicCheckbox.checked = writ.commentable
-        isCommentableCheckbox.checked = writ.public
+        isPublicCheckbox.checked = writ.public
+        isCommentableCheckbox.checked = writ.commentable
         pushWritBtn.textContent = 'Update'
     }
 })
