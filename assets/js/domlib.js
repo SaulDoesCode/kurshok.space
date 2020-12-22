@@ -48,13 +48,13 @@ export default (d => {
    * it's similar to array.includes but allows functions
    */
   d.allare = (arr, like) => {
-    if (!arr) return false
-    if (like instanceof Function)
-      for (let i = 0; i < arr.length; i++)
-        if (!d.like(arr[i])) return false
-    else
-      for (let i = 0; i < arr.length; i++)
-        if (arr[i] !== like) return false
+    if (!d.isArrlike(arr)) return false
+    const isfn = like instanceof Function
+    for (let i = 0; i < arr.length; i++) {
+      if (!(isfn ? like(arr[i]) : arr[i] === like)) {
+        return false
+      }
+    }
     return true
   }
 
@@ -112,7 +112,7 @@ export default (d => {
     if (input instanceof Node) return input
     if (d.isNum(input)) input = String(input)
     if (typeof input === 'string') return Array.from(document.createRange().createContextualFragment(input).childNodes)
-    if (d.isArr(input)) return input.map(i => d.html(i, host))
+    if (d.isArr(input)) return input.map(i => d.html(i, ...args))
     throw new Error('.html: unrenderable input')
   }
 
