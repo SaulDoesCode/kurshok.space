@@ -125,8 +125,9 @@ main {
   margin: .4em;
   padding: 0 .25em;
   font-size: 1.1em;
-  border-radius: 2px;
+  border-radius: 4px;
   cursor: pointer;
+  box-shadow: 0 1px 4px hsla(31, 18%, 50%, 0.9);
 }
 
 main[route-active="posts"] {
@@ -154,7 +155,7 @@ main[route-active="posts"] {
   filter: drop-shadow(0 2px .5em rgba(0,0,0,.1));
   box-shadow: 0 1px 4px rgb(0, 0, 0, .12);
   background: #fff;
-  background: linear-gradient(160deg, hsl(0, 0%, 100%) 46%, hsl(36, 67%, 78%));
+  background: linear-gradient(170deg, hsl(0, 0%, 100%) 50%, hsl(36, 67%, 95%));
 }
 
 main[route-active="posts"] .post,
@@ -392,11 +393,11 @@ nav.quick-scroll > div {
   margin: .1em .2em;
   padding: .2em .4em;
   line-height: 1.1;
-  font-size: .88em;
-  border-radius: .1em;
+  font-size: .85em;
   color: hsl(0, 0%, 100%);
   text-shadow: 0 1px 2px rgb(0,0,0,.12);
-  border-radius: 4px;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgb(0, 0, 0, .1);
   background: var(--primary-color);
 }
 
