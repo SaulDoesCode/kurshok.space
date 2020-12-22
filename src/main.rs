@@ -11,6 +11,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 mod admin_functions;
 mod auth;
 mod email;
+mod expirable_data;
 mod comments;
 mod orchestrator;
 mod posts;
@@ -65,6 +66,9 @@ async fn main() -> std::io::Result<()> {
 
     admin_functions::watch_and_update_files();
     println!("file watching active");
+
+    expirable_data::start_system();
+    println!("expirable_data system active");
     // if CONF.read().dev_mode {}
 
     HttpServer::new(|| {
