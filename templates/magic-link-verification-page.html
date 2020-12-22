@@ -25,10 +25,11 @@
     </script>
 {% else %}
     <script>
+window.localStorage.setItem('ml-success', true)
 {% if dev_mode %}
         setTimeout(() => {
             window.location = '/'
-        }, 25000)
+        }, 2500)
 {% else %}
         window.location = '/'
 {% endif %}
