@@ -241,7 +241,6 @@ app.posts = Object.create(null)
 app.postPages = Object.create(null)
 
 app.postPaginationView = section({
-    $: contentDisplay,
     class: 'post-pagination',
 },
     app.postPageBackBtn = div({
@@ -297,8 +296,8 @@ app.fetchPosts = async (page = 0, amount = 5) => {
         app.postPages[page] = []
         postListView.innerHTML = ''
 
-        if (writs.length < 5) {
-            df.remove(app.postPaginationView)
+        if (writs.length >= 5) {
+            d.render(app.postPaginationView, contentDisplay)
         }
 
         writs.forEach(w => {
