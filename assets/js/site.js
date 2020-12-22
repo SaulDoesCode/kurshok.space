@@ -30,7 +30,7 @@ app.editableWritQuery = wq('/editable-writs')
 
 app.toggleSituations = {list: [], active: null}
 
-app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation, delayRemoveMS} = {}) => {
+app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation, delayRemoveMS, background} = {}) => {
     const ts = {}
     ts.clickOutHandler = d.on.pointerdown(document.body, e => {
         if (
@@ -50,10 +50,15 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation
         ts.toggleView()
     })
 
+    if (background === true) {
+        background = df.div({class: 'background-cover'})
+    }
+
     ts.toggleView = (state = !df.hasClass(view, 'open')) => {
         df.class(view, 'open', state)
         df.class(launcher, 'active', state)
         if (state) {
+            if (background) d.render(background)
             d.render(view, renderTo)
             ts.clickOutHandler.on()
             if (app.toggleSituations.active) {
@@ -68,10 +73,12 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation
                 view.style.animation = viewOutAnimation
                 ts.launchEventHandler.off()
                 df.remove(view, delayRemoveMS).then(() => {
+                    if (background) df.remove(background)
                     view.style.animation = ''
                     ts.launchEventHandler.on()
                 })
             } else {
+                if (background) df.remove(background)
                 df.remove(view)
             }
         }
@@ -161,9 +168,9 @@ domlib.createElementPlugins.contingentVisibility = (event, el) => {
 }
 
 app.dismissIcon = () => domlib.html( /*html*/
-    `<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="width: 16px; height: 22px;">
-    <polygon fill="rgb(255, 66, 66)" points="11.649 9.882 18.262 3.267 16.495 1.5 9.881 8.114 3.267 1.5 1.5 3.267 8.114 9.883 1.5 16.497 3.267 18.264 9.881 11.65 16.495 18.264 18.262 16.497">
-    </polygon>
+`<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="width: 16px; height: 22px;">
+<polygon fill="rgb(255, 66, 66)" points="11.649 9.882 18.262 3.267 16.495 1.5 9.881 8.114 3.267 1.5 1.5 3.267 8.114 9.883 1.5 16.497 3.267 18.264 9.881 11.65 16.495 18.264 18.262 16.497">
+</polygon>
 </svg>`
 )
 
