@@ -112,7 +112,7 @@ route.whenActive = (hash, fn, once) => run(() => {
     })
 })
 
-window.onhashchange = route.handle
+window.addEventListener('hashchange', route.handle)
 run(() => {
     route.handle()
     window.dispatchEvent(new window.CustomEvent('routerReady'))
