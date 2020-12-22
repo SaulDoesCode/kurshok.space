@@ -69,7 +69,7 @@ const commentsDisplay = app.commentsDisplay = section({
     class: 'comments'
 }, cd => [
     header(
-        h4('Comments')
+        cd.heading = h4({id: 'comments'}, 'Comments')
     ),
     cd.commentWriter = div({
         class: 'comment-writer',
@@ -304,7 +304,7 @@ const randomColor = () => {
 randomColor.letters = '0123456789ABCDEF'
 
 
-const randHSLColor = () => `hsl(${Math.random()*360|0}, ${Math.random()*100|30}%, 30%)`
+const randHSLColor = () => `hsla(${Math.random()*360|0}, ${Math.random()*100|30}%, 50%, .8)`
 
 app.formulateThread = (comment, children, $) => div({
     $,
