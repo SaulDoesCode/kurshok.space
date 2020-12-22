@@ -65,7 +65,11 @@ const quickScroll = d.html( /* html */ `
 route.on.post(async hash => {
     await app.afterPostsInitialization()
     const post = app.activePost = app.posts[hash]
-    const {title, tags, author, date, content, comments, commentsContainer} = app.postDisplay.parts
+    if (post == null) {
+        location.hash = 'posts'
+        return
+    }
+    const {title, tags, author, date, content} = app.postDisplay.parts
     title.textContent = post.title
     date.innerHTML = ''
     d.render(app.renderUXTimestamp(post.posted), date)
@@ -191,24 +195,41 @@ const publicPost = w => div({
         if (e.target.className.includes('vote')) return
         location.hash = w.id
     }
-},
-    app.votesUI('writ', w),
-    header(
-        div({class: 'title'},
-            h4(w.title),
-            div({class: 'author-name'}, `By ${w.author_name}`)
-        ),
-        div(
-            div({class: 'posted'}, app.renderUXTimestamp(w.posted)),
-            div({class: 'tags'},
-                w.tags.map(t => span({
-                    class: 'tag',
-                    attr: {title: t}
-                }, t))
+}, pubPost => {
+    const titleEl = h4(w.title)
+    app.on('postEdit:' + w.id, p => {
+        if (p === false) {
+            df.remove(pubPost)
+            app.postPages[w.page] = app.postPages[w.page].filter(id => id != w.id)
+            delete app.posts[w.id]
+            if (location.hash.includes(w.id)) {
+                location.hash = 'posts'
+            }
+        } else {
+            titleEl.textContent = app.posts[w.id].title = p.title
+            app.posts[w.id].commentable = p.commentable
+        }
+    })
+
+    return [
+        app.votesUI('writ', w),
+        header(
+            div({class: 'title'},
+                titleEl,
+                div({class: 'author-name'}, `By ${w.author_name}`)
+            ),
+            div(
+                div({class: 'posted'}, app.renderUXTimestamp(w.posted)),
+                div({class: 'tags'},
+                    w.tags.map(t => span({
+                        class: 'tag',
+                        attr: {title: t}
+                    }, t))
+                )
             )
         )
-    )
-);
+    ]
+});
 
 app.formatVoteCount = (el, count, digits = 2) => {
     el.innerHTML = ''
@@ -301,6 +322,7 @@ app.fetchPosts = async (page = 0, amount = 5) => {
         }
 
         writs.forEach(w => {
+            w.page = page
             app.postPages[page].push(w.id)
             publicPost(app.posts[w.id] = w)
         })
@@ -317,11 +339,18 @@ app.fetchPosts = async (page = 0, amount = 5) => {
 
 app.fetchPosts()
 
+app.on.newPost(() => {
+    app.posts = Object.create(null)
+    app.postPages = Object.create(null)
+    postListView.innerHTML = ''
+    app.fetchPosts()
+})
+
 app.afterPostsInitialization = fn => app.postsInitialized ?
     (fn != null ? fn() : Promise.resolve(true)) : 
     fn != null ?
         app.once.postsInitialized(fn) :
-        new Promise(resolve => app.once.postsInitialized(resolve))
+        new Promise(app.once.postsInitialized)
 
 app.dateFormat = 'HH:mm a DD MMM YYYY'
 
