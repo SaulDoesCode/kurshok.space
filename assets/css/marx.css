@@ -1,8 +1,8 @@
 :root {
     --primary-color: #c1ab8a;
-    --highlight-color: #b8a58a;
-    --border-color: #b6a78a;
-    --button-color: #1a1a1a;
+    --highlight-color: #d8b98a;
+    --border-color: #d3c29e;
+    --button-color: #b39e7e;
     --shadow-outline-color: rgba(148, 117, 98, 0.466);
 }
 
@@ -246,7 +246,7 @@ main {
 }
 
 footer {
-    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    border-top: 1px solid rgba(0, 0, 0, .05);
     padding: 16px 0;
     text-align: center;
 }
@@ -586,7 +586,8 @@ input[type=submit]::-moz-focus-inner, input[type=reset]::-moz-focus-inner, input
 input[type=submit]:hover, input[type=reset]:hover, input[type=button]:hover, button:hover {
     background-color: var(--highlight-color);
     border-color: var(--border-color);
-    color: #fff;
+    color: hsl(0, 0%, 100%);
+    text-shadow: 0 2px 3px rgba(0, 0, 0, .25);
 }
 
 input[type=submit]:not(:disabled):active, input[type=reset]:not(:disabled):active, input[type=button]:not(:disabled):active, button:not(:disabled):active, input[type=submit]:not(:disabled).active, input[type=reset]:not(:disabled).active, input[type=button]:not(:disabled).active, button:not(:disabled).active {
