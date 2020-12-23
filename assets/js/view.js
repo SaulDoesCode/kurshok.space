@@ -1,7 +1,7 @@
 import app from '/js/site.min.js'
 import route from '/js/router.min.js'
 const d = app.d, df = d.domfn
-const {div, h4, section, span, header} = df
+const {div, button, h1, h4, section, span, header} = df
 
 
 const mainView = d.query('main[route-active]')
@@ -27,9 +27,22 @@ pd => {
 
 
 route('posts', contentDisplay)
-if (location.hash == '' || location.hash == '#') location.hash = 'posts'
+if (location.hash == '' || location.hash == '#') {
+    location.hash = 'posts'
+    route.handle()
+}
 
 route('post', app.postDisplay)
+
+route('no-content', div({class: 'no-content'},
+    h1('Sorry folks, no content. This website is barren.'),
+    button({
+        onclick() {
+            location.hash = 'posts'
+            window.location = '/'
+        }
+    }, 'Reload page, maybe it helps.')
+))
 
 d.run(async () => {
     try {
@@ -63,10 +76,17 @@ const quickScroll = d.html( /* html */ `
 </nav>`)
 
 route.on.post(async hash => {
+    setTimeout(() => {
+        if (!app.posts[hash] && app.failedToFetchPosts) {
+            location.hash = 'no-content'
+            route.handle()
+        }
+    }, 1200)
     await app.afterPostsInitialization()
     const post = app.activePost = app.posts[hash]
     if (post == null) {
-        location.hash = 'posts'
+        location.hash = 'no-content'
+        route.handle()
         return
     }
     const {title, tags, author, date, content} = app.postDisplay.parts
@@ -206,6 +226,10 @@ const publicPost = w => div({
                 location.hash = 'posts'
             }
         } else {
+            if (location.hash.includes('no-content')) {
+                location.hash = 'posts'
+                route.handle()
+            }
             titleEl.textContent = app.posts[w.id].title = p.title
             app.posts[w.id].commentable = p.commentable
         }
@@ -285,6 +309,16 @@ app.postPaginationView = section({
 )
 
 app.fetchPosts = async (page = 0, amount = 5) => {
+    if (route.hash() == 'no-content') {
+        if (!app.failedToFetchPosts) {
+            location.hash = 'posts'
+            route.handle()
+            console.log('false alarm')
+        } else {
+            console.warn('not sure what happened')
+        }
+    }
+
     let writs
     if (d.isArr(app.postPages[page])) {
         postListView.innerHTML = ''
@@ -299,9 +333,16 @@ app.fetchPosts = async (page = 0, amount = 5) => {
                 with_content: false,
                 kind: 'post',
                 amount,
+                public: true,
                 page
             })
             if (!d.isArr(writs)) {
+                if (page == 0) {
+                    mainView.innerHTML = ''
+                    app.failedToFetchPosts = true
+                    location.hash = 'no-content'
+                    route.handle()
+                }
                 console.error(writs)
                 throw new Error(writs.status)
             }
@@ -312,6 +353,24 @@ app.fetchPosts = async (page = 0, amount = 5) => {
                 app.postPageForwardBtn.style.color = ''
                 app.postPageForwardBtn.textContent = '>>'
             }, 3000)
+
+            if (location.hash.includes('post:')) {
+                if (page == 0) {
+                    app.failedToFetchPosts = true
+                    location.hash = 'no-content'
+                    route.handle()
+                } else {
+                    location.hash = 'posts'
+                    route.handle()
+                }
+            } else if (page == 0) {
+                mainView.innerHTML = ''
+                app.failedToFetchPosts = true
+                location.hash = 'no-content'
+                route.handle()
+            }
+
+
             return
         }
         app.postPages[page] = []
