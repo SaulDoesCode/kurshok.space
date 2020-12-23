@@ -11,9 +11,12 @@ use slug::slugify;
 use thiserror::Error;
 use time::Duration;
 
-use std::sync::{
-  atomic::{AtomicU64, Ordering::SeqCst},
-  Arc,
+use std::{
+  collections::BTreeMap,
+  sync::{
+    atomic::{AtomicU64, Ordering::SeqCst},
+    Arc,
+  }
 };
 
 use super::{CONF, TEMPLATES};
@@ -27,6 +30,7 @@ use crate::utils::{
   // FancyBool,
   FancyIVec,
 };
+use crate::expirable_data::ExpirableData;
 
 impl Orchestrator {
   pub fn hash(&self, data: &[u8]) -> Vec<u8> {
@@ -118,8 +122,25 @@ impl Orchestrator {
       })
       .is_ok()
     {
-      if CONF.read().admin_emails.contains(&email) {
-        ORC.make_admin(&usr.id, 0, Some("blessed email".to_string()));
+      let mut exp_data: BTreeMap<String, Vec<String>> = BTreeMap::new();
+      
+      exp_data.insert("users".to_string(), vec!(usr.id.clone()));
+      exp_data.insert("usernames".to_string(), vec!(usr.username.clone()));
+      exp_data.insert("emails".to_string(), vec!(email));
+      exp_data.insert("user_email_index".to_string(), vec!(usr.id.clone()));
+      exp_data.insert("handles".to_string(), vec!(usr.handle.clone()));
+
+      if !self.expire_data(
+        if self.dev_mode {
+          // 5 min
+          5 * 60
+        } else {
+          // 15 min
+          15 * 60
+        },
+        exp_data
+      ) && self.dev_mode {
+        println!("failed to set expiry for unverified user");
       }
 
       return Some(usr);
@@ -215,14 +236,16 @@ impl Orchestrator {
       return None;
     }
 
-    let res: TransactionResult<User, ()> = (
+    let res: TransactionResult<(User, String, bool), ()> = (
       &self.magic_links,
       &self.users,
       &self.user_verifications,
+      &self.user_email_index
     ).transaction(|(
         magic_links,
         users,
         user_verifications,
+        user_email_index
     )| {
       if let Some(raw) = magic_links.get(code.as_bytes())? {
         let ml = MagicLink::try_from_slice(&raw).unwrap();
@@ -230,11 +253,14 @@ impl Orchestrator {
         if !ml.has_expired() {
           if let Some(raw) = users.get(ml.usr_id.as_bytes())? {
             let usr = User::try_from_slice(&raw).unwrap();
-            if user_verifications.get(usr.id.as_bytes())?.is_none() {
+            let first_time = user_verifications.get(usr.id.as_bytes())?.is_none();
+            if first_time {
               let v = UserVerification::new();
               user_verifications.insert(usr.id.as_bytes(), v.try_to_vec().unwrap())?;
             }
-            return Ok(usr);
+            if let Some(raw_email) = user_email_index.get(usr.id.as_bytes())? {
+              return Ok((usr, raw_email.to_string(), first_time));
+            }
           } else if self.dev_mode {
             println!("could not find user associated with magic-link");
           }
@@ -247,8 +273,30 @@ impl Orchestrator {
       Err(sled::transaction::ConflictableTransactionError::Abort(()))
     });
 
-    if let Ok(user) = res {
-      let el = self.authcache.cache_user(user);
+    if let Ok((usr, email, first_time)) = res {
+      if first_time {
+        let mut exp_data: BTreeMap<String, Vec<String>> = BTreeMap::new();
+  
+        exp_data.insert("users".to_string(), vec!(usr.id.clone()));
+        exp_data.insert("usernames".to_string(), vec!(usr.username.clone()));
+        exp_data.insert("emails".to_string(), vec!(email.clone()));
+        exp_data.insert("user_email_index".to_string(), vec!(usr.id.clone()));
+        exp_data.insert("handles".to_string(), vec!(usr.handle.clone()));
+  
+        if let Some(_) = self.unexpire_data(ExpirableData::MultiTree(exp_data)) {
+          if self.dev_mode {
+            println!("no need to clean up user: {} anymore, they are verified", &usr.username);
+          }
+        } else if self.dev_mode {
+          println!("we fucked up, a verified user: {} was/will-be deleted", &usr.username);
+        }
+  
+        if CONF.read().admin_emails.contains(&email) {
+          self.make_admin(&usr.id, 0, Some("blessed email".to_string()));
+        }
+      }
+
+      let el = self.authcache.cache_user(usr);
       return Some(el);
     }
     if self.dev_mode {
@@ -261,11 +309,16 @@ impl Orchestrator {
     let res: TransactionResult<String, ()> = self.preauth_tokens.transaction(|preauth_tokens| {
       let token = random_string(22);
       preauth_tokens.insert(token.as_bytes(), usr_id.as_bytes())?;
-
       Ok(token)
     });
-
+  
     if let Ok(token) = res {
+      ORC.expire_key(
+        // 15 minutes
+        60*15,
+        "preauth_tokens".to_string(),
+        token.clone()
+      );
       return Some(token);
     }
     None
@@ -275,6 +328,11 @@ impl Orchestrator {
     let res: TransactionResult<(), ()> = self.preauth_tokens.transaction(|preauth_tokens| {
       preauth_tokens.remove(preauth_token.as_bytes())?;
       Ok(())
+    });
+
+    ORC.unexpire_data(ExpirableData::Single{
+      tree: "preauth_tokens".to_string(),
+      key: preauth_token.to_string(),
     });
 
     res.is_ok()
@@ -849,7 +907,7 @@ impl MagicLink {
       code: random_string(20),
       usr_id,
       // 5 minutes in the future + 30 seconds for possible delivery time
-      expiry: unix_timestamp() + (1000 * 60 * 5) + (1000 * 30)
+      expiry: unix_timestamp() + 330
     }
   }
 
@@ -924,6 +982,7 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
                   let expiry = raw.to_i64();
                   println!("/auth/verification - now = {} > expiry = {} == {}", now, expiry, now > expiry);
                 }
+                // check if auth priming has expired
                 unix_timestamp() > raw.to_i64()
               } else {
                 true
