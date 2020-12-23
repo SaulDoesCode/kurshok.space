@@ -183,6 +183,13 @@ main[route-active="posts"] .post>* {
   height: 120px;
 }
 
+main[route-active="no-content"] > :not(.no-content) {
+  display: none;
+}
+main[route-active="posts"] > .no-content {
+  display: none;
+}
+
 nav.quick-scroll {
   position: fixed;
   flex-direction: column;
