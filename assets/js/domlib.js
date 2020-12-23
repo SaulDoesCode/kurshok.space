@@ -570,6 +570,7 @@ export default (d => {
 
   domfn.remove = (node, after) => {
     if (node instanceof Function) node = node()
+    if (typeof node === 'string') node = document.querySelector(node)
     if (d.isArr(node))
       for (const n of node) domfn.remove(n, after)
     else if (d.isNum(after)) {
