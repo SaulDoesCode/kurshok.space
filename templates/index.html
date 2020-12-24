@@ -19,20 +19,35 @@
     {% else %}
     <link rel="stylesheet" href="/css/postauth.min.css">
     {% endif %}
+    <script src="/js/lazy-simon.min.js" defer></script>
     <script src="/js/view.min.js" type="module"></script>
 </head>
 <body>
     <nav class="hero">
+        <nav class="tabs">
+            <a href="#posts" route-link="posts">
+                <span class="icon-doc-inv"></span>
+                <span class="txt">Posts</span>
+            </a>
+            <a href="#books" route-link="books">
+                <span class="icon-book"></span>
+                <span class="txt">Books</span>
+            </a>
+        </nav>
+
         <header>Grimstack</header>
         <section class="launchers">
         {% if username is defined %}
             {% if is_writer %}
                 <button class="ww-launcher" title="open up the writ writer and post something">
-                    WritWriter
+                    Writ Writer
+                    <span class="icon-sliders"></span>
                 </button>
             {% endif %}
 
-            <button class="profile-launcher" title="click to see or build your profile">{{ username }}</button>
+            <button class="profile-launcher" title="click to see or build your profile">
+                {{ username }}
+            </button>
             <script type="module" defer>
                 import app from '/js/site.min.js'
                 app.user = { username: "{{ username }}".trim() }
@@ -43,7 +58,10 @@
                 {% endif %}
             </script>
         {% else %}
-            <button class="auth-launcher" title="click for a login or signup modal">Auth</button>
+            <button class="auth-launcher" title="click for a login or signup modal">
+                Auth
+                <span class="icon-lock"></span>
+            </button>
             <script type="module" defer>
                 import app from '/js/site.min.js'
                 app.oneTimeAuthLauncher = app.d.once.click('.auth-launcher', async e => {
@@ -65,15 +83,18 @@
 
             <div class="footer-links">
                 <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=saul@grimstack.io&lc=US&item_name=Help+keep+grimstack+online+and+its+devs+sheltered&no_note=0&cn=&curency_code=USD&bn=PP-DonationsBF:btn_donateCC_LG.gif:NonHosted">
+                    <img src="/css/SuperTinyIcons/paypal.svg" alt="Digital Ocean logo">
                     Donate via Paypal <br>
-                    <span>email: saul@grimstack.io</span>
+                    <span> email: saul@grimstack.io</span>
                 </a>
                 <a href="https://m.do.co/c/6564219d6c9a">
+                    <img src="/css/SuperTinyIcons/digitalocean.svg" alt="Digital Ocean logo">
                     Use our Digital Ocean referral link
                 </a>
                 <a href="https://etherscan.io/address/0x0bac497c4d77a6eab1531b7341c829400944d30e">
-                    <b>ETH</b> 
-                    0x0Bac497c4D77A6eab1531b7341c829400944D30e
+                    <img src="/css/SuperTinyIcons/ethereum.svg" alt="Ethereum logo">
+                    <b>ETH: </b> 
+                     0x0Bac497c4D77A6eab1531b7341c829400944D30e
                 </a>
             </div>
         </section>
@@ -86,10 +107,21 @@
                     Privacy Policy
                 </a>
                 <a href="https://github.com/SaulDoesCode/grimstack">
+                    <img src="/css/SuperTinyIcons/opensource.svg" alt="Github logo">
                     Grimsack Source Code
+                </a>
+                <a href="https://github.com/SaulDoesCode">
+                    <img src="/css/SuperTinyIcons/github.svg" alt="Github logo">
+                    Github
+                </a>
+                <a href="https://www.amazon.com/s/ref=dp_byline_sr_ebooks_1?ie=UTF8&field-author=Saul+van+der+Walt&text=Saul+van+der+Walt&sort=relevancerank&search-alias=digital-text">
+                    <img src="/css/SuperTinyIcons/amazon.svg" alt="Amazon logo">
+                    Amazon Books
                 </a>
             </div>
         </section>
     </footer>
+
+    <template-file route="books" src="/books.html"></template-file>
 </body>
 </html>
