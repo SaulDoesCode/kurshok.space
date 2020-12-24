@@ -105,6 +105,10 @@ const commentsDisplay = app.commentsDisplay = section({
     })
 ])
 
+if (!app.user) {
+    commentsDisplay.heading.setAttribute('title', 'make an account to comment')
+}
+
 app.gatherComment = () => {
     const {textarea, authorOnlyToggle} = commentsDisplay
     const raw_content = textarea.value.trim()
@@ -292,6 +296,19 @@ app.on.postRendered(async post => {
     for (const {comment, children} of commentTrees) {
         commentList.push(app.formulateThread(comment, children, commentsDisplay.list))
     }
+
+    if (app.user == null || app.user.username == null) {
+        app.d.run(() => {
+            df.remove(commentsDisplay.commentWriter)
+            if (commentList.length == 0) {
+                df.remove(commentsDisplay)
+                const wc = document.querySelector('.with-comments')
+                if (wc) {
+                    wc.classList.remove('with-comments')
+                }
+            }
+        })
+    }
 })
 
 const randomColor = () => {
@@ -351,7 +368,11 @@ app.formulateThread = (comment, children, $) => div({
                     commentsDisplay.postBtn.textContent = 'Reply'
                     commentsDisplay.textarea.focus()
                 }
-            }, 'reply'),
+            }, 'reply', btn => {
+                if (!app.user) {
+                    btn.setAttribute('title', 'make an account to reply')
+                }
+            }),
             
             children == null || children.length > 0 && button({
                 class: 'hide-replies-btn',
