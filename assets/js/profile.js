@@ -12,7 +12,12 @@ const {
     <button class="logout-btn" ref="logoutBtn">Log out</button>
 </section>`.collect()
 
-app.profileViewToggle = app.setupToggleSituation(profileLauncher, app.profileView = profileView)
+app.profileViewToggle = app.setupToggleSituation(
+    profileLauncher,
+    app.profileView = profileView,
+    'body',
+    {background: true}
+)
 
 d.once.click(logoutBtn, async e => {
     const res = await (await fetch('/auth', {method: 'DELETE'})).json()
