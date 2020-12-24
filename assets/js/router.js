@@ -4,16 +4,17 @@ const {emitter, domfn, directive, run, isRenderable, isFunc} = domlib
 
 const route = emitter((path, view, omitSuffix) => {
     if (omitSuffix != null) path.replace(omitSuffix, '')
-    if (view == null) return location.hash = path
     if (path[0] !== '#') path = '#' + path
+    if (view == null) return location.hash = path
 
     if (view.tagName === 'TEMPLATE') {
         view.remove()
         view = [...view.content.childNodes]
     }
 
-    if (isRenderable(view)) {
-        views[path] = isFunc(view) ? view() : view
+    if (isFunc(view)) view = view()
+    if (isRenderable(view) || isFunc(view)) {
+        views[path] = view
     }
 
     route.handle()
@@ -35,9 +36,27 @@ directive('route-link', {
 
 directive('route', {
     init(el, val) {
-        if (el.tagName === 'TEMPLATE') return route(val, el)
+        if (el.tagName === 'TEMPLATE') {
+            return route(val, el)
+        }
+        if (el.tagName === 'TEMPLATE-FILE') {
+            try {
+                if (val[0] !== '#') val = '#' + val
+                fetch(el.getAttribute('src'))
+                    .then(res => res.text())
+                    .then(html => route(
+                        val, 
+                        () => () => route.views[val] = domlib.html(html)
+                    ))
+                domlib.domfn.remove(el)
+            } catch(e) {
+                console.error(`invalid <template-file route="${val}" src="???">`, e)
+                return
+            }
+        }
+
         el.routeHandler = route.on.change((view, hash) => {
-            if (hash === el.attr.route) { 
+            if (hash === el.getAttribute('route')) { 
                 el.innerHTML = ''
                 domfn.append(el, domfn.html(view))
             } else {
@@ -80,8 +99,10 @@ route.handle = () => {
     let path = location.hash
     if (path.includes('/')) path = path.split('/')[0]
     if (path.includes(':')) path = path.split(':')[0]
-    const view = route.views[path]
+    let view = route.views[path]
     const hash = route.hash()
+
+    if (isFunc(view)) view = view()
     if (view == null) {
         if (route.path != null) {
             location.hash = route.path
