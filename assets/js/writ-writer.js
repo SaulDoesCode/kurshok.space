@@ -160,7 +160,12 @@ app.pushWrit = async (title, raw_content, tags, ops = {}) => {
                 })
             }
         } else {
+            raw_writ.id = data.data.id
+            raw_writ.posted = data.data.posted
+            raw_writ.slug = data.data.slug
             app.emit.newPost(raw_writ.id)
+            app.ww.writs[raw_writ.id] = raw_writ
+            writListEntry(raw_writ.title, raw_writ.id)
         }
         return Promise.resolve(data.data)
     }
@@ -168,10 +173,6 @@ app.pushWrit = async (title, raw_content, tags, ops = {}) => {
 }
 
 app.deleteWritRequest = writID => app.txtDelete('/writ', writID)
-
-app.reloadWrits = () => {
-    // TODO: keep things up to date when changes happen
-}
 
 app.editableWritQuery({
     author_name: app.user.username,
