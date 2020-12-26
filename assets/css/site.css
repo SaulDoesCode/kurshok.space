@@ -8,7 +8,7 @@ body {
   align-items: center;
   align-content: center;
   flex-flow: column nowrap;
-  background: hsl(0, 0%, 98%);
+  background: hsl(0, 0%, 12%);
   color: hsl(0, 0%, 12%);
   min-height: 100vh;
   max-width: 100vw;
@@ -19,10 +19,11 @@ body {
   scroll-behavior: smooth;
 }
 
-body > * > header {
+body > * > header > h1 {
   display: block;
   text-align: center;
-  font-size: 1.25em;
+  font-size: 1.2em;
+  margin: 0 .5em;
   font-weight: 600;
 }
 
@@ -119,16 +120,38 @@ main {
   color: #000;
   padding: .25em .5em 0 .5em;
   margin: 0;
+  margin-bottom: 1em;
   flex: 0 1 auto;
   width: 100%;
   box-sizing: border-box;
+  background: var(--hero-color);
+  box-shadow: 0 3px 5px rgb(0, 0, 0, .15);
+  padding: .75em;
 }
 
 .hero > header {
-  display: inline-block;
+  display: inline-flex;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
   margin: 0;
-  font-size: 1.5em;
+  font-size: 1.15em;
+  color: hsl(0, 0%, 65%);
   width: auto;
+}
+
+.hero>header > h1 {
+  display: inline-block;
+  background: var(--primary-color);
+  color: #fff;
+  text-shadow: 0 2px 3px rgb(0, 0, 0, .12);
+  padding: .5em;
+  border-radius: 4px;
+}
+
+.hero>header>div {
+  font-size: .95em;
 }
 
 .hero .launchers {
@@ -140,14 +163,23 @@ main {
 .hero .auth-launcher,
 .hero .profile-launcher,
 .post-nav button {
-  display: inline-block;
+  display: inline-flex;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  flex-direction: column;
   text-align: center;
   margin: .25em;
-  padding: 0 .25em;
-  font-size: 1.1em;
-  border-radius: 4px;
+  padding: .25em;
+  font-size: 1.15em;
+  line-height: 1.1;
+  border-radius: 2px;
   cursor: pointer;
-  box-shadow: 0 1px 4px hsla(31, 18%, 50%, 0.9);
+  box-shadow: 0 1px 4px hsla(34, 6%, 22%, 0.9);
+}
+
+.post-nav button {
+  flex-flow: row wrap;
 }
 
 nav.tabs {
@@ -167,7 +199,7 @@ nav.tabs a {
   margin: .2em .5em;
   padding: .25em;
   background: hsl(0, 0%, 100%);
-  color: hsl(39, 6%, 40%);
+  color: hsl(39, 6%, 35%);
   box-shadow: 0 2px 3px rgb(0, 0, 0, .12);
   line-height: 1.2;
   border-radius: 4px;
@@ -185,6 +217,14 @@ nav.tabs a.active-route {
 main[route-active="posts"] {
   position: relative;
   max-width: 920px;
+}
+
+main > section {
+  color:hsl(0, 0%, 68%);
+}
+
+main > section.posts, main > section.post {
+  color: hsl(0, 0%, 14%);
 }
 
 .post-list {
@@ -206,7 +246,7 @@ main[route-active="posts"] {
   filter: drop-shadow(0 2px .5em rgba(0,0,0,.1));
   box-shadow: 0 1px 4px rgb(0, 0, 0, .12);
   background: #fff;
-  background: linear-gradient(170deg, hsl(0, 0%, 100%) 50%, hsl(36, 67%, 95%));
+  background: linear-gradient(70deg, hsla(0, 0%, 100%,.95) 60%, var(--highlight-color));
 }
 
 .post:not(.full) {
@@ -257,16 +297,17 @@ nav.quick-scroll > div {
 .post.full {
   position: relative;
   margin-top: .5em;
+  padding-top: .5em;
   flex-flow: column;
   justify-content: flex-start;
   min-height: 60vh;
   background: rgba(255, 255, 255, 1.0);
-  background: linear-gradient(175deg, hsl(0, 0%, 100%) 90%, hsl(36, 67%, 88%));
+  background: linear-gradient(175deg, hsl(0, 0%, 100%) 90%, var(--highlight-color));
 }
 
 .post.full.with-comments {
   justify-content: space-between;
-  background: linear-gradient(to bottom, hsl(0, 0%, 100%) 70%, hsl(36, 67%, 88%));
+  background: linear-gradient(to bottom, hsl(0, 0%, 100%) 70%, var(--highlight-color));
 }
 
 .post > .post-header > * {
@@ -340,7 +381,7 @@ nav.quick-scroll > div {
   flex-flow: column;
 }
 
-.post.full>header > div {
+.post.full>header>div {
   width: 100%;
   display: flex;
   justify-content: space-around;
@@ -348,7 +389,7 @@ nav.quick-scroll > div {
   align-items: center;
   flex-flow: row wrap;
   margin: .5em 0 0 0;
-  font-size: .9em;
+  font-size: .95em;
 }
 
 .post.full>header>div:first-of-type {
@@ -500,11 +541,12 @@ nav.quick-scroll > div {
 .post .comments {
   flex-flow: column;
   justify-content: center;
-  margin-top: 1em;
+  margin: 1em 0 0 0;  
   padding: 0 .5em;
   padding-top: .75em;
   padding-bottom: .25em;
   line-height: 1.3;
+  
 }
 
 .comment-list > .comment:first-of-type {
@@ -744,12 +786,13 @@ footer {
   flex-flow: row wrap;
   margin: 1.5em 0 0 0;
   padding: 1em .75em;
-  background: hsl(0, 0%, 96%);
+  background: hsl(0, 0%, 11%);
   font-size: .8em;
 }
 
 footer header {
   margin: 0 0 .75em 0;
+  color: hsl(0, 0%, 80%);
 }
 
 footer > section {
@@ -759,7 +802,7 @@ footer > section {
   align-items: center;
   flex-flow: column;
   width: fit-content;
-  max-width: 380px;
+  max-width: 420px;
   height: 100%;
   margin: .5em;
 }
@@ -775,12 +818,17 @@ footer a {
   color: hsl(39, 6%, 40%);
 }
 
+footer picture {
+  display: inline-block;
+  margin-right: .5em;
+}
+
 footer img {
   display: inline-block;
   width: 2em;
   height: 2em;
   filter: drop-shadow(0 1px 3px rgba(0,0,0,.12));
-  margin: 0 .25em;
+  margin: 0 0;
 }
 
 footer span {
@@ -867,6 +915,11 @@ footer span {
 
 main[route-active="books"] {
   max-width: 1200px;
+  color: hsl(0, 0%, 85%);
+}
+
+main[route-active="books"] hr {
+  border-color: hsl(0, 0%, 25%);
 }
 
 section.books > header {
@@ -887,6 +940,7 @@ article.book {
 
 article.book header {
   font-size: 1.1em;
+  text-shadow: 0 2px 3px rgb(0, 0, 0, .12);
 }
 
 article.book>div {
