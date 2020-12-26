@@ -28,18 +28,49 @@ app.authViewToggle = app.setupToggleSituation(
   {background: true}
 )
 
+const authMsg = df.div({class: 'auth-msg'})
+
+const showAuthMsg = (msg, time) => {
+  df.attrToggle(authBtn, 'hidden', true)
+  authMsg.textContent = msg
+  if (!authView.contains(authMsg)) {
+    authView.append(authMsg)
+  }
+  if (time) {
+    df.remove(authMsg, time).then(() => {
+      df.attrToggle(authBtn, 'hidden', undefined)
+      authView.append(authBtn)
+    })
+  }
+}
+
 app.authenticate = async (
   username = usernameInput.value.trim(),
   email = emailInput.value.trim()
 ) => {
-  if (username == '') throw new Error('username is invalid')
-  if (email == '' || !email.includes('@')) throw new Error('email is invalid')
-  console.log('attempting authentication...')
+  if (username == '') {
+    if (email == '' || !email.includes('@')) {
+      showAuthMsg('username & email are invalid', 4500)
+    } else {
+      showAuthMsg('username is invalid', 4500)
+    }
+    throw new Error('username is invalid')
+  }
+  if (email == '' || !email.includes('@')) {
+    showAuthMsg('email is invalid', 4500)
+    throw new Error('email is invalid')
+  }
+
+  showAuthMsg('attempting authentication...')
+  
+
   const res = await app.jsonPost('/auth', { username, email })
   const data = await res.json()
+
   console.log(data)
   if (data.ok) {
     app.toast.msg(`auth went through: ` + data.status)
+    showAuthMsg(`auth went through: ` + data.status)
 
     try {
       await app.try_auth_verify()
@@ -48,6 +79,7 @@ app.authenticate = async (
     return true
   } else {
     app.toast.error(`auth failed: ` + data.status)
+    showAuthMsg(`auth failed: ` + data.status, 5000)
     throw new Error('authentication failed: ' + data.status)
   }
 }
