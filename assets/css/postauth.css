@@ -288,15 +288,15 @@
     flex-direction: column;
     background: #fff;
     color: hsl(0, 0%, 25%);
-    max-width: 95vw;
-    width: 94vw;
+    max-width: 860px;
+    width: 90vw;
     min-width: 300px;
     min-height: 20vh;
     border-radius: 4px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, .12);
     margin: 1em;
     padding: .5em;
-    top: 5vh;
+    top: 12vh;
 }
 
 .profile-view button {
