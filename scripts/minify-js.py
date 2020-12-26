@@ -23,7 +23,7 @@ script_dir = str(pathlib.Path(__file__).parent)
 
 if len(sys.argv) > 1 and ".js" in sys.argv[1]:
     print("\ntrying to minify " + sys.argv[1] + " ...")
-    arg = "exec " + script_dir + "/node_modules/.bin/terser " + sys.argv[1] + " -c -m --source-map \"root='https://grimstack.io/js/',url='" + sys.argv[1][:-3] + ".min.js.map'\" -o " + sys.argv[1][:-3] + ".min.js"
+    arg = "exec " + script_dir + "/node_modules/.bin/terser " + sys.argv[1] + " -c -m --source-map \"root='https://kurshok.space/js/',url='" + sys.argv[1][:-3] + ".min.js.map'\" -o " + sys.argv[1][:-3] + ".min.js"
     os.system(arg)
     
     print("done minifying, did it work? ")
