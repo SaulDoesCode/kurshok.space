@@ -1,5 +1,5 @@
 const version = 'v0.0.1'
-const cacheName = version + '-grimstack.io'
+const cacheName = version + '-kurshok.space'
 
 const cachedPaths = [
   '/css/marx.min.css',
