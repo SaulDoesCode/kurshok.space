@@ -523,8 +523,10 @@ export default (d => {
       }
     } else if (typeof attr === 'string') {
       const old = node.getAttribute(attr)
-      if (val == null) return old
-      node.setAttribute(attr, val)
+      if (val != null) {
+        node.setAttribute(attr, val)
+      }
+      return old
     }
     return node
   }
@@ -574,7 +576,7 @@ export default (d => {
     if (d.isArr(node))
       for (const n of node) domfn.remove(n, after)
     else if (d.isNum(after)) {
-      return new Promise(accept => setTimeout(() => accept(domfn.remove(node)), after))
+      return new Promise(res => setTimeout(() => res(domfn.remove(node)), after))
     } else if (d.isMounted(node)) d.run(() => node.remove())
     else if (d.isNodeList(node))
       for (let i = 0; i < node.length; i++) domfn.remove(node[i])
