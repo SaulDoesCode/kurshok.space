@@ -1,6 +1,6 @@
 Hi, {{username}}!
 
-To login at grimstack.io,
+To login at {{domain}},
 just follow this magic link:
 
 https://{{domain}}/auth/{{magic_code}}
