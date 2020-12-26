@@ -30,3 +30,7 @@
     display: inline;
     color: hsl(0, 0%, 30%);
 }
+
+.auth-view button {
+    cursor: pointer;
+}
