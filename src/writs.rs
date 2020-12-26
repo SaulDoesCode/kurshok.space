@@ -1276,7 +1276,7 @@ pub async fn writ_query(
 ) -> HttpResponse {
   let o_usr = ORC.user_by_session(&req);
   if let Some(writs) =
-    ORC.public_writ_query(query.into_inner(), o_usr.as_ref().map(|el| el.value()))
+    ORC.public_writ_query(query.into_inner(), o_usr.as_ref())
   {
     return HttpResponse::Ok().json(writs);
   }
@@ -1290,7 +1290,7 @@ pub async fn editable_writ_query(
   query: web::Json<WritQuery>,
 ) -> HttpResponse {
   if let Some(usr) = ORC.user_by_session(&req) {
-    if let Some(writs) = ORC.editable_writ_query(query.into_inner(), usr.value()) {
+    if let Some(writs) = ORC.editable_writ_query(query.into_inner(), &usr) {
       return HttpResponse::Ok().json(writs);
     }
   } else {

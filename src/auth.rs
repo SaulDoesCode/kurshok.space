@@ -2,7 +2,6 @@ use actix_web::{
   cookie::Cookie, delete, get, post, web, HttpMessage, HttpRequest, HttpResponse,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
-use dashmap::{DashMap, ElementGuard};
 use lettre::{Message, message::{header, MultiPart, SinglePart}};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -11,13 +10,7 @@ use slug::slugify;
 use thiserror::Error;
 use time::Duration;
 
-use std::{
-  collections::BTreeMap,
-  sync::{
-    atomic::{AtomicU64, Ordering::SeqCst},
-    Arc,
-  }
-};
+use std::{collections::BTreeMap};
 
 use super::{CONF, TEMPLATES};
 
@@ -231,7 +224,7 @@ impl Orchestrator {
     return None;
   }
 
-  fn handle_magic_link(&self, code: String) -> Option<ElementGuard<String, User>> {
+  fn handle_magic_link(&self, code: String) -> Option<User> {
     if code.len() != 20 {
       return None;
     }
@@ -296,8 +289,7 @@ impl Orchestrator {
         }
       }
 
-      let el = self.authcache.cache_user(usr);
-      return Some(el);
+      return Some(usr);
     }
     if self.dev_mode {
       println!("handle_magic_link: db transaction failed");
@@ -369,9 +361,8 @@ impl Orchestrator {
       .insert(sess_id.as_bytes(), session.try_to_vec().unwrap())
     {
       Ok(_) => {
-        self.authcache.cache_session(sess_id.clone(), session);
         return Ok(sess_id);
-      }
+      },
       Err(e) => {
         if self.dev_mode {
           println!("sessions.insert error: {:?}", e);
@@ -381,10 +372,8 @@ impl Orchestrator {
     }
   }
 
-  pub fn get_session(&self, id: &String) -> Option<ElementGuard<String, UserSession>> {
-    if let Some(el) = self.authcache.sessions.get(id) {
-      return Some(el);
-    } else if let Ok(Some(raw)) = self.sessions.get(id.as_bytes()) {
+  pub fn get_session(&self, id: &String) -> Option<UserSession> {
+    if let Ok(Some(raw)) = self.sessions.get(id.as_bytes()) {
       let session = UserSession::try_from_slice(&raw).unwrap();
       if session.has_expired() {
         if let Err(e) = self.sessions.remove(id.as_bytes()) {
@@ -392,7 +381,7 @@ impl Orchestrator {
         }
         return None;
       }
-      return Some(self.authcache.cache_session(id.clone(), session));
+      return Some(session);
     }
     None
   }
@@ -401,7 +390,7 @@ impl Orchestrator {
     self.admins.contains_key(usr_id.as_bytes()).unwrap_or(false)
   }
 
-  pub fn user_by_session(&self, req: &HttpRequest) -> Option<ElementGuard<String, User>> {
+  pub fn user_by_session(&self, req: &HttpRequest) -> Option<User> {
     if let Some(auth_cookie) = req.cookie("auth") {
       let sess_id = auth_cookie.value().to_string();
       if let Some(session) = self.get_session(&sess_id) {
@@ -425,7 +414,7 @@ impl Orchestrator {
     req: &HttpRequest,
     how_far_to_expiry: Duration,
   ) -> (
-    Option<dashmap::ElementGuard<String, User>>,
+    Option<User>,
     Option<Cookie<'c>>,
   ) {
     if let Some(auth_cookie) = req.cookie("auth") {
@@ -434,7 +423,6 @@ impl Orchestrator {
         let mut cookie: Option<Cookie> = None;
         if session.close_to_expiry(how_far_to_expiry) {
           let usr_id = session.usr_id.clone();
-          self.authcache.remove_session(&sess_id);
           if self.sessions.remove(sess_id.as_bytes()).is_ok() {
             if let Ok(sess_id) = self.setup_session(usr_id) {
               cookie = Some(build_the_usual_cookie("auth", sess_id));
@@ -450,7 +438,7 @@ impl Orchestrator {
     (None, None)
   }
 
-  pub fn admin_by_session(&self, req: &HttpRequest) -> Option<ElementGuard<String, User>> {
+  pub fn admin_by_session(&self, req: &HttpRequest) -> Option<User> {
     if let Some(auth_cookie) = req.cookie("auth") {
       let sess_id = auth_cookie.value().to_string();
       if let Some(session) = self.get_session(&sess_id) {
@@ -480,32 +468,28 @@ impl Orchestrator {
     false
   }
 
-  pub fn user_by_id(&self, id: &str) -> Option<ElementGuard<String, User>> {
-    if let Some(el) = self.authcache.users.get(&id.to_string()) {
-      return Some(el);
-    } else if let Ok(Some(raw)) = self.users.get(id.as_bytes()) {
-      let el = self.authcache
-        .cache_user(User::try_from_slice(&raw).unwrap());
-      return Some(el);
+  pub fn user_by_id(&self, id: &str) -> Option<User> {
+    if let Ok(Some(raw)) = self.users.get(id.as_bytes()) {
+      return Some(User::try_from_slice(&raw).unwrap());
     }
     None
   }
 
-  pub fn admin_by_id(&self, id: &str) -> Option<ElementGuard<String, User>> {
+  pub fn admin_by_id(&self, id: &str) -> Option<User> {
     if self.is_admin(id) {
       return self.user_by_id(id);
     }
     None
   }
 
-  pub fn user_by_username(&self, username: &str) -> Option<ElementGuard<String, User>> {
+  pub fn user_by_username(&self, username: &str) -> Option<User> {
     if let Ok(Some(user_id)) = self.usernames.get(username.as_bytes()) {
       return self.user_by_id(user_id.to_str());
     }
     None
   }
 
-  pub fn user_by_handle(&self, handle: &str) -> Option<ElementGuard<String, User>> {
+  pub fn user_by_handle(&self, handle: &str) -> Option<User> {
     if let Ok(Some(user_id)) = self.handles.get(handle.as_bytes()) {
       return self.user_by_id(user_id.to_str());
     }
@@ -749,80 +733,6 @@ impl Orchestrator {
   }
 }
 
-pub struct AuthCache {
-  user_count: Arc<AtomicU64>,
-  max_user_count: u64,
-  session_count: Arc<AtomicU64>,
-  max_session_count: u64,
-  pub users: DashMap<String, crate::auth::User>,
-  pub sessions: DashMap<String, crate::auth::UserSession>,
-}
-
-impl AuthCache {
-  pub fn new(max_user_count: u64, max_session_count: u64) -> Self {
-    AuthCache {
-      user_count: Arc::new(AtomicU64::new(0)),
-      max_user_count,
-      session_count: Arc::new(AtomicU64::new(0)),
-      max_session_count,
-      users: DashMap::new(),
-      sessions: DashMap::new(),
-    }
-  }
-
-  pub fn cache_user(&self, user: User) -> ElementGuard<String, User> {
-    let el = self.users.insert_and_get(user.id.clone(), user);
-    let count = self.user_count.fetch_add(1, SeqCst) + 1;
-    if count > self.max_user_count {
-      self.pop_user();
-    }
-    el
-  }
-
-  pub fn remove_user(&self, id: &String) -> bool {
-    if self.users.remove(id) {
-      self.user_count.fetch_sub(1, SeqCst);
-      return true;
-    }
-    false
-  }
-
-  pub fn pop_user(&self) -> bool {
-    if let Some(el) = self.users.iter().last() {
-      return self.remove_user(el.key());
-    }
-    false
-  }
-
-  pub fn cache_session(
-    &self,
-    id: String,
-    session: UserSession,
-  ) -> ElementGuard<String, UserSession> {
-    let el = self.sessions.insert_and_get(id, session);
-    let count = self.session_count.fetch_add(1, SeqCst) + 1;
-    if count > self.max_session_count {
-      self.pop_session();
-    }
-    el
-  }
-
-  pub fn remove_session(&self, id: &String) -> bool {
-    if self.sessions.remove(id) {
-      self.session_count.fetch_sub(1, SeqCst);
-      return true;
-    }
-    false
-  }
-
-  pub fn pop_session(&self) -> bool {
-    if let Some(el) = self.sessions.iter().last() {
-      return self.remove_session(el.key());
-    }
-    false
-  }
-}
-
 #[derive(Error, Debug)]
 pub enum AuthError {
   #[error("id does not match any currently existing user")]
@@ -928,7 +838,7 @@ pub async fn logout(req: HttpRequest) -> HttpResponse {
   let mut status = "successfully logged out";
   if let Some(auth_cookie) = req.cookie("auth") {
     let sess_id = auth_cookie.value().to_string();
-    if ORC.sessions.remove(sess_id.as_bytes()).is_err() || !ORC.authcache.remove_session(&sess_id) {
+    if ORC.sessions.remove(sess_id.as_bytes()).is_err() {
       status = "login was already bad or expired, no worries";
     }
   }

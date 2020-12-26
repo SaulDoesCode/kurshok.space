@@ -35,8 +35,6 @@ pub struct Orchestrator {
   pub dev_mode: bool,
   pub hasher: Hasher,
 
-  pub authcache: crate::auth::AuthCache,
-
   // writs
   pub writ_db: Db,
   pub writs: Tree,
@@ -143,7 +141,6 @@ impl Orchestrator {
     let comment_votes = writ_db.open_tree("comment_votes").unwrap();
     let dates = writ_db.open_tree("dates").unwrap();
 
-    let authcache = crate::auth::AuthCache::new(5000, 5000);
     Orchestrator {
       db,
       id_counter,
@@ -168,8 +165,6 @@ impl Orchestrator {
       expiry_tll,
       dev_mode,
       hasher,
-
-      authcache,
 
       writ_db,
       writs,

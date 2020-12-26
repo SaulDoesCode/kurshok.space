@@ -1070,7 +1070,7 @@ pub async fn post_comment_query(
   };
 
   match comment_query(
-    o_usr.as_ref().map(|el| el.value()),
+    o_usr.as_ref(),
     query.into_inner()
   ).await{
     Some(comments) => crate::responses::Ok(
@@ -1104,9 +1104,8 @@ pub async fn make_comment(
   req: HttpRequest,
   rc: web::Json<RawComment>,
 ) -> HttpResponse {
-  let o_usr = ORC.user_by_session(&req);
-  let usr = match &o_usr {
-    Some(el) => el.value(),
+  let usr = match ORC.user_by_session(&req) {
+    Some(usr) => usr,
     None => return crate::responses::BadRequest("only authorized users may post comments"),
   };
 
@@ -1138,19 +1137,18 @@ pub async fn make_comment(
   }
 
   if rc.parent_id.matches(':').count() == 1 || rc.parent_id.contains('/') {
-    return make_comment_on_comment(usr, rc).await;
+    return make_comment_on_comment(&usr, rc).await;
   }
-  make_comment_on_writ(usr, rc).await
+  make_comment_on_writ(&usr, rc).await
 }
 
 #[post("/edit-comment")]
 pub async fn edit_comment_request(
   req: HttpRequest,
   rce: web::Json<RawCommentEdit>,
-) -> HttpResponse {
-  let o_usr = ORC.user_by_session(&req);
-  let usr = match &o_usr {
-    Some(el) => el.value(),
+) -> HttpResponse {  
+  let usr = match ORC.user_by_session(&req) {
+    Some(usr) => usr,
     None => return crate::responses::Forbidden("Unauthorized comment edit attempt"),
   };
 

@@ -29,7 +29,7 @@ pub async fn render_post(
     query.public = Some(true);
     query.amount = Some(1);
 
-    let public_writ = match ORC.public_writ_query(query, o_usr.as_ref().map(|el| el.value())) {
+    let public_writ = match ORC.public_writ_query(query, o_usr.as_ref()) {
         Some(mut writs) => writs.pop().unwrap(),
         None => {
             return render_404(
@@ -83,7 +83,7 @@ pub async fn render_post_by_slug(
     query.public = Some(true);
     query.amount = Some(1);
 
-    let public_writ = match ORC.public_writ_query(query, o_usr.as_ref().map(|el| el.value())) {
+    let public_writ = match ORC.public_writ_query(query, o_usr.as_ref()) {
         Some(mut writs) => writs.pop().unwrap(),
         None => {
             return HttpResponse::NotFound()
