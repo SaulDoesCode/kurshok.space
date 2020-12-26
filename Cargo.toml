@@ -8,13 +8,13 @@ version = "0.1.1"
 # actix-files = { git = "https://github.com/SaulDoesCode/actix-web" }
 # actix-web = { git = "https://github.com/SaulDoesCode/actix-web", features = ["rustls"] }
 actix-web = { version = "^3", features = ["rustls"]}
-actix-files = "*"
+actix-files = "^0"
 bincode = "^1.3"
 borsh = "^0"
 clap = "^2.33.3"
 comrak = "^0"
 crossbeam-channel = "^0"
-dashmap = {version = "4.0.0-rc6"}
+dashmap = {version = "4.0.0", features = ["rayon"]}
 derive_more = "*"
 itertools = "*"
 lazy_static = "^1"
