@@ -201,9 +201,9 @@ impl Orchestrator {
     };
 
     if let Ok(msg) = Message::builder()
-      .from("Grimstack Auth <admin@grimstack.io>".parse().unwrap())
+      .from("Kurshok Space Auth <admin@kurshok.space>".parse().unwrap())
       .to(format!("{} <{}>", username, email).parse().unwrap())
-      .subject("Grimstack Auth email")
+      .subject("Kurshok Space Auth email")
       .multipart(
         MultiPart::alternative()
           .singlepart(

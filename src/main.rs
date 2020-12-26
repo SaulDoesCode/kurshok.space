@@ -20,8 +20,8 @@ mod responses;
 mod utils;
 mod writs;
 
-use actix_files::NamedFile;
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_files::NamedFile;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io::BufReader};
@@ -35,9 +35,9 @@ use orchestrator::ORC;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let matches = clap::App::new("Grimstack")
+    let matches = clap::App::new("kurshok.space")
         .version("0.0.1")
-        .author("Saul <me@saul.app>")
+        .author("Saul <saul@kurshok.space>")
         .about("multipurpose web app database thingy")
         .arg(
             clap::Arg::with_name("production")
