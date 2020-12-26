@@ -1,9 +1,11 @@
 :root {
-    --primary-color: hsl(33, 44%, 65%);
-    --highlight-color: #d8b98a;
-    --border-color: #d3c29e;
-    --button-color: hsl(36, 33%, 63%);
+    --hero-color: hsl(0, 5%, 19%);
     --shadow-outline-color: rgba(148, 117, 98, 0.466);
+
+    --primary-color: hsl(0, 68%, 50%);
+    --highlight-color: hsl(356, 100%, 61%);
+    --border-color: hsl(354, 77%, 57%);
+    --button-color:hsl(0, 84%, 56%);
 }
 
 *,::before,::after {
@@ -18,7 +20,7 @@
 
 html {
     cursor: default;
-    font-family: Noto Sans, sans-serif;
+    font-family: Nunito, Noto Sans, sans-serif;
     line-height: 1.15;
     -moz-tab-size: 4;
     -o-tab-size: 4;
@@ -600,7 +602,7 @@ input[type=submit]:not(:disabled):active, input[type=reset]:not(:disabled):activ
     background-color: var(--highlight-color);
     border-color: var(--border-color);
     color: #fff;
-    filter: saturate(95%) brightness(0.98) contrast(102%);
+    filter: brightness(0.96) contrast(102%);
 }
 
 input[type=submit]:focus, input[type=reset]:focus, input[type=button]:focus, button:focus {
