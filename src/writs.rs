@@ -924,8 +924,7 @@ impl RawWrit {
       return Err(WritError::NoPermNoMD);
     }
 
-    let tags: Vec<String> = self.tags
-      .iter()
+    let tags: Vec<String> = self.tags.iter()
       .map(|t| t.trim().replace("  ", "-").replace(" ", "-"))
       .collect();
 
@@ -969,30 +968,30 @@ impl RawWrit {
       is_md,
     };
 
+    if is_new_writ && ORC.titles.contains_key(writ.title_key().as_bytes()).unwrap() {
+      return Err(WritError::TitleTaken);
+    }
+
     let author_attrs = ORC.user_attributes(&author_id);
     if !writ.viewable_by.iter().all(|t| author_attrs.contains(t)) {
       return Err(WritError::UsedUnavailableAttributes);
     }
 
-    if is_new_writ && ORC.titles.contains_key(writ.title_key().as_bytes()).unwrap() {
-      return Err(WritError::TitleTaken);
-    }
-
     let raw_content = self.raw_content.trim();
 
-    /* if !ORC.dev_mode && is_new_writ {
+    if !ORC.dev_mode && is_new_writ {
       // hash contents and ratelimit with it to prevent spam
       let rc_hash = ORC.hash(raw_content.as_bytes());
       let mut hitter = Vec::from("wr".as_bytes());
       hitter.extend_from_slice(&rc_hash);
-      if let Some(rl) = ORC.ratelimiter.hit(&hitter, 1, Duration::minutes(360)) {
+      if let Some(rl) = ORC.ratelimiter.hit(&hitter, 1, time::Duration::minutes(360)) {
         if rl.is_timing_out() {
           return Err(WritError::DuplicateWrit);
         }
       } else {
         return Err(WritError::DBIssue);
       }
-    } */
+    }
 
     let res: TransactionResult<(), ()> = (
       &ORC.content,
@@ -1180,7 +1179,7 @@ impl CommentSettings {
       public,
       visible_to: None,
       min_comment_length: Some(5),
-      max_comment_length: Some(5000),
+      max_comment_length: Some(8000),
       disqualified_strs: None,
       hide_when_vote_below: Some(10),
       max_level: Some(32),
@@ -1306,9 +1305,9 @@ pub async fn push_raw_writ(
   req: HttpRequest,
   rw: web::Json<RawWrit>,
 ) -> HttpResponse {
-  if rw.raw_content.len() > 150_000 {
+  if rw.raw_content.len() > 200_000 {
     return crate::responses::BadRequest(
-      "Your writ is too long, it has to be less than 150k characters",
+      "Your writ is too long, it has to be less than 200k characters",
     );
   }
 
