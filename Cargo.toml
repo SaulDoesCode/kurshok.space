@@ -30,7 +30,7 @@ serde_json = "^1"
 sled = {version = "^0.34", features = ["compression", "rio"]}
 slug = "^0.1.4"
 sthash = {git = "https://github.com/SaulDoesCode/rust-sthash"}
-tera = "^1.6"
+tera = { version = "^1.6", features = ["builtins"] }
 thiserror = "^1"
 time = {version = "^0.2", features = ["serde", "rand"]}
 tokio = {version = "^0.2", features = ["full"]}
