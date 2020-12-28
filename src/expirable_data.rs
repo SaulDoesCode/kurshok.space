@@ -1,5 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use dashmap::DashMap;
+use rayon::prelude::*;
 use sled::{transaction::*, IVec, Transactional};
 
 use std::{
@@ -107,7 +108,7 @@ pub fn start_system() -> thread::JoinHandle<()> {
     thread::spawn(|| {
         loop {
             let now = unix_timestamp();
-            if EXPIRY_TIMES.iter().any(|e| now >= *e.key()) {
+            if EXPIRY_TIMES.par_iter().any(|e| now >= *e.key()) {
                 clean_up()
             }
             thread::sleep(std::time::Duration::from_secs(1));
