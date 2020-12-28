@@ -2,6 +2,8 @@ import domlib from '/js/domlib.min.js'
 
 const app = domlib.emitter()
 const d = app.d = domlib, df = domlib.domfn
+const {div, article, a, p, button, hr, h1, h4, section, span, header} = df
+
 const reqWithBody = (contentType = 'application/json', bodyMorpher = JSON.stringify) => method => (url, body, ops = {}) => fetch(url, {
     method,
     headers: {
@@ -216,6 +218,172 @@ app.toast = new Proxy((kind, msg, displayTime = 15000) => {
 }, {
     get: (toast, kind) => toast.bind(null, kind)
 })
+
+d.run(async () => {
+    try {
+        await app.loadScriptsThenRunSequentially(true,
+            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/dayjs.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/utc.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/relativeTime.min.js'
+        )
+        window.dayjs.extend(window.dayjs_plugin_utc)
+        window.dayjs.extend(window.dayjs_plugin_relativeTime)
+        dayjs().utcOffset(2)
+        app.emit('dayjsLoaded', app.dayjsLoaded = true)
+    } catch (e) {}
+})
+
+app.dateFormat = 'HH:mm a DD MMM YYYY'
+
+app.dayjsUXTSformat = ts => {
+    const date = dayjs.unix(ts).utcOffset(2)
+    return date.format(app.dateFormat) + ' | ' + date.fromNow()
+}
+
+app.renderUXTimestamp = (ts, formater = app.dayjsUXTSformat, txt) => {
+    if (txt == null) txt = d.txt()
+    try {
+        txt.textContent = formater(ts)
+        if (txt.textContent.includes('minute') || txt.textContent.includes('hour')) {
+            txt.updateInterval = setInterval(function update() {
+                txt.textContent = formater(ts)
+                if (!document.contains(txt)) clearInterval(txt.updateInterval)
+                else if (txt.textContent.includes('hour')) {
+                    clearInterval(txt.updateInterval)
+                    txt.updateInterval = setInterval(update, 60 * 60000)
+                }
+            }, 60000)
+        }
+    } catch (e) {
+        txt.textContent = new Date(ts * 1000).toLocaleString()
+        app.once.dayjsLoaded(() => app.renderUXTimestamp(ts, formater, txt))
+    }
+    return txt
+}
+
+app.vote = async (voteType, id, up) => {
+    try {
+        const res = await fetch(`/${voteType}/${id}/${up == null ? 'unvote' : up ? 'upvote' : 'downvote'}`)
+        return await res.json()
+    } catch (e) {
+        console.error('app.voteWrit error: ', e)
+    }
+    return false
+}
+
+app.formatVoteCount = (el, count, digits = 2) => {
+    el.innerHTML = ''
+    let formated = app.abreviateNum(count, digits)
+    if (typeof formated === 'string' && formated.includes('.')) {
+        const marker = formated[formated.length - 1]
+        formated = formated.substring(0, formated.length - 1)
+        const [bignum, endbits] = formated.split('.')
+        formated = [
+            span(bignum),
+            '.',
+            span({class: 'endbits'}, endbits),
+            span({class: 'marker'}, marker)
+        ]
+    }
+    d.render(formated, el)
+}
+
+app.votesUI = (voteType, {
+    id,
+    vote = 0,
+    you_voted
+}) => parentEl => {
+    const votesEl = div({
+        class: 'votes',
+        async onclick(e, el) {
+            if (app.user == null) {
+                e.preventDefault()
+                if (app.oneTimeAuthLauncher) {
+                    app.oneTimeAuthLauncher.off()
+                }
+                try {
+                    if (app.authViewToggle) {
+                        app.authViewToggle.toggleView()
+                    } else {
+                        await import('/js/auth.min.js')
+                    }
+                } catch (e) {
+                    if (app.oneTimeAuthLauncher) {
+                        app.oneTimeAuthLauncher.on()
+                    }
+                }
+                return
+            }
+            const isUp = e.target.classList.contains('up')
+            const isDown = e.target.classList.contains('down')
+            if (!isDown && !isUp) return
+            e.target.classList.add('await-vote')
+            clearInterval(el.awaitAnimTimeout)
+            el.awaitAnimTimeout = setTimeout(() => {
+                e.target.classList.remove('await-vote')
+            }, 2500)
+            const isSelected = e.target.classList.contains('selected')
+            // unvote
+            if (you_voted != null && isSelected) {
+                const res = await app.vote(voteType, id)
+                clearInterval(el.awaitAnimTimeout)
+                e.target.classList.remove('await-vote')
+                if (res != false) {
+                    el.downvote.classList.remove('selected')
+                    el.upvote.classList.remove('selected')
+                    app.formatVoteCount(el.voteCount, vote = res.data)
+                    you_voted = null
+                }
+            } else if (isUp) {
+                const res = await app.vote(voteType, id, true)
+                clearInterval(el.awaitAnimTimeout)
+                e.target.classList.remove('await-vote')
+                if (res != false) {
+                    el.downvote.classList.remove('selected')
+                    el.upvote.classList.add('selected')
+                    app.formatVoteCount(el.voteCount, vote = res.data)
+                    you_voted = true
+                }
+            } else if (isDown) {
+                const res = await app.vote(voteType, id, false)
+                clearInterval(el.awaitAnimTimeout)
+                e.target.classList.remove('await-vote')
+                if (res != false) {
+                    el.upvote.classList.remove('selected')
+                    el.downvote.classList.add('selected')
+                    app.formatVoteCount(el.voteCount, vote = res.data)
+                    you_voted = false
+                }
+            }
+        }
+    })
+
+    votesEl.append(
+        votesEl.upvote = span({
+            class: {
+                up: true,
+                    vote: true,
+                    selected: you_voted === true,
+                    'icon-up-open': true,
+            }
+        }),
+
+        votesEl.voteCount = span({
+            class: 'vote-count'
+        }, vote),
+
+        votesEl.downvote = span({
+            class: {
+                down: true,
+                    vote: true,
+                    selected: you_voted === false,
+                    'icon-down-open': true,
+            }
+        })
+    )
+
+    return votesEl
+}
 
 window.app = app
 export default app

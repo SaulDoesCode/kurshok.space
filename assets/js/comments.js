@@ -65,7 +65,7 @@ app.makeComment = async (
 }
 
 const commentsDisplay = app.commentsDisplay = section({
-    $: app.postDisplay,
+    $: location.pathname.includes('/post/') ? '.post' : app.postDisplay,
     class: 'comments'
 }, cd => [
     header(
@@ -122,6 +122,7 @@ app.cancelCommentWriting = () => {
         commentsDisplay.authorOnlyToggle.input.checked = false
     }
     commentsDisplay.postBtn.textContent = 'Post'
+    commentsDisplay.heading.textContent = 'Comments'
     app.editingComment = null
     app.replyingToComment = null
     if (app.editingCommentElement) {
@@ -151,8 +152,8 @@ const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
             res = await app.confirmCommentEdit(app.editingComment)
         } else {
             res = await app.makeComment(
-                app.replyingToComment || app.activePostDisplay.id,
-                app.activePostDisplay.id
+                app.replyingToComment || ((app.postDisplay && app.activePostDisplay.id) || app.postID),
+                (app.postDisplay && app.activePostDisplay.id) || app.postID
             )
             if (!res.ok) throw res.status || 'very bad, comment post failed miserably'
         }
@@ -197,6 +198,7 @@ const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
         commentsDisplay.textarea.value = ''
         if (commentsDisplay.authorOnlyToggle.input.checked) commentsDisplay.authorOnlyToggle.input.checked = false
         commentsDisplay.postBtn.textContent = 'Post'
+        commentsDisplay.heading.textContent = 'Comments'
         app.replyingToComment = null
         app.editingCommentParent = null
         commentPostHandler.on()
@@ -229,6 +231,7 @@ app.editComment = async (cid, author_only) => {
     }
     commentsDisplay.textarea.value = res.data
     commentsDisplay.postBtn.textContent = 'Confirm Edit'
+    commentsDisplay.heading.textContent = 'Comments: Editing'
     commentsDisplay.textarea.focus()
     commentsDisplay.authorOnlyToggle.input.checked = author_only
     commentsDisplay.classList.add('edit-mode')
@@ -275,50 +278,67 @@ app.confirmCommentEdit = async editingComment => {
     return res
 }
 
-app.on.postRendered(async post => {
-    app.activePostDisplay = post
+if (location.pathname.includes('/post/')) {
+    app.renderComments = async (post_id) => {
+        const fcRes = await app.fetchComments(post_id)
+        if (!fcRes.ok) return
+        const commentTrees = fcRes.data
+        const commentList = []
 
-    app.postDisplay.classList.toggle('with-comments', post.commentable)
+        for (const {comment, children} of commentTrees) {
+            commentList.push(app.formulateThread(comment, children, commentsDisplay.list))
+        }
 
-    if (post.commentable) {
-        commentsDisplay.list.innerHTML = ''
-        d.render(commentsDisplay, app.postDisplay)
-    } else {
-        df.remove(commentsDisplay)
-        return
-    }
-
-    const fcRes = await app.fetchComments(post.id)
-    if (!fcRes.ok) return
-    const commentTrees = fcRes.data
-    const commentList = []
-
-    for (const {comment, children} of commentTrees) {
-        commentList.push(app.formulateThread(comment, children, commentsDisplay.list))
-    }
-
-    if (app.user == null || app.user.username == null) {
-        app.d.run(() => {
-            df.remove(commentsDisplay.commentWriter)
-            if (commentList.length == 0) {
-                df.remove(commentsDisplay)
-                const wc = document.querySelector('.with-comments')
-                if (wc) {
-                    wc.classList.remove('with-comments')
+        if (app.user == null || app.user.username == null) {
+            app.d.run(() => {
+                df.remove(commentsDisplay.commentWriter)
+                if (commentList.length == 0) {
+                    df.remove(commentsDisplay)
+                    const wc = document.querySelector('.with-comments')
+                    if (wc) {
+                        wc.classList.remove('with-comments')
+                    }
                 }
-            }
-        })
+            })
+        }
     }
-})
-
-const randomColor = () => {
-    let color = '#';
-    for (let i = 0; i < 6; i++) {
-        color += randomColor.letters[Math.floor(Math.random() * 16)];
-    }
-    return color
+} else {
+    app.on.postRendered(async post => {
+        app.activePostDisplay = post
+    
+        app.postDisplay.classList.toggle('with-comments', post.commentable)
+    
+        if (post.commentable) {
+            commentsDisplay.list.innerHTML = ''
+            d.render(commentsDisplay, app.postDisplay)
+        } else {
+            df.remove(commentsDisplay)
+            return
+        }
+    
+        const fcRes = await app.fetchComments(post.id)
+        if (!fcRes.ok) return
+        const commentTrees = fcRes.data
+        const commentList = []
+    
+        for (const {comment, children} of commentTrees) {
+            commentList.push(app.formulateThread(comment, children, commentsDisplay.list))
+        }
+    
+        if (app.user == null || app.user.username == null) {
+            app.d.run(() => {
+                df.remove(commentsDisplay.commentWriter)
+                if (commentList.length == 0) {
+                    df.remove(commentsDisplay)
+                    const wc = document.querySelector('.with-comments')
+                    if (wc) {
+                        wc.classList.remove('with-comments')
+                    }
+                }
+            })
+        }
+    })
 }
-randomColor.letters = '0123456789ABCDEF'
 
 
 const randHSLColor = () => `hsla(${Math.random()*360|0}, ${Math.random()*100|30}%, 50%, .8)`
@@ -341,22 +361,28 @@ app.formulateThread = (comment, children, $) => div({
             span({class: 'posted'}, 
                 app.renderUXTimestamp(comment.posted, app.commentDateFormat)
             ),
+            comment.edited != null && [span({class: 'line-divider'}, '|'), span({class: 'edited'},
+                'edited',
+                app.renderUXTimestamp(comment.edited, app.commentDateFormat)
+            )],
             span({class: 'divider'}),
-            (app.user != null && comment.author_name == app.user.username) && button({
-                class: 'edit-btn',
-                onclick() {
-                    app.editComment(comment.id, comment.author_only)
-                }
-            }, 'edit'),
-            span({
-                class: 'delete',
-                attr: {
-                    title: 'click to delete your comment'
-                },
-                onclick(e) {
-                    app.deleteComment(comment.id)
-                }
-            }, app.dismissIcon())
+            (app.user != null && comment.author_name == app.user.username) && [
+                button({
+                    class: 'edit-btn',
+                    onclick() {
+                        app.editComment(comment.id, comment.author_only)
+                    }
+                }, 'edit'),
+                span({
+                    class: 'delete',
+                    attr: {
+                        title: 'click to delete your comment'
+                    },
+                    onclick(e) {
+                        app.deleteComment(comment.id)
+                    }
+                }, app.dismissIcon())
+            ]
         ),
         div({class: 'content'}, d.html(comment.content)),
         div({class: 'btn-rack'},
@@ -366,6 +392,7 @@ app.formulateThread = (comment, children, $) => div({
                     app.replyingToComment = ('' + comment.id).replace('-', '/')
                     commentsDisplay.authorOnlyToggle.input.checked = comment.author_only
                     commentsDisplay.postBtn.textContent = 'Reply'
+                    commentsDisplay.heading.textContent = 'Comments: Write a reply'
                     commentsDisplay.textarea.focus()
                 }
             }, 'reply', btn => {
