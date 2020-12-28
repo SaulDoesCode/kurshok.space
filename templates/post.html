@@ -7,27 +7,41 @@
     <title>Kurshok</title>
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
     <link rel="modulepreload" href="/js/domlib.min.js">
-    {% if not dev_mode or dev_mode is undefined  %}
-    <link href="https://fonts.googleapis.com/css2?family=Cantarell:wght@400;700&display=swap" rel="stylesheet">
-    {% endif %}
+{% if not dev_mode or dev_mode is undefined  %}
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500&display=swap" rel="stylesheet">
+{% endif %}
     <link rel="stylesheet" href="/css/marx.min.css">
+    <link rel="stylesheet" href="/css/fontello/css/fontello.min.css">
     <link rel="stylesheet" href="/css/site.min.css">
-    {% if username is undefined %}
+{% if username is undefined %}
     <link rel="stylesheet" href="/css/auth.min.css">
-    {% endif %}
+{% else %}
+    <link rel="stylesheet" href="/css/postauth.min.css">
+{% endif %}
     <script src="/js/site.min.js" type="module" defer></script>
 </head>
 
 <body>
     <nav class="hero">
-        <header>Kurshok Space</header>
-        {% if username is defined %}
-        <button class="profile-launcher" title="click to see or build your profile">{{ username }}</button>
+        <header>
+            <h1>Kurshok</h1>
+            <div>For the brainsick ones</div>
+        </header>
+
+    {% if username is defined %}
+        <button class="profile-launcher" title="click to see or build your profile">
+            {{ username }}
+        </button>
         <script type="module" defer>
-            import d from '/js/domlib.min.js'
-            d.once.click('.profile-launcher', () => import('/js/profile.min.js'))
+            import app from '/js/site.min.js'
+            app.user = { username: "{{ username }}".trim() }
+            import('/js/profile.min.js')
+            // d.once.click('.profile-launcher', () => {})
+            {% if is_writer %}
+            app.d.once.click('.ww-launcher', () => import('/js/writ-writer.min.js'))
+            {% endif %}
         </script>
-        {% else %}
+    {% else %}
         <button class="auth-launcher" title="click for a login or signup modal">Auth</button>
         <script type="module" defer>
             import d from '/js/domlib.min.js'
@@ -36,19 +50,47 @@
                 import('/js/auth.min.js')
             })
         </script>
-        {% endif %}
+    {% endif %}
     </nav>
 
-    <main class="content-display">
-        <section class="post-header">
-            <h3>{{ public_writ.title }}</h3>
+    <main class="content-display" route-active="{{ public_writ.id }}">
+        <nav class="post-nav">
+            <button class="post-back-btn" onclick="location = '/#posts'">
+                <span class="icon-left-open"></span>
+                Back to Post List
+            </button>
+        </nav>
+        <section class="post full">
+            <header class="post-header">
+                <div>
+                    <h3 class="post-title">{{ public_writ.title }}</h3>
+                    <div class="author-name">By {{ public_writ.author_name }}</div>
+                    <div> ● </div>
+                    <div class="posted">
+                        {{ public_writ.posted | date(format="%H:%M %P %d %b %Y") }}
+                    </div>
+                    <div class="tags">
+                    {% for tag in public_writ.tags %}
+                        <span title="{{tag}}" class="tag">{{tag}}</span>
+                    {% endfor %}
+                    </div>
+                </div>
+            </header>
+            <article class="content">
+                {{ public_writ.content }}
+            </article>
         </section>
-
-        <article>
-            {{ public_writ.content }}
-        </article>
-
     </main>
+
+{% if public_writ.commentable %}
+<script defer type="module">
+    import "/js/comments.min.js"
+    app.postID = "{{ public_writ.id }}"
+    app.renderComments(app.postID)
+</script>
+{% endif %}
+
+{% include "footer.html" %}
 </body>
 
 </html>
