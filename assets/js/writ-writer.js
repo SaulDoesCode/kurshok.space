@@ -166,6 +166,7 @@ app.pushWrit = async (title, raw_content, tags, ops = {}) => {
             app.emit.newPost(raw_writ.id)
             app.ww.writs[raw_writ.id] = raw_writ
             writListEntry(raw_writ.title, raw_writ.id)
+            app.clearEditor()
         }
         return Promise.resolve(data.data)
     }

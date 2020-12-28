@@ -565,8 +565,8 @@ export default (d => {
   domfn.clear = node => (node[d.isInput(node) ? 'value' : 'textContent'] = '', node)
 
   domfn.refurbish = node => {
-    for (const {name} of node.attributes) node.removeAttribute(name)
     node.removeAttribute('class')
+    for (const {name} of node.attributes) node.removeAttribute(name)
     return domfn.clear(node)
   }
 
