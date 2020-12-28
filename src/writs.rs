@@ -24,15 +24,17 @@ impl Orchestrator {
   pub fn index_writ_tags(&self, writ_id: String, tags: Vec<String>) -> bool {
     let res: TransactionResult<(), ()> =
       (&self.tags_index, &self.tag_counter).transaction(|(tags_index, tag_counter)| {
+        let mut id = String::new();
         for tag in tags.iter() {
-          let id = format!("{}:{}", &tag, writ_id);
-          tags_index.insert(id.as_bytes(), tags.try_to_vec().unwrap())?;
+          id = format!("{}:{}", &tag, id);
           let count: u64 = match tag_counter.get(tag.as_bytes())? {
             Some(raw_count) => raw_count.to_u64(),
             None => 0,
           };
           tag_counter.insert(tag.as_bytes(), &(count + 1).to_be_bytes())?;
         }
+        id = format!("{}:{}", id, &writ_id);
+        tags_index.insert(id.as_bytes(), writ_id.as_bytes())?;
         Ok(())
       });
     res.is_ok()
@@ -41,9 +43,9 @@ impl Orchestrator {
   pub fn remove_indexed_writ_tags(&self, writ_id: String, tags: Vec<String>) -> bool {
     (&self.tags_index, &self.tag_counter)
       .transaction(|(tags_index, tag_counter)| {
+        let mut id = String::new();
         for tag in tags.iter() {
-          let id = format!("{}:{}", tag, writ_id);
-          tags_index.remove(id.as_bytes())?;
+          id = format!("{}:{}", &tag, id);
           let count: u64 = match tag_counter.get(tag.as_bytes())? {
             Some(raw_count) => raw_count.to_u64(),
             None => return Err(sled::transaction::ConflictableTransactionError::Abort(())),
@@ -54,6 +56,8 @@ impl Orchestrator {
             tag_counter.insert(tag.as_bytes(), IVec::from_u64(count - 1))?;
           }
         }
+        id = format!("{}:{}", id, &writ_id);
+        tags_index.remove(id.as_bytes())?;
         Ok(())
       })
       .is_ok()
