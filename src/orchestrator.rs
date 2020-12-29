@@ -36,7 +36,6 @@ pub struct Orchestrator {
   pub hasher: Hasher,
 
   // writs
-  pub writ_db: Db,
   pub writs: Tree,
   pub raw_content: Tree,
   pub content: Tree,
@@ -68,7 +67,7 @@ impl Orchestrator {
       .use_compression(true)
       .compression_factor(20)
       .mode(sled::Mode::LowSpace)
-      .flush_every_ms(Some(2500))
+      .flush_every_ms(Some(1500))
       .open()
       .expect("failed to open main.db");
 
@@ -106,40 +105,30 @@ impl Orchestrator {
       Hasher::new(Key::from_seed(&seed, None), None)
     };
 
-    let ratelimiter = RateLimiter::setup_default();
+    let ratelimiter = RateLimiter::setup_default(&db);
 
     let dev_mode = CONF.read().dev_mode;
 
-    let writ_db_name = format!("{}writs.db", CONF.read().db_location);
-    let writ_db = sled::Config::new()
-      .path(&writ_db_name)
-      .use_compression(true)
-      .compression_factor(20)
-      .mode(sled::Mode::LowSpace)
-      .flush_every_ms(Some(1500))
-      .open()
-      .expect("failed to open writs.db");
+    let writs = db.open_tree("writs").unwrap();
+    let raw_content = db.open_tree("raw_content").unwrap();
+    let content = db.open_tree("content").unwrap();
+    let tags_index = db.open_tree("tags_index").unwrap();
+    let tag_counter = db.open_tree("tag_counter").unwrap();
 
-    let writs = writ_db.open_tree("writs").unwrap();
-    let raw_content = writ_db.open_tree("raw_content").unwrap();
-    let content = writ_db.open_tree("content").unwrap();
-    let tags_index = writ_db.open_tree("tags_index").unwrap();
-    let tag_counter = writ_db.open_tree("tag_counter").unwrap();
+    let slugs = db.open_tree("slugs").unwrap();
+    let kinds = db.open_tree("kinds").unwrap();
 
-    let slugs = writ_db.open_tree("slugs").unwrap();
-    let kinds = writ_db.open_tree("kinds").unwrap();
-
-    let titles = writ_db.open_tree("titles").unwrap();
-    let comment_trees = writ_db.open_tree("comment_trees").unwrap();
-    let comment_key_path_index = writ_db.open_tree("comment_key_path_index").unwrap();
-    let comments = writ_db.open_tree("comments").unwrap();
-    let comment_raw_content = writ_db.open_tree("comment_raw_content").unwrap();
-    let comment_settings = writ_db.open_tree("comment_settings").unwrap();
-    let writ_voters = writ_db.open_tree("writ_voters").unwrap();
-    let comment_voters = writ_db.open_tree("comment_voters").unwrap();
-    let votes = writ_db.open_tree("votes").unwrap();
-    let comment_votes = writ_db.open_tree("comment_votes").unwrap();
-    let dates = writ_db.open_tree("dates").unwrap();
+    let titles = db.open_tree("titles").unwrap();
+    let comment_trees = db.open_tree("comment_trees").unwrap();
+    let comment_key_path_index = db.open_tree("comment_key_path_index").unwrap();
+    let comments = db.open_tree("comments").unwrap();
+    let comment_raw_content = db.open_tree("comment_raw_content").unwrap();
+    let comment_settings = db.open_tree("comment_settings").unwrap();
+    let writ_voters = db.open_tree("writ_voters").unwrap();
+    let comment_voters = db.open_tree("comment_voters").unwrap();
+    let votes = db.open_tree("votes").unwrap();
+    let comment_votes = db.open_tree("comment_votes").unwrap();
+    let dates = db.open_tree("dates").unwrap();
 
     Orchestrator {
       db,
@@ -166,7 +155,6 @@ impl Orchestrator {
       dev_mode,
       hasher,
 
-      writ_db,
       writs,
       raw_content,
       content,

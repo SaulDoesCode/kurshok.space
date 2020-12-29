@@ -11,30 +11,26 @@ fn now() -> i64 {
 }
 
 pub struct RateLimiter {
-  pub db: Db,
   pub store: Tree,
   pub limit: u64,
   pub count: Arc<AtomicU64>,
 }
 
 impl RateLimiter {
-  pub fn setup_default() -> Self {
-    let db = sled::open("./storage/rl.db").unwrap();
-    let store = db.open_tree("rl").unwrap();
+  pub fn setup_default(db: &Db) -> Self {
+    let store = db.open_tree("rl").expect("failed to open sled rl tree for ratelimiter");
     let count = Arc::new(AtomicU64::new(store.len() as u64));
     RateLimiter {
-      db,
       store,
       limit: 100_000,
       count,
     }
   }
 
-  pub fn new(db: Db, store: Tree, limit: u64) -> Self {
+  pub fn new(store: Tree, limit: u64) -> Self {
     let count = Arc::new(AtomicU64::new(0));
     count.fetch_add(store.len() as u64, SeqCst);
     Self {
-      db,
       store,
       limit,
       count,

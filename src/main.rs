@@ -189,7 +189,7 @@ async fn index(req: HttpRequest) -> impl Responder {
         ctx.insert("dev_mode", &ORC.dev_mode);
         ctx.insert(
             "is_writer",
-            &ORC.user_has_some_attrs(&usr.id, &["writer", "admin"])
+            &ORC.user_has_some_attrs(usr.id, &["writer", "admin"])
                 .unwrap_or(false),
         );
     }
