@@ -16,9 +16,9 @@ lazy_static! {
 }
 
 impl Orchestrator {
-    pub fn expire_key(&self, from_now: i64, tree: String, key: String) -> bool {
+    pub fn expire_key(&self, from_now: i64, tree: String, key: &[u8]) -> bool {
         let exp = unix_timestamp() + from_now;
-        let data = ExpirableData::Single{tree, key};
+        let data = ExpirableData::Single{tree, key: key.to_vec()};
 
         self.expirable_data.insert(
             data.try_to_vec().unwrap(),
@@ -29,7 +29,7 @@ impl Orchestrator {
         })
     }
 
-    pub fn expire_keys(&self, from_now: i64, tree: String, keys: Vec<String>) -> bool {
+    pub fn expire_keys(&self, from_now: i64, tree: String, keys: Vec<Vec<u8>>) -> bool {
         let exp = unix_timestamp() + from_now;
         let data = ExpirableData::MultiKey{tree, keys};
 
@@ -42,7 +42,7 @@ impl Orchestrator {
         })
     }
 
-    pub fn expire_data(&self, from_now: i64, tree: BTreeMap<String, Vec<String>>) -> bool {
+    pub fn expire_data(&self, from_now: i64, tree: BTreeMap<String, Vec<Vec<u8>>>) -> bool {
         let exp = unix_timestamp() + from_now;
         let data = ExpirableData::MultiTree(tree);
 
@@ -69,32 +69,9 @@ impl Orchestrator {
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub enum ExpirableData {
-    Single {tree: String, key: String},
-    MultiKey {tree: String, keys: Vec<String>},
-    MultiTree(BTreeMap<String, Vec<String>>),
-}
-
-#[derive(BorshSerialize, BorshDeserialize)]
-pub struct ExpirableValue<T> {
-    value: T,
-    expiry: i64,
-}
-
-impl<T> ExpirableValue<T> {
-    fn new(value: T, expiry: i64) -> Self {
-        Self{value, expiry}
-    }
-
-    fn has_expired(&self) -> bool {
-        unix_timestamp() > self.expiry
-    }
-
-    fn value(self) -> Option<T> {
-        if self.has_expired() {
-            return None;
-        }
-        Some(self.value)
-    }
+    Single {tree: String, key: Vec<u8>},
+    MultiKey {tree: String, keys: Vec<Vec<u8>>},
+    MultiTree(BTreeMap<String, Vec<Vec<u8>>>),
 }
 
 pub fn start_system() -> thread::JoinHandle<()> {
@@ -132,22 +109,15 @@ pub fn clean_up() {
             expired_list.push(raw_data);
             match data {
                 ExpirableData::Single{tree, key} => {
-                    if ORC.dev_mode {
-                        println!("going in for expiry: key - {} tree - {}", &key, &tree);
-                    }
                     if let Ok(tr) = ORC.db.open_tree(tree.as_bytes()) {
-                        if let Ok(Some(_)) = tr.remove(key.as_bytes()) {
-                            if ORC.dev_mode {
-                                println!("removed key - {} from tree - {}", key, tree);
-                            }
-                        }
+                        if let Ok(Some(_)) = tr.remove(key.as_slice()) {}
                     }
                 },
                 ExpirableData::MultiKey{tree, keys} => {
                     if let Ok(tr) = ORC.db.open_tree(tree.as_bytes()) {
                         let res: TransactionResult<(), ()> = tr.transaction(|tr| {
                             for key in keys.iter() {
-                                tr.remove(key.as_bytes())?;
+                                tr.remove(key.as_slice())?;
                             }
                             Ok(())
                         });
@@ -180,7 +150,7 @@ pub fn clean_up() {
                         for tr in trs {
                             if let Some(keys) = key_set.next() {
                                 for key in keys.iter() {
-                                    tr.remove(key.as_bytes())?;
+                                    tr.remove(key.as_slice())?;
                                 }
                             }
                         }
