@@ -56,68 +56,89 @@ const {
 
 writingPad.value = ''
 
+app.titleInput = titleInput
+app.writingPad = writingPad
+app.tagInput = tagInput
+
+app.doob = async (doobs = 10) => {
+    let x = 0;
+    while (x < doobs) {
+        ++x
+        app.clearEditor();
+        app.titleInput.value = `Doob # ${x}`
+        app.writingPad.value = `Doob # ${x}`
+        app.tagInput.value = `test`
+        await app.editorPushWrit()
+    }
+}
+
 ;(app.wwTS = app.setupToggleSituation(wwLauncher, wwView, 'body', {
     viewOutAnimation: 'fade-out 220ms ease-out',
     delayRemoveMS: 220,
     background: true,
 })).toggleView()
 
-const writListEntry = (title, id) => div({
+const writListEntry = (title, id, prepend = false) => div({
     class: {
         'wl-entry': true,
         unpushed: id == null
     },
-    $: writList,
+    $: prepend ? undefined : writList,
     attr: {wid: id == null ? title : id}
-}, parent => [
-    parent.titleSpan = span(title),
-    div(
-        () => {
-            const delBtn = span({
-                class: 'delete-writ',
-                attr: {title: 'Double click/tap to delete writ'}
-            }, '🗑')
+}, parent => {
+    if (prepend) {
+        writList.prepend(parent)
+    }
+    return [
+        parent.titleSpan = span(title),
+        div(
+            () => {
+                const delBtn = span({
+                    class: 'delete-writ',
+                    attr: {title: 'Double click/tap to delete writ'}
+                }, '🗑')
 
-            // manually jigging double click/tap
-            let timeout, clicks = 0
-            const clickHandler = d.on.pointerup(delBtn, async e => {
-                clearTimeout(timeout)
-                if (++clicks == 2) {
-                    clicks = 0
-                } else {
-                    if (clicks == 1) delBtn.classList.add('prep')
-                    timeout = setTimeout(() => {
-                        delBtn.classList.remove('prep')
+                // manually jigging double click/tap
+                let timeout, clicks = 0
+                const clickHandler = d.on.pointerup(delBtn, async e => {
+                    clearTimeout(timeout)
+                    if (++clicks == 2) {
                         clicks = 0
-                    }, 900)
-                    return
-                }
-                try {
-                    clickHandler.off()
-                    if (id != null) {
-                        const res = await app.deleteWritRequest(id)
-                        if (res.ok) {
-                            df.remove(parent)
-                            if (app.ww.active && app.ww.active.id == id) app.clearEditor()
-                            delete app.ww.writs[id]
-                            app.emit('postEdit:' + id, false)
-                        }
                     } else {
-                        await localforage.removeItem('unpushed:' + title)
-                        delete app.ww.unpushed[title]
-                        df.remove(parent)
-                        if (app.ww.active && app.ww.active.title == title) app.clearEditor()
+                        if (clicks == 1) delBtn.classList.add('prep')
+                        timeout = setTimeout(() => {
+                            delBtn.classList.remove('prep')
+                            clicks = 0
+                        }, 900)
+                        return
                     }
-                } catch (e) {
-                    clickHandler.on()
-                    console.error(`Well, that didn't work: ${e}`)
-                }
-            })
+                    try {
+                        clickHandler.off()
+                        if (id != null) {
+                            const res = await app.deleteWritRequest(id)
+                            if (res.ok) {
+                                df.remove(parent)
+                                if (app.ww.active && app.ww.active.id == id) app.clearEditor()
+                                delete app.ww.writs[id]
+                                app.emit('postEdit:' + id, false)
+                            }
+                        } else {
+                            await localforage.removeItem('unpushed:' + title)
+                            delete app.ww.unpushed[title]
+                            df.remove(parent)
+                            if (app.ww.active && app.ww.active.title == title) app.clearEditor()
+                        }
+                    } catch (e) {
+                        clickHandler.on()
+                        console.error(`Well, that didn't work: ${e}`)
+                    }
+                })
 
-            return delBtn
-        }
-    )
-])
+                return delBtn
+            }
+        )
+    ]
+})
 
 app.ww = {writs: {}, unpushed: {}}
 
@@ -330,8 +351,19 @@ d.on.pointerup(pushWritBtn, e => {
     app.editorPushWrit()
 })
 
+d.on.keydown(tagInput, e => {
+    if (e.key === 'Enter') {
+        app.editorPushWrit()
+        e.preventDefault()
+        titleInput.focus()
+    }
+})
+
 d.on.input(titleInput, e => {
-    if (app.ww.active && app.ww.selectedWLE) {
+    if (e.key === 'Enter') {
+        writingPad.focus()
+        e.preventDefault()
+    } else if (app.ww.active && app.ww.selectedWLE) {
         app.ww.selectedWLE.titleSpan.textContent = titleInput.value
     }
 })
