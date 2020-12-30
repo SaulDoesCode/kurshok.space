@@ -193,6 +193,8 @@ app.fetchPosts = async (page = 0, amount = 6) => {
             route.handle()
             console.log('false alarm')
         } else {
+            location.hash = 'posts'
+            route.handle()
             console.warn('not sure what happened')
         }
     }
@@ -258,11 +260,12 @@ app.fetchPosts = async (page = 0, amount = 6) => {
             d.render(app.postPaginationView, contentDisplay)
         }
 
-        writs.forEach(w => {
-            w.page = page
-            app.postPages[page].push(w.id)
-            publicPost(app.posts[w.id] = w)
-        })
+        writs //.sort((w0, w1) => w1.posted - w0.posted)
+            .forEach(w => {
+                w.page = page
+                app.postPages[page].push(w.id)
+                publicPost(app.posts[w.id] = w)
+            })
     }
     app.emit.activePostPage(app.activePostPage = page)
     app.pageNumView.textContent = page
