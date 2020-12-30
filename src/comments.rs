@@ -5,14 +5,14 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sled::{transaction::*, IVec, Transactional};
 use std::{cell::Cell, collections::HashMap};
-use time::Duration;
+use time::{Duration};
 
 use crate::auth::User;
 use crate::orchestrator::ORC;
 use crate::utils::{
   datetime_from_unix_timestamp, i64_is_zero, render_md, unix_timestamp, FancyBool, FancyIVec,
 };
-use crate::writs::{CommentSettings, Vote, Writ};
+use crate::writs::{CommentSettings, Vote, Writ, WritID};
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct PublicComment {
@@ -68,14 +68,14 @@ impl Comment {
     None
   }
 
-  pub fn new_first_level_id(writ_id: &str, usr_id: &str) -> Option<(String, String)> {
+  pub fn new_first_level_id(writ_id: &str, usr_id: u64) -> Option<(String, String)> {
     if let Ok(uid) = ORC.generate_id(writ_id.as_bytes()) {
       let own_id = format!("{}:{}", usr_id, uid);
       return Some((format!("{}/{}", writ_id, own_id), own_id));
     }
     None
   }
-  pub fn new_subcomment_id(writ_id: &str, parent_id: &str, usr_id: &str) -> Option<(String, String)> {
+  pub fn new_subcomment_id(writ_id: &str, parent_id: &str, usr_id: u64) -> Option<(String, String)> {
     if let Ok(uid) = ORC.generate_id(writ_id.as_bytes()) {
       let own_id = format!("{}:{}", usr_id, uid);
       return Some((format!("{}/{}", parent_id, own_id), own_id));
@@ -91,37 +91,36 @@ impl Comment {
     self.id[self.id.chars().rev().position(|c| c == '/').unwrap()..].to_string()
   }
 
-  pub fn author_id(&self) -> String {
-    Self::get_author_id_from_id(&self.id).to_string()
+  pub fn author_id(&self) -> Option<u64> {
+    Self::get_author_id_from_id(&self.id)
   }
 
-  pub fn get_author_id_from_id(id: &str) -> &str {
-    if id.contains('/') {
-      return id.split('/').last().unwrap().split(':').next().unwrap();
-    }
-    return id.split(':').next().unwrap();
-  }
-
-  pub fn get_author_id_from_uncertain_id(id: &str) -> Option<&str> {
-    if id.contains('/') {
-      if let Some(cid) = id.split('/').last() {
-        return cid.split(':').next();
+  pub fn get_author_id_from_id(id: &str) -> Option<u64> {
+    if let Some(raw) = id.split('/').last() {
+      if let Some(raw) = raw.split(':').next() {
+        if let Ok(id) = raw.parse() {
+          return Some(id);
+        }
+      }
+    } else if let Some(raw) = id.split(':').next() {
+      if let Ok(id) = raw.parse() {
+        return Some(id);
       }
     }
-    id.split(':').next()
+    None
   }
 
-  pub fn vote_id(&self, usr_id: &str) -> String {
+  pub fn vote_id(&self, usr_id: u64) -> String {
     format!("{}<{}", self.id, usr_id)
   }
 
-  pub fn public(self, usr_id: &Option<String>) -> Option<PublicComment> {
+  pub fn public(self, usr_id: &Option<u64>) -> Option<PublicComment> {
     Some(PublicComment {
       posted: self.posted,
       edited: self.edited,
       author_only: self.author_only.wrap(),
       you_voted: match usr_id {
-        Some(id) => match ORC.comment_voters.get(self.vote_id(id).as_bytes()) {
+        Some(id) => match ORC.comment_voters.get(self.vote_id(*id).as_bytes()) {
           Ok(cv) => cv.map(|raw| Vote::try_from_slice(&raw).unwrap().up),
           Err(_) => None,
         },
@@ -340,62 +339,64 @@ impl Comment {
       .is_ok()
   }
 
-  pub fn vote(&self, usr_id: &str, up: Option<bool>) -> Option<i64> {
-    let res: TransactionResult<i64, ()> =
-      (&ORC.comment_votes, &ORC.comment_voters).transaction(|(votes, voters)| {
-        let vote_id = self.vote_id(usr_id);
-        let mut count: i64 = 0;
-        if let Some(raw) = voters.get(vote_id.as_bytes())? {
-          let old_vote = Vote::try_from_slice(&raw).unwrap();
-          if let Some(up) = &up {
-            // prevent double voting
-            if old_vote.up == *up {
-              return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-            }
-            // handle when they alreay voted and now vote the oposite way
-            count += votes.get(self.id.as_bytes())?.unwrap().to_i64();
-            if *up {
-              count += 2;
-            } else {
-              count -= 2;
-            }
-            votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
-          } else {
-            // unvote
-            voters.remove(vote_id.as_bytes())?;
-
-            count += votes.get(self.id.as_bytes())?.unwrap().to_i64();
-            if old_vote.up {
-              count -= 1;
-            } else {
-              count += 1;
-            }
-
-            votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
-
-            return Ok(count);
+  pub fn vote(&self, usr_id: u64, up: Option<bool>) -> Option<i64> {
+    let res: TransactionResult<i64, ()> = (
+      &ORC.comment_votes,
+      &ORC.comment_voters
+    ).transaction(|(votes, voters)| {
+      let vote_id = self.vote_id(usr_id);
+      let mut count: i64 = 0;
+      if let Some(raw) = voters.get(vote_id.as_bytes())? {
+        let old_vote = Vote::try_from_slice(&raw).unwrap();
+        if let Some(up) = &up {
+          // prevent double voting
+          if old_vote.up == *up {
+            return Err(sled::transaction::ConflictableTransactionError::Abort(()));
           }
-        } else if up.is_none() {
-          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-        } else {
+          // handle when they alreay voted and now vote the oposite way
           count += votes.get(self.id.as_bytes())?.unwrap().to_i64();
-          if up.clone().unwrap() {
-            count += 1;
+          if *up {
+            count += 2;
           } else {
-            count -= 1;
+            count -= 2;
           }
           votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+        } else {
+          // unvote
+          voters.remove(vote_id.as_bytes())?;
+
+          count += votes.get(self.id.as_bytes())?.unwrap().to_i64();
+          if old_vote.up {
+            count -= 1;
+          } else {
+            count += 1;
+          }
+
+          votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+
+          return Ok(count);
         }
+      } else if up.is_none() {
+        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+      } else {
+        count += votes.get(self.id.as_bytes())?.unwrap().to_i64();
+        if up.clone().unwrap() {
+          count += 1;
+        } else {
+          count -= 1;
+        }
+        votes.insert(self.id.as_bytes(), &count.to_be_bytes())?;
+      }
 
-        let v = Vote {
-          id: vote_id,
-          when: unix_timestamp(),
-          up: up.unwrap(),
-        };
-        voters.insert(v.id.as_bytes(), v.try_to_vec().unwrap())?;
+      let v = Vote {
+        id: vote_id,
+        when: unix_timestamp(),
+        up: up.unwrap(),
+      };
+      voters.insert(v.id.as_bytes(), v.try_to_vec().unwrap())?;
 
-        Ok(count)
-      });
+      Ok(count)
+    });
 
     match res {
       Ok(count) => Some(count),
@@ -408,15 +409,15 @@ impl Comment {
     }
   }
 
-  pub fn upvote(&self, usr_id: &str) -> Option<i64> {
+  pub fn upvote(&self, usr_id: u64) -> Option<i64> {
     self.vote(usr_id, Some(true))
   }
 
-  pub fn downvote(&self, usr_id: &str) -> Option<i64> {
+  pub fn downvote(&self, usr_id: u64) -> Option<i64> {
     self.vote(usr_id, Some(false))
   }
 
-  pub fn unvote(&self, usr_id: &str) -> Option<i64> {
+  pub fn unvote(&self, usr_id: u64) -> Option<i64> {
     self.vote(usr_id, None)
   }
 }
@@ -441,7 +442,7 @@ pub fn comment_on_writ(
 
     let content = render_md(&raw_content);
 
-    let (id, _own_id) = match Comment::new_first_level_id(&writ.id, &usr.id) {
+    let (id, _own_id) = match Comment::new_first_level_id(&writ.id, usr.id) {
       Some(i) => i,
       None => return None,
     };
@@ -511,7 +512,7 @@ pub fn comment_on_comment(
 
   let content = render_md(&raw_content);
 
-  let (id, own_id) = match Comment::new_subcomment_id(&writ_id, &parent_id, &usr.id) {
+  let (id, own_id) = match Comment::new_subcomment_id(&writ_id, &parent_id, usr.id) {
     Some(i) => i,
     None => return None,
   };
@@ -610,7 +611,7 @@ pub struct CommentTree {
 impl CommentTree {
   pub fn public(
     self,
-    usr_id: &Option<String>,
+    usr_id: &Option<u64>,
     top_level: bool,
   ) -> Option<PublicCommentTree> {
     Some(PublicCommentTree {
@@ -745,7 +746,10 @@ impl CommentIDTree {
       }
     }
 
-    let author_id = Comment::get_author_id_from_id(&self.comment).to_string();
+    let author_id = match Comment::get_author_id_from_id(&self.comment) {
+      Some(au_id) => au_id,
+      None => return None,
+    };
 
     if let Some(excluded_author_ids) = &query.exluded_author_ids {
       if excluded_author_ids.contains(&author_id) {
@@ -765,7 +769,7 @@ impl CommentIDTree {
 
     if let Ok(Some(val)) = ORC.comments.get(self.comment.as_bytes()) {
       let comment = Comment::try_from_slice(&val).unwrap();
-      if check_query_conditions(query, &comment, &author_id) {
+      if check_query_conditions(query, &comment, author_id) {
         return Some(CommentTree {
           comment,
           children: if is_top_level {
@@ -811,15 +815,15 @@ pub struct CommentQuery {
   pub ids: Option<Vec<String>>,
   pub skip_ids: Option<Vec<String>>,
   pub authors: Option<Vec<String>>,
-  pub author_ids: Option<Vec<String>>,
+  pub author_ids: Option<Vec<u64>>,
   pub public: Option<bool>,
   pub is_admin: Option<bool>,
-  pub requestor_id: Option<String>,
+  pub requestor_id: Option<u64>,
 
   pub author_name: Option<String>,
   pub author_handle: Option<String>,
-  pub author_id: Option<String>,
-  pub exluded_author_ids: Option<Vec<String>>,
+  pub author_id: Option<u64>,
+  pub exluded_author_ids: Option<Vec<u64>>,
   pub posted_before: Option<i64>,
   pub posted_after: Option<i64>,
   pub year: Option<i32>,
@@ -834,7 +838,7 @@ pub struct CommentQuery {
   pub page: u64,
 }
 
-pub fn check_query_conditions(query: &CommentQuery, comment: &Comment, author_id: &str) -> bool {
+pub fn check_query_conditions(query: &CommentQuery, comment: &Comment, author_id: u64) -> bool {
   let is_admin = query.is_admin.unwrap_or(false);
 
   if let Some(public_status) = query.public {
@@ -912,8 +916,8 @@ pub async fn comment_query(o_usr: Option<&User>, mut query: CommentQuery) -> Opt
     return None;
   }
   let is_admin = if let Some(usr) = &o_usr {
-    query.requestor_id = Some(usr.id.clone());
-    ORC.is_admin(&usr.id)
+    query.requestor_id = Some(usr.id);
+    ORC.is_admin(usr.id)
   } else {
     false
   };
@@ -956,8 +960,10 @@ pub async fn comment_query(o_usr: Option<&User>, mut query: CommentQuery) -> Opt
     let settings = CommentSettings::try_from_slice(&val).unwrap();
     if !settings.public {
       if let Some(requestor_id) = &query.requestor_id {
-        if writ_id.split(":").collect::<Vec<&str>>()[1] != *requestor_id {
-          return None;
+        if let Ok(author_id) = writ_id.split(":").collect::<Vec<&str>>()[1].parse::<u64>() {
+          if author_id != *requestor_id {
+            return None;
+          }
         }
       } else if !is_admin {
         return None;
@@ -977,11 +983,11 @@ pub async fn comment_query(o_usr: Option<&User>, mut query: CommentQuery) -> Opt
   query.is_admin = Some(is_admin);
 
   if let Some(authors) = &query.authors {
-    let mut ids: Vec<String> = authors
+    let mut ids: Vec<u64> = authors
       .par_iter()
       .filter_map(|a| 
         ORC.usernames.get(a.as_bytes())
-          .map_or(None, |id| id.map(|id| id.to_string()))
+          .map_or(None, |id| id.map(|id| id.to_u64()))
       )
       .collect();
 
@@ -993,13 +999,13 @@ pub async fn comment_query(o_usr: Option<&User>, mut query: CommentQuery) -> Opt
   } else if query.author_id.is_none() {
     if let Some(name) = &query.author_name {
       if let Ok(Some(id)) = ORC.usernames.get(name.as_bytes()) {
-        query.author_id = Some(id.to_string());
+        query.author_id = Some(id.to_u64());
       } else {
         return None;
       }
     } else if let Some(handle) = &query.author_handle {
       if let Ok(Some(id)) = ORC.handles.get(handle.as_bytes()) {
-        query.author_id = Some(id.to_string());
+        query.author_id = Some(id.to_u64());
       } else {
         return None;
       }
@@ -1065,7 +1071,7 @@ pub async fn post_comment_query(
 ) -> HttpResponse {
   let o_usr = ORC.user_by_session(&req);
   let usr_id = match &o_usr {
-    Some(el) => Some(el.id.clone()),
+    Some(usr) => Some(usr.id),
     None => None,
   };
 
@@ -1173,7 +1179,7 @@ pub async fn edit_comment_request(
     }
   }
 
-  make_comment_edit(&usr.id, rce).await
+  make_comment_edit(usr.id, rce).await
 }
 
 #[get("/comment/{id}/raw-content")]
@@ -1184,7 +1190,7 @@ pub async fn fetch_comment_raw_content(
   let cid = cid.replace("-", "/");
   // TODO: ratelimiting
   if let Some(usr) = ORC.user_by_session(&req) {
-    if let Some(author_id) = Comment::get_author_id_from_uncertain_id(cid.as_str()) {
+    if let Some(author_id) = Comment::get_author_id_from_id(cid.as_str()) {
       if author_id == usr.id {
         if let Ok(Some(raw_rc)) = ORC.comment_raw_content.get(cid.as_bytes()) {
           return crate::responses::Ok(raw_rc.to_string());
@@ -1234,10 +1240,9 @@ pub async fn upvote_comment(
   id: web::Path<String>,
 ) -> HttpResponse {
   let id = id.replace("-", "/");
-  if let Some(raw) = ORC.user_id_by_session(&req) {
-    let usr_id = raw.to_string();
+  if let Some(usr_id) = ORC.user_id_by_session(&req) {
     if let Some(comment) = Comment::from_id(id.as_bytes()) {
-      if let Some(count) = comment.upvote(&usr_id) {
+      if let Some(count) = comment.upvote(usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1254,10 +1259,9 @@ pub async fn downvote_comment(
   id: web::Path<String>,
 ) -> HttpResponse {
   let id = id.replace("-", "/");
-  if let Some(raw) = ORC.user_id_by_session(&req) {
-    let usr_id = raw.to_string();
+  if let Some(usr_id) = ORC.user_id_by_session(&req) {
     if let Some(comment) = Comment::from_id(id.as_bytes()) {
-      if let Some(count) = comment.downvote(&usr_id) {
+      if let Some(count) = comment.downvote(usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1274,10 +1278,9 @@ pub async fn unvote_comment(
   id: web::Path<String>,
 ) -> HttpResponse {
   let id = id.replace("-", "/");
-  if let Some(raw) = ORC.user_id_by_session(&req) {
-    let usr_id = raw.to_string();
+  if let Some(usr_id) = ORC.user_id_by_session(&req) {
     if let Some(comment) = Comment::from_id(id.as_bytes()) {
-      if let Some(count) = comment.unvote(&usr_id) {
+      if let Some(count) = comment.unvote(usr_id) {
         return crate::responses::AcceptedStatusData("vote went through", count);
       }
     }
@@ -1291,7 +1294,6 @@ pub async fn unvote_comment(
 pub async fn make_comment_on_writ(usr: &User, rc: RawComment) -> HttpResponse {
   if let Some(writ) = ORC.writ_by_id(&rc.writ_id) {
     if let Some(comment) = comment_on_writ(
-      
       &writ,
       usr,
       rc.raw_content,
@@ -1306,27 +1308,28 @@ pub async fn make_comment_on_writ(usr: &User, rc: RawComment) -> HttpResponse {
 }
 
 pub async fn make_comment_on_comment(usr: &User, rc: RawComment) -> HttpResponse {
-  if let Ok(Some(val)) = ORC.comment_settings.get(rc.writ_id.as_bytes()) {
-    let settings = CommentSettings::try_from_slice(&val).unwrap();
-    if let Some(parent_comment) = Comment::from_id(rc.parent_id.as_bytes()) {
-      if let Some(comment) = comment_on_comment(
-        &settings,
-        &parent_comment,
-        &usr,
-        rc.writ_id,
-        rc.raw_content,
-        parent_comment.author_only,
-      ) {
-        return crate::responses::AcceptedData(comment);
+  if let Some(wid) = WritID::from_str(&rc.writ_id) {
+    if let Ok(Some(val)) = ORC.comment_settings.get(&wid.to_bin()) {
+      let settings = CommentSettings::try_from_slice(&val).unwrap();
+      if let Some(parent_comment) = Comment::from_id(rc.parent_id.as_bytes()) {
+        if let Some(comment) = comment_on_comment(
+          &settings,
+          &parent_comment,
+          &usr,
+          rc.writ_id,
+          rc.raw_content,
+          parent_comment.author_only,
+        ) {
+          return crate::responses::AcceptedData(comment);
+        }
       }
     }
   }
-
   crate::responses::InternalServerError("troubles abound, couldn't make subcomment :(")
 }
 
-pub async fn make_comment_edit(usr_id: &str, rce: RawCommentEdit) -> HttpResponse {
-  if let Some(author_id) = Comment::get_author_id_from_uncertain_id(&rce.id) {
+pub async fn make_comment_edit(usr_id: u64, rce: RawCommentEdit) -> HttpResponse {
+  if let Some(author_id) = Comment::get_author_id_from_id(&rce.id) {
     if author_id != usr_id {
       return crate::responses::Forbidden("You cannot edit another user's comments.");
     }
@@ -1334,14 +1337,16 @@ pub async fn make_comment_edit(usr_id: &str, rce: RawCommentEdit) -> HttpRespons
     return crate::responses::BadRequest("Bad comment id");
   }
 
-  if let Ok(Some(val)) = ORC.comment_settings.get(rce.writ_id.as_bytes()) {
-    let settings = CommentSettings::try_from_slice(&val).unwrap();
-    // TODO: proper error handling instead of do or fail generically
-    if let Some(comment) = edit_comment(&settings, rce) {
-      if let Some(pc) = comment.public(&Some(usr_id.to_string())) {
-        return crate::responses::AcceptedData(pc);
+  if let Some(wid) = WritID::from_str(&rce.writ_id) {
+    if let Ok(Some(val)) = ORC.comment_settings.get(&wid.to_bin()) {
+      let settings = CommentSettings::try_from_slice(&val).unwrap();
+      // TODO: proper error handling instead of do or fail generically
+      if let Some(comment) = edit_comment(&settings, rce) {
+        if let Some(pc) = comment.public(&Some(usr_id)) {
+          return crate::responses::AcceptedData(pc);
+        }
+        return crate::responses::Accepted("Comment edited succesfully, but retrieving the updated version hit a snag, no worries just reload the page");
       }
-      return crate::responses::Accepted("Comment edited succesfully, but retrieving the updated version hit a snag, no worries just reload the page");
     }
   }
   crate::responses::InternalServerError("troubles abound, couldn't edit comment :(")
