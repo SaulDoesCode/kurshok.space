@@ -55,7 +55,7 @@ impl Orchestrator {
     }
 
     let user_id = match self.generate_id("usr".as_bytes()) {
-      Ok(id) => format!("{}", id),
+      Ok(id) => id,
       Err(_) => return None,
     };
 
@@ -85,7 +85,7 @@ impl Orchestrator {
     }
 
     let usr = User {
-      id: user_id.clone(),
+      id: user_id,
       username: username.clone(),
       handle,
       reg: unix_timestamp(),
@@ -106,22 +106,24 @@ impl Orchestrator {
           return Err(sled::transaction::ConflictableTransactionError::Abort(()));
         }
 
-        users.insert(user_id.as_bytes(), usr.try_to_vec().unwrap())?;
-        usernames.insert(usr.username.as_bytes(), user_id.as_bytes())?;
-        emails.insert(email.as_bytes(), user_id.as_bytes())?;
-        user_email_index.insert(user_id.as_bytes(), email.as_bytes())?;
-        handles.insert(usr.handle.as_bytes(), user_id.as_bytes())?;
+        let uid = IVec::from_u64(user_id);
+
+        users.insert(&uid, usr.try_to_vec().unwrap())?;
+        usernames.insert(usr.username.as_bytes(), &uid)?;
+        emails.insert(email.as_bytes(), &uid)?;
+        user_email_index.insert(&uid, email.as_bytes())?;
+        handles.insert(usr.handle.as_bytes(), &uid)?;
         Ok(())
       })
       .is_ok()
     {
-      let mut exp_data: BTreeMap<String, Vec<String>> = BTreeMap::new();
+      let mut exp_data: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
       
-      exp_data.insert("users".to_string(), vec!(usr.id.clone()));
-      exp_data.insert("usernames".to_string(), vec!(usr.username.clone()));
-      exp_data.insert("emails".to_string(), vec!(email));
-      exp_data.insert("user_email_index".to_string(), vec!(usr.id.clone()));
-      exp_data.insert("handles".to_string(), vec!(usr.handle.clone()));
+      exp_data.insert("users".to_string(), vec!(usr.id.to_be_bytes().to_vec()));
+      exp_data.insert("usernames".to_string(), vec!(usr.username.as_bytes().to_vec()));
+      exp_data.insert("emails".to_string(), vec!(email.as_bytes().to_vec()));
+      exp_data.insert("user_email_index".to_string(), vec!(usr.id.to_be_bytes().to_vec()));
+      exp_data.insert("handles".to_string(), vec!(usr.handle.as_bytes().to_vec()));
 
       if !self.expire_data(
         if self.dev_mode {
@@ -145,7 +147,7 @@ impl Orchestrator {
   pub fn create_magic_link_email(
     &self,
     first_time: bool,
-    usr_id: String,
+    usr_id: u64,
     username: String,
     email: String,
   ) -> Option<lettre::Message> {
@@ -244,14 +246,14 @@ impl Orchestrator {
         let ml = MagicLink::try_from_slice(&raw).unwrap();
         magic_links.remove(code.as_bytes())?;
         if !ml.has_expired() {
-          if let Some(raw) = users.get(ml.usr_id.as_bytes())? {
+          if let Some(raw) = users.get(&ml.usr_id.to_be_bytes())? {
             let usr = User::try_from_slice(&raw).unwrap();
-            let first_time = user_verifications.get(usr.id.as_bytes())?.is_none();
+            let first_time = user_verifications.get(usr.id.to_be_bytes())?.is_none();
             if first_time {
               let v = UserVerification::new();
-              user_verifications.insert(usr.id.as_bytes(), v.try_to_vec().unwrap())?;
+              user_verifications.insert(IVec::from_u64(usr.id), v.try_to_vec().unwrap())?;
             }
-            if let Some(raw_email) = user_email_index.get(usr.id.as_bytes())? {
+            if let Some(raw_email) = user_email_index.get(usr.id.to_be_bytes())? {
               return Ok((usr, raw_email.to_string(), first_time));
             }
           } else if self.dev_mode {
@@ -268,13 +270,13 @@ impl Orchestrator {
 
     if let Ok((usr, email, first_time)) = res {
       if first_time {
-        let mut exp_data: BTreeMap<String, Vec<String>> = BTreeMap::new();
-  
-        exp_data.insert("users".to_string(), vec!(usr.id.clone()));
-        exp_data.insert("usernames".to_string(), vec!(usr.username.clone()));
-        exp_data.insert("emails".to_string(), vec!(email.clone()));
-        exp_data.insert("user_email_index".to_string(), vec!(usr.id.clone()));
-        exp_data.insert("handles".to_string(), vec!(usr.handle.clone()));
+        let mut exp_data: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
+      
+        exp_data.insert("users".to_string(), vec!(usr.id.to_be_bytes().to_vec()));
+        exp_data.insert("usernames".to_string(), vec!(usr.username.as_bytes().to_vec()));
+        exp_data.insert("emails".to_string(), vec!(email.as_bytes().to_vec()));
+        exp_data.insert("user_email_index".to_string(), vec!(usr.id.to_be_bytes().to_vec()));
+        exp_data.insert("handles".to_string(), vec!(usr.handle.as_bytes().to_vec()));
   
         if let Some(_) = self.unexpire_data(ExpirableData::MultiTree(exp_data)) {
           if self.dev_mode {
@@ -285,7 +287,7 @@ impl Orchestrator {
         }
   
         if CONF.read().admin_emails.contains(&email) {
-          self.make_admin(&usr.id, 0, Some("blessed email".to_string()));
+          self.make_admin(usr.id, 0, Some("blessed email".to_string()));
         }
       }
 
@@ -297,19 +299,19 @@ impl Orchestrator {
     None
   }
 
-  pub fn create_preauth_token(&self, usr_id: &str) -> Option<String> {
+  pub fn create_preauth_token(&self, usr_id: u64) -> Option<String> {
     let res: TransactionResult<String, ()> = self.preauth_tokens.transaction(|preauth_tokens| {
       let token = random_string(22);
-      preauth_tokens.insert(token.as_bytes(), usr_id.as_bytes())?;
+      preauth_tokens.insert(token.as_bytes(), &usr_id.to_be_bytes())?;
       Ok(token)
     });
   
     if let Ok(token) = res {
       ORC.expire_key(
-        // 15 minutes
-        60*15,
+        // 7 minutes
+        60*7,
         "preauth_tokens".to_string(),
-        token.clone()
+        token.as_bytes()
       );
       return Some(token);
     }
@@ -324,16 +326,17 @@ impl Orchestrator {
 
     ORC.unexpire_data(ExpirableData::Single{
       tree: "preauth_tokens".to_string(),
-      key: preauth_token.to_string(),
+      key: preauth_token.as_bytes().to_vec(),
     });
 
     res.is_ok()
   }
 
-  pub fn setup_session(&self, usr_id: String) -> Result<String, AuthError> {
-    let sess_id = format!("{}:{}", &usr_id, random_string(20));
+  pub fn setup_session(&self, usr_id: u64) -> Result<String, AuthError> {
+    let sess_id = format!("{}:{}", usr_id, random_string(20));
     let timestamp = unix_timestamp();
-    if self.sessions.scan_prefix(usr_id.as_bytes()).any(|r| {
+    let sess_prefix = format!("{}", usr_id);
+    if self.sessions.scan_prefix(sess_prefix.as_bytes()).any(|r| {
       r.map_or(false, |(k, v)| {
         let ses = UserSession::try_from_slice(&v).unwrap();
         if ses.has_expired() {
@@ -386,25 +389,25 @@ impl Orchestrator {
     None
   }
 
-  pub fn is_admin(&self, usr_id: &str) -> bool {
-    self.admins.contains_key(usr_id.as_bytes()).unwrap_or(false)
+  pub fn is_admin(&self, usr_id: u64) -> bool {
+    self.admins.contains_key(&usr_id.to_be_bytes()).unwrap_or(false)
   }
 
   pub fn user_by_session(&self, req: &HttpRequest) -> Option<User> {
     if let Some(auth_cookie) = req.cookie("auth") {
       let sess_id = auth_cookie.value().to_string();
       if let Some(session) = self.get_session(&sess_id) {
-        return self.user_by_id(&session.usr_id);
+        return self.user_by_id(session.usr_id);
       }
     }
     None
   }
 
-  pub fn user_id_by_session(&self, req: &HttpRequest) -> Option<String> {
+  pub fn user_id_by_session(&self, req: &HttpRequest) -> Option<u64> {
     if let Some(auth_cookie) = req.cookie("auth") {
       let sess_id = auth_cookie.value().to_string();
       if let Some(session) = self.get_session(&sess_id) {
-        return Some(session.usr_id.clone());
+        return Some(session.usr_id);
       }
     }
     None
@@ -429,7 +432,7 @@ impl Orchestrator {
             }
           }
         }
-        let o_usr = self.user_by_id(&session.usr_id);
+        let o_usr = self.user_by_id(session.usr_id);
         if o_usr.is_some() {
           return (o_usr, cookie);
         }
@@ -442,8 +445,8 @@ impl Orchestrator {
     if let Some(auth_cookie) = req.cookie("auth") {
       let sess_id = auth_cookie.value().to_string();
       if let Some(session) = self.get_session(&sess_id) {
-        if self.is_admin(&session.usr_id) {
-          return self.user_by_id(&session.usr_id);
+        if self.is_admin(session.usr_id) {
+          return self.user_by_id(session.usr_id);
         }
       }
     }
@@ -454,7 +457,7 @@ impl Orchestrator {
     if let Some(auth_cookie) = req.cookie("auth") {
       let sess_id = auth_cookie.value().to_string();
       if let Some(session) = self.get_session(&sess_id) {
-        return self.is_admin(&session.usr_id);
+        return self.is_admin(session.usr_id);
       }
     }
     false
@@ -468,14 +471,21 @@ impl Orchestrator {
     false
   }
 
-  pub fn user_by_id(&self, id: &str) -> Option<User> {
-    if let Ok(Some(raw)) = self.users.get(id.as_bytes()) {
+  pub fn user_by_id(&self, id: u64) -> Option<User> {
+    if let Ok(Some(raw)) = self.users.get(&id.to_be_bytes()) {
       return Some(User::try_from_slice(&raw).unwrap());
     }
     None
   }
 
-  pub fn admin_by_id(&self, id: &str) -> Option<User> {
+  pub fn user_by_ivec(&self, id: IVec) -> Option<User> {
+    if let Ok(Some(raw)) = self.users.get(id) {
+      return Some(User::try_from_slice(&raw).unwrap());
+    }
+    None
+  }
+
+  pub fn admin_by_id(&self, id: u64) -> Option<User> {
     if self.is_admin(id) {
       return self.user_by_id(id);
     }
@@ -483,15 +493,15 @@ impl Orchestrator {
   }
 
   pub fn user_by_username(&self, username: &str) -> Option<User> {
-    if let Ok(Some(user_id)) = self.usernames.get(username.as_bytes()) {
-      return self.user_by_id(user_id.to_str());
+    if let Ok(Some(id)) = self.usernames.get(username.as_bytes()) {
+      return self.user_by_ivec(id);
     }
     None
   }
 
   pub fn user_by_handle(&self, handle: &str) -> Option<User> {
-    if let Ok(Some(user_id)) = self.handles.get(handle.as_bytes()) {
-      return self.user_by_id(user_id.to_str());
+    if let Ok(Some(id)) = self.handles.get(handle.as_bytes()) {
+      return self.user_by_ivec(id);
     }
     None
   }
@@ -520,9 +530,9 @@ impl Orchestrator {
 
     let res: TransactionResult<(), ()> =
       (&self.users, &self.usernames).transaction(|(users, usernames)| {
-        users.insert(usr.id.as_bytes(), usr.try_to_vec().unwrap())?;
+        users.insert(IVec::from_u64(usr.id), usr.try_to_vec().unwrap())?;
         usernames.remove(old_username.as_bytes())?;
-        usernames.insert(new_username.as_bytes(), usr.id.as_bytes())?;
+        usernames.insert(new_username.as_bytes(), IVec::from_u64(usr.id))?;
         Ok(())
       });
     res.is_ok()
@@ -537,9 +547,9 @@ impl Orchestrator {
     usr.handle = new_handle.to_string();
     let res: TransactionResult<(), ()> =
       (&self.users, &self.handles).transaction(|(users, handles)| {
-        users.insert(usr.id.as_bytes(), usr.try_to_vec().unwrap())?;
+        users.insert(&usr.id.to_be_bytes(), usr.try_to_vec().unwrap())?;
         handles.remove(old_handle.as_bytes())?;
-        handles.insert(new_handle.as_bytes(), usr.id.as_bytes())?;
+        handles.insert(new_handle.as_bytes(), &usr.id.to_be_bytes())?;
         Ok(())
       });
     res.is_ok()
@@ -548,11 +558,11 @@ impl Orchestrator {
   pub fn change_description(&self, usr: &mut User, new_desc: &str) -> bool {
     new_desc.len() > 1
     && self.user_descriptions
-        .insert(usr.id.as_bytes(), new_desc.as_bytes())
+        .insert(usr.id.to_be_bytes(), new_desc.as_bytes())
         .is_ok()
   }
 
-  pub fn make_admin(&self, usr_id: &str, level: u8, reason: Option<String>) -> bool {
+  pub fn make_admin(&self, usr_id: u64, level: u8, reason: Option<String>) -> bool {
     let attr = UserAttribute {
       aquired: unix_timestamp(),
       reason,
@@ -561,7 +571,7 @@ impl Orchestrator {
       (&self.user_attributes, &self.admins).transaction(|(usr_attrs, admins)| {
         let key = format!("{}:admin", usr_id);
         usr_attrs.insert(key.as_bytes(), attr.try_to_vec().unwrap())?;
-        admins.insert(usr_id.as_bytes(), &[level])?;
+        admins.insert(IVec::from_u64(usr_id), &[level])?;
         Ok(())
       });
     res.is_ok()
@@ -666,11 +676,11 @@ impl Orchestrator {
     res.is_ok()
   }
 
-  pub fn user_attributes(&self, usr_id: &str) -> Vec<String> {
+  pub fn user_attributes(&self, usr_id: u64) -> Vec<String> {
     let prefix = format!("{}:", usr_id);
     self
       .user_attributes
-      .scan_prefix(usr_id.as_bytes())
+      .scan_prefix(prefix.as_bytes())
       .keys()
       .filter_map(|res| {
         res.map_or(None, |key| {
@@ -704,7 +714,7 @@ impl Orchestrator {
     Some(true)
   }
 
-  pub fn user_has_some_attrs(&self, usr_id: &str, attrs: &[&str]) -> Option<bool> {
+  pub fn user_has_some_attrs(&self, usr_id: u64, attrs: &[&str]) -> Option<bool> {
     for attr in attrs {
       let key = format!("{}:{}", usr_id, attr);
       if let Ok(has_attr) = self.user_attributes.contains_key(key.as_bytes()) {
@@ -753,7 +763,7 @@ pub enum AuthError {
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
 pub struct User {
-  pub id: String,
+  pub id: u64,
   pub username: String,
   pub handle: String,
   pub reg: i64, // registration date
@@ -776,7 +786,7 @@ impl Default for UserAttribute {
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
 pub struct UserSession {
-  usr_id: String,
+  usr_id: u64,
   timestamp: i64,
   exp: i64,
 }
@@ -807,12 +817,12 @@ impl UserVerification {
 #[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
 pub struct MagicLink {
   pub code: String,
-  pub usr_id: String,
+  pub usr_id: u64,
   pub expiry: i64,
 }
 
 impl MagicLink {
-  fn new(usr_id: String) -> Self {
+  fn new(usr_id: u64) -> Self {
     MagicLink{
       code: random_string(20),
       usr_id,
@@ -883,7 +893,7 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
     if preauth_token.len() == 22 {
       if let Ok(res) = ORC.preauth_tokens.get(preauth_token.as_bytes()) {
           if let Some(raw) = res {
-            let usr_id = raw.to_string();
+            let usr_id = raw.to_u64();
             if let Ok(res) = ORC.users_primed_for_auth.remove(raw) {
               let forbidden = if let Some(raw) = res {
                 ORC.destroy_preauth_token(&preauth_token);
@@ -968,7 +978,7 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
       if preauth_token.len() == 22 {
         if let Ok(res) = ORC.preauth_tokens.get(preauth_token.as_bytes()) {
           if let Some(raw) = res {
-            let usr_id = raw.to_string();
+            let usr_id = raw.to_u64();
             if usr_id == usr.id {
               ORC.destroy_preauth_token(&preauth_token);
   
@@ -1015,7 +1025,7 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
       let priming_expiry_time: i64 = unix_timestamp() + (1000 * 60);
 
       if ORC.users_primed_for_auth.insert(
-        usr.id.as_bytes(),
+        usr.id.to_be_bytes(),
         &priming_expiry_time.to_be_bytes()
       ).is_ok() {
         let mut ctx = tera::Context::new();
@@ -1084,7 +1094,7 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
 
   if let Ok(res) = ORC.usernames.get(ar.username.as_bytes()) {
     if let Some(raw) = res {
-      let usr_id = raw.to_string();
+      let usr_id = raw.to_u64();
       if let Ok(Some(raw)) = ORC.user_email_index.get(raw) {
         if raw.to_string() != ar.email {
           return crate::responses::Forbidden(
@@ -1095,11 +1105,11 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
 
       if let Some(msg) = ORC.create_magic_link_email(
         false,
-        usr_id.clone(),
+        usr_id,
         ar.username.clone(),
         ar.email.clone(),
       ) {
-        if let Some(preauth_token) = ORC.create_preauth_token(&usr_id) {
+        if let Some(preauth_token) = ORC.create_preauth_token(usr_id) {
           if crate::email::send_email(&msg) {
             return HttpResponse::Accepted()
             .cookie(
@@ -1141,11 +1151,11 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
 
     if let Some(msg) = ORC.create_magic_link_email(
       true,
-      usr.id.clone(),
+      usr.id,
       ar.username.clone(),
       ar.email.clone(),
     ) {
-      if let Some(preauth_token) = ORC.create_preauth_token(&usr.id) {
+      if let Some(preauth_token) = ORC.create_preauth_token(usr.id) {
         if crate::email::send_email(&msg) {
           return HttpResponse::Accepted()
             .cookie(
