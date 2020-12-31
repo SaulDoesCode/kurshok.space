@@ -233,6 +233,39 @@ main > section {
   color:hsl(0, 0%, 68%);
 }
 
+.tag-filter > input[name="tags"] {
+  max-width: 120px;
+  padding: .25em .5em;
+  margin: .5em;
+  color: #fff;
+  background: hsl(0, 0%, 25%);
+}
+
+.tag-list-container {
+  display: flex;
+  justify-content: flex-start;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+}
+
+.tag-list-container .list {
+  margin: 0 .5em;
+}
+
+.tag-list-container .list > .tag {
+  cursor: not-allowed;
+}
+
+.tag-list-container button {
+  background: hsl(0, 0%, 20%);
+  border: 1px solid hsl(0, 0%, 40%);
+  color: var(--primary-color);
+  padding: .1em .25em;
+  margin: 0 .5em;
+  cursor: pointer;
+}
+
 .post-list {
   display: flex;
   justify-content: space-around;

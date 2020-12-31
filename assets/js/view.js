@@ -1,7 +1,7 @@
 import app from '/js/site.min.js'
 import route from '/js/router.min.js'
 const d = app.d, df = d.domfn
-const {div, article, a, p, button, hr, h1, h4, section, span, header} = df
+const {div, input, button, article, a, p, hr, h1, h4, section, span, header} = df
 
 const mainView = d.query('main[route-active]')
 
@@ -25,8 +25,177 @@ pd => {
     `.renderCollect(pd)
 })
 
+app.postQuery = {
+    page: 0,
+    amount: 8,
+    kind: 'post',
+    public: true
+}
 
-route('posts', contentDisplay)
+const postFilterView = div({class: 'post-filter'}, pf => [
+    section({class: 'tag-filter'}, 
+        header('Tag filter'),
+        pf.tagInput = input({
+            attr: {
+                type: 'text',
+                name: 'tags',
+                pattern: '[a-zA-Z0-9-, ]+'
+            },
+            onkeydown(e, el) {
+                if (e.key == 'Enter' && el.value.length > 1) {
+                    let value = el.value.replace(' ', '')
+                    if (value.includes(',')) {
+                        value = value.split(',')
+                    }
+                    postFilterView.collectTags(value)
+                    el.value = ''
+                    el.commas = 0
+                    el.lastInput = undefined
+                }
+            },
+            oninput(e, el) {
+                if (e.data == null) {
+                    el.commas = (el.value.match(/,/g) || []).length
+                    e.lastInput = el.value[el.value.length - 1]
+                    return
+                }
+
+                if (e.data == ' ') {
+                    const vl = el.value.length
+                    console.log(`el.value = ${el.value} && len = ${vl}`)
+                    if (!vl || el.value[vl - 2] != ',') {
+                        el.value = el.value.slice(0, -1)
+                    }
+                } else if (e.data == ',') {
+                    if (el.lastInput == ',' || el.lastInput == '-') {
+                        el.value = el.value.slice(0, -1)
+                    } else if (el.value.length === 1) {
+                        el.value = ''
+                    } else {
+                        el.commas ? el.commas++ : el.commas = 1
+
+                        if (el.commas > 1) {
+                            el.value = [...new Set(
+                                el.value.split(',')
+                                .map(tag => tag.trim())
+                                .filter(tag =>
+                                    tag.length > 1 && tag.length < 23 &&
+                                    tag.search(app.tagRegex) !== -1
+                                )
+                            )].join(', ') + ', '
+                            el.commas = (el.value.match(/,/g) || []).length
+                            e.lastInput = el.value[el.value.length - 1]
+                            console.log('it happened')
+                        } else {
+                            e.lastInput = e.data
+                        }
+                    }
+                } else if (e.data == '-') {
+                    if (el.value.length == 1) {
+                        el.value = ''
+                    } else if (el.value[el.value.length - 2] == ',') {
+                        el.value = el.value.slice(0, -1)
+                    } else {
+                        el.lastInput = '-'
+                    }
+                } else if (!e.data.match(/[a-zA-Z0-9, -]/)) {
+                    el.value = el.value.slice(0, -1)
+                } else {
+                    el.lastInput = e.data
+                }
+            }
+        }),
+        pf.tagListContainer = div({
+            attr: {hidden: true},
+            class: 'tag-list-container'
+        },
+            pf.tagListDisplay = div({
+                class: 'list',
+            }),
+            button({
+                onclick() {
+                    pf.runQuery()
+                }
+            }, 'query'),
+            pf.clearBtn = button({
+                attr: {hidden: true},
+                onclick(e, el) {
+                    pf.tags = []
+                    delete app.postQuery.tags
+                    app.postQuery.page = 0
+                    pf.collectTags()
+                    app.postFilter({})
+                    el.setAttribute('hidden', true)
+                }
+            }, 'clear')
+        )
+    )
+])
+
+postFilterView.runQuery = (with_tag) => {
+    postFilterView.collectTags(with_tag)
+    if (postFilterView.tags && postFilterView.tags.length) {
+        app.filterQuery = true
+        app.postFilter({
+            tags: postFilterView.tags
+        })
+        postFilterView.clearBtn.removeAttribute('hidden')
+    }
+}
+
+postFilterView.collectTags = (newTag) => {
+    if (!postFilterView.tags) postFilterView.tags = []
+    if (d.isArr(newTag)) {
+        newTag.forEach(t => {
+            if (typeof t == 'string' && t.length > 1) {
+                postFilterView.tags.push(t)
+            }
+        })
+    } else if (typeof newTag == 'string' && newTag.length > 1) {
+        postFilterView.tags.push(newTag)
+    }
+
+    postFilterView.tags = [...new Set(postFilterView.tags)]
+        .map(tag => tag.trim())
+        .filter(tag => 
+            tag.length > 1 && tag.length < 23 &&
+            tag.search(app.tagRegex) !== -1
+        )
+    
+    df.attrToggle(postFilterView.tagListContainer, 'hidden', !postFilterView.tags.length)
+
+    const alreadyThere = []
+    d.each(postFilterView.tagListDisplay.children, el => {
+        if (!postFilterView.tags.includes(el.title)) {
+            df.remove(el)
+        } else {
+            alreadyThere.push(el.title)
+        }
+    })
+
+    postFilterView.tags.forEach(tag => {
+        if (alreadyThere.includes(tag)) return
+
+        span({
+            $: postFilterView.tagListDisplay,
+            class: 'tag',
+            title: tag,
+            onclick(e, el) {
+                postFilterView.tags = postFilterView.tags.filter(t => t != tag)
+                df.remove(el)
+
+                df.attrToggle(postFilterView.tagListContainer, 'hidden', !postFilterView.tags.length)
+            }
+        }, tag)
+    })
+
+    return postFilterView.tags
+}
+
+app.tagRegex = /^[a-zA-Z0-9-]+$/
+
+route('posts', [contentDisplay, postFilterView])
+
 if (location.hash == '' || location.hash == '#') {
     location.hash = 'posts'
     route.handle()
@@ -80,7 +249,11 @@ route.on.post(async hash => {
     date.innerHTML = ''
     d.render(app.renderUXTimestamp(post.posted), date)
     tags.innerHTML = ''
-    post.tags.map(tag => df.span({$: tags, attr:{title: tag}, class:'tag'}, tag))
+    post.tags.map(tag => span({
+        $: tags,
+        class: 'tag',
+        attr: {title: tag},
+    }, tag))
     author.textContent = 'By ' + post.author_name
     content.innerHTML = 'Content loading...'
     if (app.commentsDisplay) df.remove(app.commentsDisplay)
@@ -109,6 +282,13 @@ const publicPost = w => div({
     attr: {pid: w.id},
     onclick(e, el) {
         if (e.target.className.includes('vote')) return
+        if (e.target.classList.contains('tag')) {
+            let tag = e.target.getAttribute('title')
+            if (tag != null) {
+                postFilterView.runQuery(tag)
+            }
+            return
+        }
         location.hash = w.id
     }
 }, pubPost => {
@@ -186,7 +366,22 @@ app.postPaginationView = section({
     ),
 )
 
-app.fetchPosts = async (page = 0, amount = 6) => {
+app.fetchPosts = async (...args) => {
+    if (args.length) {
+        if (d.isNum(args[0])) {
+            app.postQuery.page = args[0]
+            if (d.isNum(args[1])) {
+                app.postQuery.amount = args[1]
+            }
+        }
+    }
+
+    try {
+        if (!app.postQuery.tags.length) {
+            delete app.postQuery.tags
+        }
+    } catch(e) {}
+
     if (route.hash() == 'no-content') {
         if (!app.failedToFetchPosts) {
             location.hash = 'posts'
@@ -200,24 +395,21 @@ app.fetchPosts = async (page = 0, amount = 6) => {
     }
 
     let writs
-    if (d.isArr(app.postPages[page])) {
+    if (d.isArr(app.postPages[app.postQuery.page])) {
         postListView.innerHTML = ''
         let i = 0
-        for (const wid of app.postPages[page]) {
+        for (const wid of app.postPages[app.postQuery.page]) {
             publicPost(app.posts[wid])
-            if (++i >= amount) break
+            if (++i >= app.postQuery.amount) break
         }
     } else {
         try {
             writs = await app.writQuery({
                 with_content: false,
-                kind: 'post',
-                amount,
-                public: true,
-                page
+                ...app.postQuery
             })
             if (!d.isArr(writs)) {
-                if (page == 0) {
+                if (app.postQuery.page == 0 && !app.filterQuery) {
                     mainView.innerHTML = ''
                     app.failedToFetchPosts = true
                     location.hash = 'no-content'
@@ -225,6 +417,8 @@ app.fetchPosts = async (page = 0, amount = 6) => {
                 }
                 console.error(writs)
                 throw new Error(writs.status)
+            } else {
+                app.failedToFetchPosts = false
             }
         } catch(e) {
             app.postPageForwardBtn.style.color = 'red'
@@ -235,7 +429,7 @@ app.fetchPosts = async (page = 0, amount = 6) => {
             }, 3000)
 
             if (location.hash.includes('post:')) {
-                if (page == 0) {
+                if (app.postQuery.page == 0) {
                     app.failedToFetchPosts = true
                     location.hash = 'no-content'
                     route.handle()
@@ -243,17 +437,16 @@ app.fetchPosts = async (page = 0, amount = 6) => {
                     location.hash = 'posts'
                     route.handle()
                 }
-            } else if (page == 0) {
+            } else if (app.postQuery.page == 0 && !app.filterQuery) {
                 mainView.innerHTML = ''
                 app.failedToFetchPosts = true
                 location.hash = 'no-content'
                 route.handle()
             }
 
-
             return
         }
-        app.postPages[page] = []
+        app.postPages[app.postQuery.page] = []
         postListView.innerHTML = ''
 
         if (writs.length >= 5) {
@@ -262,14 +455,14 @@ app.fetchPosts = async (page = 0, amount = 6) => {
 
         writs //.sort((w0, w1) => w1.posted - w0.posted)
             .forEach(w => {
-                w.page = page
-                app.postPages[page].push(w.id)
+                w.page = app.postQuery.page
+                app.postPages[app.postQuery.page].push(w.id)
                 publicPost(app.posts[w.id] = w)
             })
     }
-    app.emit.activePostPage(app.activePostPage = page)
-    app.pageNumView.textContent = page
-    app.cv('pageNot0', page != 0)
+    app.emit.activePostPage(app.activePostPage = app.postQuery.page)
+    app.pageNumView.textContent = app.postQuery.page
+    app.cv('pageNot0', app.postQuery.page != 0)
     if (!app.postsInitialized) {
         app.emit.postsInitialized(app.postsInitialized = true)
         app.loadStyle('https://cdnjs.cloudflare.com/ajax/libs/prism/1.21.0/themes/prism-tomorrow.min.css', true)
@@ -285,6 +478,27 @@ app.on.newPost(() => {
     postListView.innerHTML = ''
     app.fetchPosts()
 })
+
+app.postFilter = async filter => {
+    if (filter.tags) {
+        app.postQuery.tags = filter.tags
+    }
+
+    app.posts = Object.create(null)
+    app.postPages = Object.create(null)
+    postListView.innerHTML = ''
+    await app.fetchPosts()
+
+    if (!Object.keys(app.posts).length) {
+        const foundNada = df.h2('404 - No matching posts found :(')
+        d.render(foundNada, 'section.posts', 'prepend')
+        d.once.click(postFilterView, () => {
+            df.remove(foundNada)
+        })
+    }
+
+    app.filterQuery = false
+}
 
 app.afterPostsInitialization = fn => app.postsInitialized ?
     (fn != null ? fn() : Promise.resolve(true)) : 
