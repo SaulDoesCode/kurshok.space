@@ -38,17 +38,21 @@ impl Orchestrator {
     writ_id: &WritID,
     tags: &[String],
   ) -> ConflictableTransactionResult<(), ()> {
-    let mut id = String::new();
+    let wid_vec = writ_id.to_bin();
+    let wid = wid_vec.as_slice();
     for tag in tags.iter() {
-      id = format!("{}:{}", &tag, id);
+      let mut id: Vec<u8> = vec![];
+      id.extend_from_slice(tag.as_bytes());
+      id.extend_from_slice(b":");
+      id.extend_from_slice(wid);
+
       let count: u64 = match tag_counter.get(tag.as_bytes())? {
         Some(raw_count) => raw_count.to_u64(),
         None => 0,
       };
       tag_counter.insert(tag.as_bytes(), &(count + 1).to_be_bytes())?;
+      tags_index.insert(id, writ_id.to_bin().as_slice())?;
     }
-    id = format!("{}:{}", id, writ_id.to_string());
-    tags_index.insert(id.as_bytes(), writ_id.to_bin())?;
     Ok(())
   }
 
@@ -71,9 +75,13 @@ impl Orchestrator {
     writ_id: &WritID, 
     tags: &[String]
   ) -> ConflictableTransactionResult<(), ()> {
-    let mut id = String::new();
+    let wid_vec = writ_id.to_bin();
+    let wid = wid_vec.as_slice();
     for tag in tags.iter() {
-      id = format!("{}:{}", &tag, id);
+      let mut id: Vec<u8> = vec![];
+      id.extend_from_slice(tag.as_bytes());
+      id.extend_from_slice(b":");
+      id.extend_from_slice(wid);
       let count: u64 = match tag_counter.get(tag.as_bytes())? {
         Some(raw_count) => raw_count.to_u64(),
         None => return Err(sled::transaction::ConflictableTransactionError::Abort(())),
@@ -83,9 +91,8 @@ impl Orchestrator {
       } else {
         tag_counter.insert(tag.as_bytes(), IVec::from_u64(count - 1))?;
       }
+      tags_index.remove(id)?;
     }
-    id = format!("{}:{}", id, writ_id.to_string());
-    tags_index.remove(id.as_bytes())?;
     Ok(())
   }
 
@@ -236,24 +243,36 @@ impl Orchestrator {
       }
 
       if !date_scan {
-        let posted = datetime_from_unix_timestamp(writ.posted);
+        let mut posted = None;
         if let Some(y) = &query.year {
-          if posted.year() != *y {
+          if posted.is_none() {
+            posted = Some(datetime_from_unix_timestamp(writ.posted));
+          }
+          if posted.as_ref().unwrap().year() != *y {
             return false;
           }
         }
         if let Some(m) = &query.month {
-          if posted.month() != *m {
+          if posted.is_none() {
+            posted = Some(datetime_from_unix_timestamp(writ.posted));
+          }
+          if posted.as_ref().unwrap().month() != *m {
             return false;
           }
         }
         if let Some(d) = &query.day {
-          if posted.day() != *d {
+          if posted.is_none() {
+            posted = Some(datetime_from_unix_timestamp(writ.posted));
+          }
+          if posted.as_ref().unwrap().day() != *d {
             return false;
           }
         }
         if let Some(h) = &query.hour {
-          if posted.hour() != *h {
+          if posted.is_none() {
+            posted = Some(datetime_from_unix_timestamp(writ.posted));
+          }
+          if posted.as_ref().unwrap().hour() != *h {
             return false;
           }
         }
@@ -272,13 +291,20 @@ impl Orchestrator {
             }
           }
         } else if let Some(viewable_by) = &query.viewable_by {
-          if let Some(attrs) = &user_attributes {
-            if !viewable_by.iter().all(|a| attrs.contains(a)) {
+          if !writ.public {
+            return false;
+          }
+
+          let usr_attrs = match &user_attributes {
+            Some(attrs) => attrs,
+            None => return false,
+          };
+
+          for attr in viewable_by.iter() {
+            if !writ.viewable_by.contains(attr) || !usr_attrs.contains(attr) {
               return false;
             }
-          } else {
-            return false;
-          };
+          }
         }
       } else if !writ.public {
         return false;
@@ -350,19 +376,62 @@ impl Orchestrator {
           }
         }
 
-        let wid= match WritID::from_str(id) {
+        let writ_id= match WritID::from_str(id) {
           Some(wid) => wid,
           None => continue,
         };
+        let wid_vec = writ_id.to_bin();
+        let wid = wid_vec.as_slice();
 
-        let writ = match self.writs.get(&wid.to_bin()) {
-          Ok(raw) => Writ::try_from_slice(&raw.unwrap()).unwrap(),
-          Err(_) => continue,
+        let writ = match self.writs.get(wid) {
+          Ok(Some(raw)) => Writ::try_from_slice(&raw).unwrap(),
+          Ok(None) | Err(_) => continue,
         };
 
         if check_writ_against_query(&writ, false) {
           count += 1;
           writs.push(writ);
+        }
+      }
+    } else if let Some(tags) = &query.tags {
+      if let Some(first) = tags.first() {
+        let mut partial_id = first.as_bytes().to_vec();
+        partial_id.extend_from_slice(b":");
+        partial_id.extend_from_slice(query.kind.as_bytes());
+        if let Some(author_id) = &query.author_id {
+          partial_id.extend_from_slice(&author_id.to_be_bytes());
+        }
+        
+        let mut ti_iter = self.tags_index.scan_prefix(partial_id);
+
+        let skip_n = query.page * amount;
+        while let Some(Ok((_, wid))) = ti_iter.next_back() {
+          if (query.page == 0 && count == amount) || 
+             (count > skip_n && count - skip_n == amount)
+          { 
+              break;
+          }
+
+          if let Some(skip_ids) = &query.skip_ids {
+            let writ_id = WritID::from_bin(&wid);
+            if skip_ids.contains(&writ_id.to_string()) {
+              continue;
+            }
+          }
+
+          if let Ok(Some(raw)) = self.writs.get(wid) {
+            let writ = Writ::try_from_slice(&raw).unwrap();
+            if check_writ_against_query(&writ, false) {
+              count += 1;
+              if query.page == 0 || (query.page > 0 && count > skip_n) {
+                writs.push(writ);
+              }
+            }
+          }
+        }
+
+        if writs.len() > 0 {
+          return Some(writs);
         }
       }
     } else {
@@ -645,11 +714,24 @@ impl WritID {
   }
 
   pub fn from_bin(bin: &[u8]) -> Self {
-    let kind: [u8; 4] = (&bin[..4]).try_into().unwrap();
-    let author = u64::from_be_bytes((&bin[4..8]).try_into().unwrap());
-    let id = u64::from_be_bytes((&bin[8..12]).try_into().unwrap());
+    let kind: [u8; 4] = (&bin[0..4]).try_into().unwrap();
+    let author = u64::from_be_bytes((&bin[4..12]).try_into().unwrap());
+    let id = u64::from_be_bytes((&bin[12..20]).try_into().unwrap());
 
     Self{kind, author, id}
+  }
+
+  pub fn from_bin_safe(bin: &[u8]) -> Option<Self> {
+    if let Ok(kind) = (&bin[0..4]).try_into() {
+      if let Ok(author_bytes) = (&bin[4..12]).try_into() {
+        if let Ok(id_bytes) = (&bin[12..20]).try_into() {
+          let author = u64::from_be_bytes(author_bytes);
+          let id = u64::from_be_bytes(id_bytes);
+          return Some(Self{kind, author, id});
+        }
+      }
+    }
+    None
   }
 
   pub fn new(kind: &[u8], author: u64) -> Option<Self> {
@@ -1080,7 +1162,7 @@ impl RawWrit {
     }
 
     let tags: Vec<String> = self.tags.iter()
-      .map(|t| t.trim().replace("  ", "-").replace(" ", "-"))
+      .map(|t| t.trim().replace("  ", "-").replace(" ", "-").replace("--", "-"))
       .collect();
 
     if !RawWrit::are_tags_valid(&tags) {
@@ -1166,112 +1248,109 @@ impl RawWrit {
       &ORC.tags_index,
       &ORC.tag_counter,
       &ORC.comment_settings,
-    )
-      .transaction(
-        |(
-          ctn,
-          raw_ctn,
-          titles,
-          slugs,
-          dates,
-          votes,
-          writs,
+    ).transaction(|(
+      ctn,
+      raw_ctn,
+      titles,
+      slugs,
+      dates,
+      votes,
+      writs,
+      tags_index,
+      tag_counter,
+      comment_settings,
+    )| {
+      let wid_vec = writ_id.to_bin();
+      let wid = wid_vec.as_slice();
+
+      let mut new_writ = writ.clone();
+
+      if writ.is_md {
+        raw_ctn.insert(wid, raw_content.as_bytes())?;
+        ctn.insert(wid, render_md(raw_content).as_bytes())?;
+      } else {
+        ctn.insert(wid, raw_content.as_bytes())?;
+      }
+
+      if is_new_writ {
+        ORC.index_writ_tags_in_transaction(
           tags_index,
           tag_counter,
-          comment_settings,
-        )| {
-          let wid_vec = writ_id.to_bin();
-          let wid = wid_vec.as_slice();
+          &writ_id,
+          new_writ.tags.as_slice()
+        )?;
 
-          let mut new_writ = writ.clone();
+        titles.insert(new_writ.title_key().as_bytes(), wid)?;
+        slugs.insert(new_writ.slug_key().as_bytes(), wid)?;
 
-          if writ.is_md {
-            raw_ctn.insert(wid, raw_content.as_bytes())?;
-            ctn.insert(wid, render_md(raw_content).as_bytes())?;
-          } else {
-            ctn.insert(wid, raw_content.as_bytes())?;
-          }
+        dates.insert(new_writ.date_key().as_bytes(), wid)?;
 
-          if is_new_writ {
-            ORC.index_writ_tags_in_transaction(
-              tags_index,
-              tag_counter,
-              &writ_id,
-              new_writ.tags.as_slice()
-            )?;
+        votes.insert(wid, &0i64.to_be_bytes())?;
 
-            titles.insert(new_writ.title_key().as_bytes(), wid)?;
-            slugs.insert(new_writ.slug_key().as_bytes(), wid)?;
+        comment_settings.insert(
+          wid,
+          CommentSettings::default(new_writ.public)
+            .try_to_vec()
+            .unwrap(),
+        )?;
+      } else {
+        let old_writ = Writ::try_from_slice(&writs.get(wid)?.unwrap()).unwrap();
 
-            dates.insert(new_writ.date_key().as_bytes(), wid)?;
+        if new_writ.kind != old_writ.kind
+          || new_writ.title != old_writ.title
+          || new_writ.slug != old_writ.slug
+        {
+          writs.remove(wid)?;
+          titles.remove(old_writ.title_key().as_bytes())?;
+          titles.insert(new_writ.title_key().as_bytes(), wid)?;
 
-            votes.insert(wid, &0i64.to_be_bytes())?;
+          slugs.remove(old_writ.slug_key().as_bytes())?;
+          slugs.insert(new_writ.slug_key().as_bytes(), wid)?;
 
-            comment_settings.insert(
-              wid,
-              CommentSettings::default(new_writ.public)
-                .try_to_vec()
-                .unwrap(),
-            )?;
-          } else {
-            let old_writ = Writ::try_from_slice(&writs.get(wid)?.unwrap()).unwrap();
+          let settings = CommentSettings::try_from_slice(
+            &comment_settings.get(wid)?.unwrap()
+          ).unwrap();
+          comment_settings.insert(wid, settings.try_to_vec().unwrap())?;
+        }
 
-            if new_writ.kind != old_writ.kind
-              || new_writ.title != old_writ.title
-              || new_writ.slug != old_writ.slug
-            {
-              writs.remove(wid)?;
-              titles.remove(old_writ.title_key().as_bytes())?;
-              titles.insert(new_writ.title_key().as_bytes(), wid)?;
+        if new_writ.tags != old_writ.tags {
+          ORC.remove_indexed_writ_tags_in_transaction(
+            tags_index,
+            tag_counter,
+            &writ_id,
+            old_writ.tags.as_slice()
+          )?;
 
-              slugs.remove(old_writ.slug_key().as_bytes())?;
-              slugs.insert(new_writ.slug_key().as_bytes(), wid)?;
+          ORC.index_writ_tags_in_transaction(
+            tags_index,
+            tag_counter,
+            &writ_id,
+            new_writ.tags.as_slice()
+          )?;
+        }
 
-              let settings = CommentSettings::try_from_slice(
-                &comment_settings.get(wid)?.unwrap()
-              ).unwrap();
-              comment_settings.insert(wid, settings.try_to_vec().unwrap())?;
-            }
+        if old_writ.is_md && !new_writ.is_md {
+          raw_ctn.remove(wid)?;
+        }
 
-            if new_writ.tags != old_writ.tags {
-              ORC.remove_indexed_writ_tags_in_transaction(
-                tags_index,
-                tag_counter,
-                &writ_id,
-                old_writ.tags.as_slice()
-              )?;
+        if new_writ.posted != old_writ.posted {
+          new_writ.posted = old_writ.posted;
+          // dates.remove(old_writ.date_key().as_bytes())?;
+          // dates.insert(writ.date_key().as_bytes(), writ_id)?;
+        }
+      }
 
-              ORC.index_writ_tags_in_transaction(
-                tags_index,
-                tag_counter,
-                &writ_id,
-                new_writ.tags.as_slice()
-              )?;
-            }
+      writs.insert(wid, new_writ.try_to_vec().unwrap())?;
 
-            if old_writ.is_md && !new_writ.is_md {
-              raw_ctn.remove(wid)?;
-            }
-
-            if new_writ.posted != old_writ.posted {
-              new_writ.posted = old_writ.posted;
-              // dates.remove(old_writ.date_key().as_bytes())?;
-              // dates.insert(writ.date_key().as_bytes(), writ_id)?;
-            }
-          }
-
-          writs.insert(wid, new_writ.try_to_vec().unwrap())?;
-
-          Ok(())
-        },
-      );
+      Ok(())
+    });
 
     match res {
       Ok(_) => Ok(writ),
-      Err(_) => {
-        /* if self.dev_mode {
-          println!("writ creation pooped out: {}", err);
-        } */
+      Err(e) => {
+        if ORC.dev_mode {
+          println!("writ creation pooped out: {:?}", e);
+        }
         Err(WritError::DBIssue)
       }
     }
@@ -1317,9 +1396,10 @@ impl CommentSettings {
   pub fn default(public: bool) -> Self {
     Self {
       public,
-      visible_to: None,
+      visible_to: None, // everyone
       min_comment_length: Some(5),
       max_comment_length: Some(8000),
+      // TODO: impliment this
       disqualified_strs: None,
       hide_when_vote_below: Some(10),
       max_level: Some(32),
