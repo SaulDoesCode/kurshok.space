@@ -26,6 +26,8 @@
     <link rel="stylesheet" href="/css/postauth.min.css">
     {% endif %}
     <script src="/js/view.min.js" type="module"></script>
+    <template-file route="books" src="/books.html"></template-file>
+    <template-file route="whats-in-the-name" src="/whats-in-the-name.html"></template-file>
 </head>
 <body>
     <nav class="hero">
@@ -41,8 +43,12 @@
         </nav>
 
         <header>
-            <h1>Kurshok</h1>
-            <div>For the brainsick ones</div>
+            <h1 onclick="location.hash='posts'">Kurshok</h1>
+            <div>
+                <a route-link="whats-in-the-name" href="#whats-in-the-name">
+                    For the brainsick ones
+                </a>
+            </div>
         </header>
 
         <section class="launchers">
@@ -82,8 +88,6 @@
     </nav>
 
     <main class="content-display" route-active></main>
-
-    <template-file route="books" src="/books.html"></template-file>
 
 {% include "footer.html" %}
 </body>
