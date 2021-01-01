@@ -106,9 +106,11 @@ export default (d => {
   }
 
   d.html = (input, ...args) => {
-    if (args.length == 2) host = args[0]
-    else if (args.length > 2) return d.h(input, ...args)
-    if (input instanceof Function) input = input(host)
+    if (args.length > 2) return d.h(input, ...args)
+    if (input instanceof Function) input = input(...args)
+    if (input instanceof Promise) return new Promise(resolve => {
+      input.then(i => resolve(d.html(i, ...args)))
+    })
     if (input instanceof Node) return input
     if (d.isNum(input)) input = String(input)
     if (typeof input === 'string') return Array.from(document.createRange().createContextualFragment(input).childNodes)
