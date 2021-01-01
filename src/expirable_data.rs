@@ -1,18 +1,18 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use dashmap::DashMap;
+use parking_lot::RwLock;
 use rayon::prelude::*;
 use sled::{transaction::*, IVec, Transactional};
 
 use std::{
     thread,
-    collections::BTreeMap
+    collections::{HashSet, BTreeMap}
 };
 
 use crate::orchestrator::{Orchestrator, ORC};
 use crate::utils::{unix_timestamp, FancyIVec};
 
 lazy_static! {
-  static ref EXPIRY_TIMES: DashMap<i64, ()> = DashMap::new();
+  static ref EXPIRY_TIMES: RwLock<HashSet<i64>> = RwLock::new(HashSet::new());
 }
 
 impl Orchestrator {
@@ -24,7 +24,7 @@ impl Orchestrator {
             data.try_to_vec().unwrap(),
             IVec::from_i64(exp)
         ).map_or(false, |_| {
-            EXPIRY_TIMES.insert(exp, ());
+            (EXPIRY_TIMES.write()).insert(exp);
             true
         })
     }
@@ -37,7 +37,7 @@ impl Orchestrator {
             data.try_to_vec().unwrap(),
             IVec::from_i64(exp)
         ).map_or(false, |_| {
-            EXPIRY_TIMES.insert(exp, ());
+            (EXPIRY_TIMES.write()).insert(exp);
             true
         })
     }
@@ -50,21 +50,70 @@ impl Orchestrator {
             data.try_to_vec().unwrap(),
             IVec::from_i64(exp)
         ).map_or(false, |_| {
-            EXPIRY_TIMES.insert(exp, ());
+            (EXPIRY_TIMES.write()).insert(exp);
             true
         })
     }
 
     pub fn unexpire_data(&self, data: ExpirableData) -> Option<IVec> {
         if let Ok(o_exp) = self.expirable_data.remove(data.try_to_vec().unwrap()) {
-            o_exp.map(|exp| {
-                EXPIRY_TIMES.remove(&exp.to_i64());
-                exp
+            o_exp.map(|raw| {
+                let exp = raw.to_i64();
+                (*EXPIRY_TIMES.write()).remove(&exp);
+                raw
             })
         } else {
             None
         }
     }
+}
+
+fn expirable_data_into_map(map: &mut BTreeMap<String, Vec<Vec<u8>>>, data: ExpirableData) {
+    match data {
+        ExpirableData::Single{tree, key} => {
+            if let Some(keys) = map.get_mut(&tree) {
+                keys.push(key);
+            } else {
+                map.insert(tree, vec![key]);
+            }
+        },
+        ExpirableData::MultiKey{tree, keys} => {
+            if let Some(new_keys) = map.get_mut(&tree) {
+                for key in keys {
+                    new_keys.push(key);
+                }
+            } else {
+                map.insert(tree, keys);
+            }
+        },
+        ExpirableData::MultiTree(old_map) => {
+            map.extend(old_map);
+        }
+    }
+}
+
+fn expirable_data_to_map(data: ExpirableData) -> BTreeMap<String, Vec<Vec<u8>>> {
+    let mut map = BTreeMap::new();
+    match data {
+        ExpirableData::Single{tree, key} => {
+            map.insert(tree, vec![key]);
+        },
+        ExpirableData::MultiKey{tree, keys} => {
+            map.insert(tree, keys);
+        },
+        ExpirableData::MultiTree(old_map) => {
+            map.extend(old_map);
+        }
+    }
+
+    map
+}
+
+fn merge_expirable_data(data: ExpirableData, old_data: ExpirableData) -> ExpirableData {
+    let mut map = expirable_data_to_map(old_data);
+    expirable_data_into_map(&mut map, data);
+
+    ExpirableData::MultiTree(map)
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -78,100 +127,120 @@ pub fn start_system() -> thread::JoinHandle<()> {
     let mut iter = ORC.expirable_data.iter();
     while let Some(Ok((_, exp))) = iter.next() {
         let exp = exp.to_i64();
-        EXPIRY_TIMES.insert(exp, ());
+        (EXPIRY_TIMES.write()).insert(exp);
     }
-    clean_up();
+    clean_up_all();
 
     thread::spawn(|| {
         loop {
             let now = unix_timestamp();
-            if EXPIRY_TIMES.par_iter().any(|e| now >= *e.key()) {
-                clean_up()
+            if EXPIRY_TIMES.read().par_iter().any(|e| now >= *e) {
+                clean_up_all();
             }
             thread::sleep(std::time::Duration::from_secs(1));
         }
     })
 }
 
-pub fn clean_up() {
-    let mut expired_list = vec!();
+pub fn clean_up_all() {
+    let mut for_removal: Vec<i64> = vec![];
 
     let mut iter = ORC.expirable_data.iter();
-    while let Some(Ok((raw_data, exp))) = iter.next() {
+    while let Some(Ok((raw_data, raw_exp))) = iter.next() {
         let now = unix_timestamp();
-        let exp = exp.to_i64();
+        let exp = raw_exp.to_i64();
         if ORC.dev_mode {
-            println!("found something expirable now = {} > exp = {} == {}", now, exp, now == exp);
+            println!(
+                "found something expirable now = {} >= exp = {} == {}",
+                now, exp, now >= exp
+            );
         }
 
         if now >= exp {
-            let data = ExpirableData::try_from_slice(&raw_data).unwrap();
-            expired_list.push(raw_data);
-            match data {
-                ExpirableData::Single{tree, key} => {
-                    if let Ok(tr) = ORC.db.open_tree(tree.as_bytes()) {
-                        if let Ok(Some(_)) = tr.remove(key.as_slice()) {}
-                    }
-                },
-                ExpirableData::MultiKey{tree, keys} => {
-                    if let Ok(tr) = ORC.db.open_tree(tree.as_bytes()) {
-                        let res: TransactionResult<(), ()> = tr.transaction(|tr| {
-                            for key in keys.iter() {
-                                tr.remove(key.as_slice())?;
-                            }
-                            Ok(())
-                        });
-                        if ORC.dev_mode {
-                            let ok = if res.is_ok() {
-                                "ok"
-                            } else {
-                                "not ok"
-                            };
-                            println!("removing keys from tree - {} went {}", tree, ok);
-                        }
-                    } else if ORC.dev_mode {
-                        println!("ExpirableData::MultiKey couldn't open tree - {}", &tree);
-                    }
-                },
-                ExpirableData::MultiTree(map) => {
-                    if ORC.dev_mode {
-                        println!("going in for the big multi-tree expiry - {:?}", &map);
-                    }
-
-                    let mut trees = vec!();
-                    for tree in map.keys() {
-                        if let Ok(tr) = ORC.db.open_tree(tree.as_bytes()) {
-                            trees.push(tr);
-                        }
-                    }
-
-                    let res: TransactionResult<(), ()> = trees.as_slice().transaction(|trs| {
-                        let mut key_set = map.values();
-                        for tr in trs {
-                            if let Some(keys) = key_set.next() {
-                                for key in keys.iter() {
-                                    tr.remove(key.as_slice())?;
-                                }
-                            }
-                        }
-                        Ok(())
-                    });
-
-                    if ORC.dev_mode {
-                        let ok = if res.is_ok() {
-                            "ok"
-                        } else {
-                            "not ok"
-                        };
-                        println!("removing many keys from many trees went {}", ok);
-                    }
-                },
-            }
-            EXPIRY_TIMES.remove(&exp);
+            clean_up_expirable_datum(raw_data, None);
+            for_removal.push(exp);
         }
     }
 
-    for data in expired_list {
-        if let Ok(_) = ORC.expirable_data.remove(data) {}
+    let mut et = EXPIRY_TIMES.write();
+    for el in for_removal{
+        (*et).remove(&el);
     }
+}
+
+fn clean_up_expirable_datum(raw_data: IVec, exp: Option<i64>) -> bool {
+    let data = ExpirableData::try_from_slice(&raw_data).unwrap();
+    let mut ok = false;
+    match data {
+        ExpirableData::Single{tree, key} => {
+            if let Ok(tr) = ORC.db.open_tree(tree.as_bytes()) {
+                if let Ok(Some(_)) = tr.remove(key.as_slice()) {
+                    ok = true;
+                }
+            }
+        },
+        ExpirableData::MultiKey{tree, keys} => {
+            if let Ok(tr) = ORC.db.open_tree(tree.as_bytes()) {
+                let res: TransactionResult<(), ()> = tr.transaction(|tr| {
+                    for key in keys.iter() {
+                        tr.remove(key.as_slice())?;
+                    }
+                    Ok(())
+                });
+                if ORC.dev_mode {
+                    let ok = if res.is_ok() {
+                        "ok"
+                    } else {
+                        "not ok"
+                    };
+                    println!("removing keys from tree - {} went {}", tree, ok);
+                }
+                ok = res.is_ok();
+            } else if ORC.dev_mode {
+                println!("ExpirableData::MultiKey couldn't open tree - {}", &tree);
+            }
+        },
+        ExpirableData::MultiTree(map) => {
+            if ORC.dev_mode {
+                println!("going in for the big multi-tree expiry - {:?}", &map);
+            }
+
+            let mut trees = vec!();
+            for tree in map.keys() {
+                if let Ok(tr) = ORC.db.open_tree(tree.as_bytes()) {
+                    trees.push(tr);
+                }
+            }
+
+            let res: TransactionResult<(), ()> = trees.as_slice().transaction(|trs| {
+                let mut key_set = map.values();
+                for tr in trs {
+                    if let Some(keys) = key_set.next() {
+                        for key in keys.iter() {
+                            tr.remove(key.as_slice())?;
+                        }
+                    }
+                }
+                Ok(())
+            });
+
+            if ORC.dev_mode {
+                let ok = if res.is_ok() {
+                    "ok"
+                } else {
+                    "not ok"
+                };
+                println!("removing many keys from many trees went {}", ok);
+            }
+        },
+    }
+
+    if let Some(exp) = exp {
+        (*EXPIRY_TIMES.write()).remove(&exp);
+    }
+    if let Err(_) = ORC.expirable_data.remove(&raw_data) {
+        if let Ok(_) = ORC.expirable_data.remove(raw_data) {}
+    }
+
+    ok
 }
