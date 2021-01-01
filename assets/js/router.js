@@ -2,29 +2,35 @@ import domlib from '/js/domlib.min.js'
 
 const {emitter, domfn, directive, run, isRenderable, isFunc} = domlib
 
-const route = emitter((path, view, omitSuffix) => {
+const route = emitter(async (path, view, omitSuffix, noHandle) => {
     if (omitSuffix != null) path.replace(omitSuffix, '')
     if (path[0] !== '#') path = '#' + path
     if (view == null) return location.hash = path
+
+    if (views[path]) throw new Error('route already exists')
 
     if (view.tagName === 'TEMPLATE') {
         view.remove()
         view = [...view.content.childNodes]
     }
 
-    if (isFunc(view)) view = view()
+    if (isFunc(view)) {
+        view = view.constructor.name === 'AsyncFunction' ? (await view()) : view()
+    }
+    if (view instanceof Promise) {
+        view = await view
+    }
     if (isRenderable(view) || isFunc(view)) {
         views[path] = view
     }
-
-    route.handle()
+    if (!noHandle) route.handle()
 })
 const views = route.views = Object.create(null)
 route.hash = (hash = location.hash) => hash.replace('#', '')
 
 directive('route-link', {
     init(el, val) {
-        if (el.tagName !== 'A') throw new Error('route-link is meant for actual a[href] link elements')
+        if (el.tagName !== 'A') throw new Error('route-link is meant for actual a[href] / link elements')
         el.routeLink = route.on.change(() => el.classList.toggle(
             'active-route',
             location.hash === (el.href = '#' + el.getAttribute('route-link'))
@@ -42,17 +48,34 @@ directive('route', {
         if (el.tagName === 'TEMPLATE-FILE') {
             try {
                 if (val[0] !== '#') val = '#' + val
-                fetch(el.getAttribute('src'))
-                    .then(res => res.text())
-                    .then(html => route(
-                        val, 
-                        () => () => route.views[val] = domlib.html(html)
-                    ))
+                const src = el.getAttribute('src')
+                const immediate = el.getAttribute('immediate')
+                if (immediate != null) {
+                    const prerender = immediate.length > 1
+                    fetch(src).then(res => res.text()).then(txt => {
+                        if (prerender) {
+                            route(val, domlib.html(txt), null, true)
+                        } else {
+                            route(val, () => () => domlib.html(txt), null, true)
+                        }
+                        route.handle()
+                    })
+                } else {
+                    let once
+                    let view = async () => {
+                        if (!once) {
+                            once = true
+                            return view = domlib.html(await (await fetch(src)).text())
+                        }
+                        return view
+                    }
+                    route(val, () => view)
+                }
                 domlib.domfn.remove(el)
             } catch(e) {
                 console.error(`invalid <template-file route="${val}" src="???">`, e)
-                return
             }
+            return
         }
 
         el.routeHandler = route.on.change((view, hash) => {
@@ -93,7 +116,9 @@ route.view404 = hash => `<br><header>404 - ${hash} | No view for this route</hea
 
 domlib.route = route
 
-route.handle = () => {
+const handled = Object.create(null)
+
+route.handle = async () => {
     if (route.wasReset && route.path == location.hash) return
     if (route.path != null && route.path == location.hash) return
     let path = location.hash
@@ -102,8 +127,15 @@ route.handle = () => {
     let view = route.views[path]
     const hash = route.hash()
 
-    if (isFunc(view)) view = view()
-    if (view == null) {
+    if (isFunc(view) && !handled[path]) {
+        handled[path] = true
+        view = route.views[path] = view.constructor.name === 'AsyncFunction' ? (await view()) : view()
+    }
+    if (view instanceof Promise) {
+        view = await view
+    }
+
+    if (view == null || isFunc(view)) {
         if (route.path != null) {
             location.hash = route.path
             route.wasReset = true
