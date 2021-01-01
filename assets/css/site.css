@@ -114,7 +114,7 @@ main {
   justify-content: space-around;
   flex-flow: row wrap;
   color: #000;
-  padding: .25em .5em 0 .5em;
+  padding: .1em .5em;
   margin: 0;
   margin-bottom: 1em;
   flex: 0 1 auto;
@@ -122,7 +122,6 @@ main {
   box-sizing: border-box;
   background: var(--hero-color);
   box-shadow: 0 3px 5px rgb(0, 0, 0, .15);
-  padding: .75em;
 }
 
 .hero > header {
@@ -133,7 +132,7 @@ main {
   flex-flow: row wrap;
   margin: 0;
   font-size: 1.15em;
-  color: hsl(0, 0%, 65%);
+  color: hsl(0, 0%, 35%);
   width: auto;
   grid-area: logo;
 }
@@ -143,6 +142,7 @@ main {
   background: var(--primary-color);
   color: #fff;
   text-shadow: 0 2px 3px rgb(0, 0, 0, .12);
+  box-shadow: 0 1px 3px rgb(0, 0, 0, .15);
   padding: .5em;
   border-radius: 4px;
 }
@@ -179,7 +179,7 @@ main {
   line-height: 1;
   border-radius: 2px;
   cursor: pointer;
-  box-shadow: 0 1px 4px hsla(34, 6%, 22%, 0.9);
+  box-shadow: 0 2px 4px hsla(34, 6%, 22%, 0.3), 0 0 3px rgb(0, 0, 0, .12);
 }
 
 .post-nav button {
