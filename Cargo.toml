@@ -14,7 +14,6 @@ borsh = "^0"
 clap = "^2.33.3"
 comrak = "^0"
 crossbeam-channel = "^0"
-dashmap = {version = "4.0.0", features = ["rayon"]}
 derive_more = "*"
 itertools = "*"
 lazy_static = "^1"
