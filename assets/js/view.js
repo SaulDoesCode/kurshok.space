@@ -51,6 +51,7 @@ const postFilterView = div({class: 'post-filter'}, pf => [
                     el.value = ''
                     el.commas = 0
                     el.lastInput = undefined
+                    pf.runQuery(false)
                 }
             },
             oninput(e, el) {
@@ -133,7 +134,9 @@ const postFilterView = div({class: 'post-filter'}, pf => [
 ])
 
 postFilterView.runQuery = (with_tag) => {
-    postFilterView.collectTags(with_tag)
+    if (with_tag !== false) {
+        postFilterView.collectTags(with_tag)
+    }
     if (postFilterView.tags && postFilterView.tags.length) {
         app.filterQuery = true
         app.postFilter({
@@ -185,6 +188,9 @@ postFilterView.collectTags = (newTag) => {
                 df.remove(el)
 
                 df.attrToggle(postFilterView.tagListContainer, 'hidden', !postFilterView.tags.length)
+
+                app.postQuery.page = 0
+                postFilterView.runQuery(false)
             }
         }, tag)
     })
