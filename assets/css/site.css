@@ -16,6 +16,7 @@ body {
   left: 0;
   padding: 0;
   margin: 0;
+  overflow-y: scroll;
   scroll-behavior: smooth;
 }
 
@@ -130,7 +131,7 @@ main {
   align-content: center;
   align-items: center;
   flex-flow: row wrap;
-  margin: 0;
+  margin: .25em 0;
   font-size: 1.15em;
   color: hsl(0, 0%, 35%);
   width: auto;
@@ -149,6 +150,16 @@ main {
 
 .hero>header>div {
   font-size: .95em;
+  transition: all 140ms ease;
+}
+
+.hero>header>div:hover {
+  font-weight: 600;
+}
+
+.hero>header a {
+  text-decoration: none !important;
+  color: hsl(0, 0%, 35%) !important;
 }
 
 .hero .launchers {
