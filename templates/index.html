@@ -67,9 +67,9 @@
                 app.user = { username: "{{ username }}".trim() }
                 import('/js/profile.min.js')
                 // d.once.click('.profile-launcher', () => {})
-                {% if is_writer %}
+            {% if is_writer %}
                 app.d.once.click('.ww-launcher', () => import('/js/writ-writer.min.js'))
-                {% endif %}
+            {% endif %}
             </script>
         {% else %}
             <button class="auth-launcher" title="click for a login or signup modal">

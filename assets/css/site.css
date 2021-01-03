@@ -528,13 +528,6 @@ nav.quick-scroll > div {
   color: #ff145a;
 }
 
-.votes .vote.up::before {
-  /*content: '🡅';*/
-}
-.votes .vote.down::before {
-  /*content: '🡇';*/
-}
-
 .votes .vote-count {
   white-space: nowrap;
   padding: 0 .25em;
