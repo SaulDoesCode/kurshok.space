@@ -23,7 +23,10 @@ impl Orchestrator {
         self.expirable_data.insert(
             data.try_to_vec().unwrap(),
             IVec::from_i64(exp)
-        ).map_or(false, |_| {
+        ).map_or(false, |res| {
+            if let Some(old_exp) = res {
+                (EXPIRY_TIMES.write()).remove(&old_exp.to_i64());
+            }
             (EXPIRY_TIMES.write()).insert(exp);
             true
         })
@@ -36,7 +39,10 @@ impl Orchestrator {
         self.expirable_data.insert(
             data.try_to_vec().unwrap(),
             IVec::from_i64(exp)
-        ).map_or(false, |_| {
+        ).map_or(false, |res| {
+            if let Some(old_exp) = res {
+                (EXPIRY_TIMES.write()).remove(&old_exp.to_i64());
+            }
             (EXPIRY_TIMES.write()).insert(exp);
             true
         })
@@ -49,22 +55,37 @@ impl Orchestrator {
         self.expirable_data.insert(
             data.try_to_vec().unwrap(),
             IVec::from_i64(exp)
-        ).map_or(false, |_| {
+        ).map_or(false, |res| {
+            if let Some(old_exp) = res {
+                (EXPIRY_TIMES.write()).remove(&old_exp.to_i64());
+            }
             (EXPIRY_TIMES.write()).insert(exp);
             true
         })
     }
 
-    pub fn unexpire_data(&self, data: ExpirableData) -> Option<IVec> {
+    pub fn unexpire_data(&self, data: ExpirableData) -> Option<i64> {
         if let Ok(o_exp) = self.expirable_data.remove(data.try_to_vec().unwrap()) {
             o_exp.map(|raw| {
                 let exp = raw.to_i64();
                 (*EXPIRY_TIMES.write()).remove(&exp);
-                raw
+                exp
             })
         } else {
             None
         }
+    }
+
+    pub fn unexpire_key(&self, tree: String, key: &[u8]) -> Option<i64> {
+        self.unexpire_data(ExpirableData::Single{tree, key: key.to_vec()})
+    }
+
+    pub fn unexpire_keys(&self, tree: String, keys: Vec<Vec<u8>>) -> Option<i64> {
+        self.unexpire_data(ExpirableData::MultiKey{tree, keys})
+    }
+
+    pub fn unexpire_map(&self, map: BTreeMap<String, Vec<Vec<u8>>>) -> Option<i64> {
+        self.unexpire_data(ExpirableData::MultiTree(map))
     }
 }
 
