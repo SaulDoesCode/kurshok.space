@@ -2,7 +2,8 @@ import domlib from '/js/domlib.min.js'
 
 const app = domlib.emitter()
 const d = app.d = domlib, df = domlib.domfn
-const {div, article, a, p, button, hr, h1, h4, section, span, header} = df
+const {div, article, textarea, input, a, p, button, hr, h1, h4, section, span, header} = df
+const {txt} = d
 
 const reqWithBody = (contentType = 'application/json', bodyMorpher = JSON.stringify) => method => (url, body, ops = {}) => fetch(url, {
     method,
@@ -41,6 +42,9 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation
             df.hasClass(view, 'open') &&
             e.target != launcher
         ) {
+            if (e.path.some(el => el instanceof Element && el.classList.contains('toast'))) {
+                return
+            }
             e.preventDefault()
             ts.toggleView(false)
             ts.clickOutHandler.off()
@@ -53,7 +57,7 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation
     })
 
     if (background === true) {
-        background = df.div({class: 'background-cover'})
+        background = div.background_cover()
     }
 
     ts.toggleView = (state = !df.hasClass(view, 'open')) => {
@@ -142,10 +146,8 @@ app.abreviateNum = (num, digits) => {
 }
 
 app.components = {}
-app.components.toggleBox = (name, {id, checked, ...ops} = {}) => df.div({
-    class: 'togglebox',
-},
-    tb => tb.input = df.input(d.merge({
+app.components.toggleBox = (name, {id, checked, ...ops} = {}) => div.togglebox(
+    tb => tb.input = input(d.merge({
         attr: {
             name,
             id,
@@ -153,7 +155,7 @@ app.components.toggleBox = (name, {id, checked, ...ops} = {}) => df.div({
             type: 'checkbox'
         }
     }, ops)),
-    df.span()
+    span()
 )
 
 domlib.createElementPlugins.contingentVisibility = (event, el) => {
@@ -184,9 +186,8 @@ app.cv = (event, state) => {
 app.cv.check = event => !!app.cv.map[event]
 app.cv.map = Object.create(null)
 
-app.toastContainer = df.section({
+app.toastContainer = section.toast_container({
     $: 'body',
-    class: 'toast-container',
     contingentVisibility: 'gotToast'
 })
 
@@ -200,17 +201,9 @@ app.toast = new Proxy((kind, msg, displayTime = 15000) => {
         app.toastList.delete(toast)
         if (app.toastList.size == 0) app.cv('gotToast', false)
     }
-    const toast = df.div({
-        $: app.toastContainer,
-        class: 'toast ' + kind
-    },
-        df.span(msg),
-        df.span({
-            class: 'dismiss-btn',
-            onceclick() { dismiss() }
-        },
-            app.dismissIcon()
-        )
+    const toast = div.toast[kind]({$: app.toastContainer},
+        span(msg),
+        span.dismiss_btn({onceclick() { dismiss() }}, app.dismissIcon())
     )
     app.toastList.add(toast)
     df.remove(toast, displayTime).then(dismiss)
@@ -281,8 +274,8 @@ app.formatVoteCount = (el, count, digits = 2) => {
         formated = [
             span(bignum),
             '.',
-            span({class: 'endbits'}, endbits),
-            span({class: 'marker'}, marker)
+            span.endbits(endbits),
+            span.marker(marker)
         ]
     }
     d.render(formated, el)
@@ -293,8 +286,7 @@ app.votesUI = (voteType, {
     vote = 0,
     you_voted
 }) => parentEl => {
-    const votesEl = div({
-        class: 'votes',
+    const votesEl = div.votes({
         async onclick(e, el) {
             if (app.user == null) {
                 e.preventDefault()
@@ -362,28 +354,106 @@ app.votesUI = (voteType, {
         votesEl.upvote = span({
             class: {
                 up: true,
-                    vote: true,
-                    selected: you_voted === true,
-                    'icon-up-open': true,
+                vote: true,
+                selected: you_voted === true,
+                'icon-up-open': true,
             }
         }),
 
-        votesEl.voteCount = span({
-            class: 'vote-count'
-        }, vote),
+        votesEl.voteCount = span.vote_count(vote),
 
         votesEl.downvote = span({
             class: {
                 down: true,
-                    vote: true,
-                    selected: you_voted === false,
-                    'icon-down-open': true,
+                vote: true,
+                selected: you_voted === false,
+                'icon-down-open': true,
             }
         })
     )
 
     return votesEl
 }
+
+app.tabView = ({
+    $,
+    tabs = [],
+    attacher = 'after',
+    ...ops
+}) => {
+    const list = header({
+        onclick(e) {
+            if (e.target.classList.contains('tab-name') && !e.target.classList.contains('active')) {
+                if (activeTab) {
+                    activeTab.name.classList.remove('active')
+                    activeTab = views[e.target.textContent]
+                    activeTab.name.classList.add('active')
+                    viewer.innerHTML = ''
+                    d.render(activeTab.view, viewer)
+                }
+            }
+        }
+    })
+    const views = Object.create(null)
+    tabs.map(({
+        name,
+        view
+    }) => {
+        views[name] = {
+            name: div.tab_name(name),
+            view
+        }
+        list.append(views[name].name)
+    })
+
+    let activeTab = views[tabs[0].name]
+    activeTab.name.classList.add('active')
+
+    const viewer = div(activeTab.view)
+
+    const element = article.tab_view(ops, list, viewer)
+    if ($) d.render(element, $, attacher)
+
+    return {
+        element,
+        get tabs() {
+            return tabs
+        },
+
+        get views() {
+            return views
+        },
+
+        add(name, view) {
+            tabs.push({name, view})
+            views[name] = {
+                name: div.tab_name({$: list}, name),
+                view
+            }
+        },
+
+        remove(name) {
+            tabs = tabs.filter(tab => tab.name != name)
+            df.remove(views[name].name)
+            delete views[name]
+        },
+
+        set active(name) {
+            if (views[name]) {
+                activeTab.name.classList.remove('active')
+                activeTab = views[name]
+                activeTab.name.classList.add('active')
+                viewer.innerHTML = ''
+                d.render(activeTab.view, viewer)
+            }
+        },
+
+        get active() {
+            return activeTab
+        }
+    }
+}
+
 
 window.app = app
 export default app
