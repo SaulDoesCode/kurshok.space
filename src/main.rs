@@ -111,6 +111,8 @@ async fn main() -> std::io::Result<()> {
             .service(auth::indirect_auth_verification)
             .service(auth::auth_link)
             .service(auth::logout)
+            .service(auth::change_user_detail)
+            .service(auth::get_user_description)
             .service(writs::editable_writ_query)
             .service(writs::writ_query)
             .service(writs::push_raw_writ)
@@ -186,6 +188,8 @@ async fn index(req: HttpRequest) -> impl Responder {
     let (o_usr, potential_renewal_cookie) = ORC.user_by_session_renew(&req, Duration::days(3));
     if let Some(usr) = o_usr {
         ctx.insert("username", &usr.username);
+        ctx.insert("usr_id", &usr.id);
+        ctx.insert("handle", &usr.handle);
         ctx.insert("dev_mode", &ORC.dev_mode);
         ctx.insert(
             "is_writer",
