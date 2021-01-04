@@ -463,9 +463,26 @@ export default (d => {
    */
   d.render = (node, host = document.body || 'body', connector = 'appendChild') => d.attach(host, connector, node)
 
+  const infinifyDOM = (gen, tag) => tag in gen ? Reflect.get(gen, tag) :
+    (gen[tag] = new Proxy(gen.bind(null, tag), {
+      get(fn, classes) {
+        classes = classes.replace(/_/g, '-').split('.')
+        return new Proxy(function () {
+          const el = fn.apply(null, arguments)
+          el.classList.add(...classes)
+          return el
+        }, {
+          get(_, anotherClass, proxy) {
+            classes.push(...anotherClass.replace(/_/g, '-').split('.'))
+            return proxy
+          }
+        })
+      }
+    }))
+
   d.actualDF = {}
   const domfn = new Proxy(d, {
-    get: (d, key) => d.actualDF[key] || d.bind(null, key),
+    get: (d, key) => d.actualDF[key] || infinifyDOM(d, key),
     set: (d, key, val) => Reflect.set(d.actualDF, key, val)
   })
   
