@@ -64,7 +64,11 @@
             </button>
             <script type="module" defer>
                 import app from '/js/site.min.js'
-                app.user = { username: "{{ username }}".trim() }
+                app.user = {
+                    username: "{{ username }}".trim(),
+                    handle: "{{ handle }}".trim(),
+                    id: "{{ usr_id }}".trim(),
+                }
                 import('/js/profile.min.js')
                 // d.once.click('.profile-launcher', () => {})
             {% if is_writer %}
