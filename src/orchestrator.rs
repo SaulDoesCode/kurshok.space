@@ -105,7 +105,7 @@ impl Orchestrator {
       Hasher::new(Key::from_seed(&seed, None), None)
     };
 
-    let ratelimiter = RateLimiter::setup_default(&db);
+    let ratelimiter = RateLimiter::setup(&db);
 
     let dev_mode = CONF.read().dev_mode;
 
