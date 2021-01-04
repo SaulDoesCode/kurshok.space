@@ -5,12 +5,10 @@ const {div, input, button, article, a, p, hr, h1, h4, section, span, header} = d
 
 const mainView = d.query('main[route-active]')
 
-const postListView = div({class: 'post-list'})
-const contentDisplay = section({class: 'posts'},
-    postListView
-)
-app.postDisplay = section({class: 'full post'},
-pd => {
+const postListView = div.post_list()
+const contentDisplay = section.posts(postListView)
+
+app.postDisplay = section.full.post(pd => {
     pd.parts = d.h /* html */ `
         <header class="post-header">
             <div>
@@ -32,8 +30,8 @@ app.postQuery = {
     public: true
 }
 
-const postFilterView = div({class: 'post-filter'}, pf => [
-    section({class: 'tag-filter'}, 
+const postFilterView = div.post_filter(pf => [
+    section.tag_filter(
         header('Tag filter'),
         pf.tagInput = input({
             attr: {
@@ -106,17 +104,12 @@ const postFilterView = div({class: 'post-filter'}, pf => [
                 }
             }
         }),
-        pf.tagListContainer = div({
+        pf.tagListContainer = div.tag_list_container({
             attr: {hidden: true},
-            class: 'tag-list-container'
         },
-            pf.tagListDisplay = div({
-                class: 'list',
-            }),
+            pf.tagListDisplay = div.list(),
             button({
-                onclick() {
-                    pf.runQuery()
-                }
+                onclick() { pf.runQuery() }
             }, 'query'),
             pf.clearBtn = button({
                 attr: {hidden: true},
@@ -179,9 +172,8 @@ postFilterView.collectTags = (newTag) => {
     postFilterView.tags.forEach(tag => {
         if (alreadyThere.includes(tag)) return
 
-        span({
+        span.tag({
             $: postFilterView.tagListDisplay,
-            class: 'tag',
             title: tag,
             onclick(e, el) {
                 postFilterView.tags = postFilterView.tags.filter(t => t != tag)
@@ -214,7 +206,7 @@ if (location.hash == '' || location.hash == '#') {
 
 route('post', app.postDisplay)
 
-route('no-content', div({class: 'no-content'},
+route('no-content', div.no_content(
     h1('Sorry folks, no content. This website is barren.'),
     button({
         onclick() {
@@ -260,11 +252,7 @@ route.on.post(async hash => {
     date.innerHTML = ''
     d.render(app.renderUXTimestamp(post.posted), date)
     tags.innerHTML = ''
-    post.tags.map(tag => span({
-        $: tags,
-        class: 'tag',
-        attr: {title: tag},
-    }, tag))
+    post.tags.map(tag => span.tag({$: tags, attr: {title: tag}}, tag))
     author.textContent = 'By ' + post.author_name
     content.innerHTML = 'Content loading...'
     if (app.commentsDisplay) df.remove(app.commentsDisplay)
@@ -287,9 +275,8 @@ route.on.change(() => {
     }
 })
 
-const publicPost = w => div({
+const publicPost = w => div.post({
     $: postListView,
-    class: 'post',
     attr: {pid: w.id},
     onclick(e, el) {
         if (e.target.className.includes('vote')) return
@@ -325,19 +312,14 @@ const publicPost = w => div({
 
     return [
         header(
-            div({class: 'title'},
+            div.title(
                 titleEl,
-                div({class: 'author-name'}, `By ${w.author_name}`)
+                div.author_name(`By ${w.author_name}`)
             ),
-            div({class: 'posted'}, app.renderUXTimestamp(w.posted)),
-            df.hr(),
+            div.posted(app.renderUXTimestamp(w.posted)),
+            hr(),
             app.votesUI('writ', w),
-            div({class: 'tags'},
-                w.tags.map(t => span({
-                    class: 'tag',
-                    attr: {title: t}
-                }, t))
-            )
+            div.tags(w.tags.map(t => span.tag({attr: {title: t}}, t)))
         )
     ]
 });
@@ -355,11 +337,8 @@ app.fetchPostContent = async id => {
 app.posts = Object.create(null)
 app.postPages = Object.create(null)
 
-app.postPaginationView = section({
-    class: 'post-pagination',
-},
-    app.postPageBackBtn = div({
-        class: 'page-back',
+app.postPaginationView = section.post_pagination(
+    app.postPageBackBtn = div.page_back({
         contingentVisibility: 'pageNot0',
         onclick(e) {
             app.fetchPosts(app.activePostPage - 1)
@@ -367,9 +346,8 @@ app.postPaginationView = section({
     }, 
         '<<',
     ),
-    app.pageNumView = div({class: 'page-num'}),
-    app.postPageForwardBtn = div({
-            class: 'page-forward',
+    app.pageNumView = div.page_num(),
+    app.postPageForwardBtn = div.page_forward({
             onclick(e) {
                 app.fetchPosts(app.activePostPage + 1)
             }
