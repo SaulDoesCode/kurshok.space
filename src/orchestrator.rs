@@ -16,6 +16,9 @@ pub struct Orchestrator {
   pub users: Tree,
   pub usernames: Tree,
   pub emails: Tree,
+  pub username_changes: Tree,
+  pub email_changes: Tree,
+  pub handle_changes: Tree,
   pub user_email_index: Tree,
   pub user_descriptions: Tree,
   pub user_attributes: Tree,
@@ -64,20 +67,33 @@ impl Orchestrator {
     let db_loc = &CONF.read().db_location;
     let db = sled::Config::new()
       .path(&format!("{}main.db", db_loc))
+      .mode(sled::Mode::LowSpace)
       .use_compression(true)
       .compression_factor(20)
-      .mode(sled::Mode::LowSpace)
       .flush_every_ms(Some(1500))
       .open()
       .expect("failed to open main.db");
 
     let id_counter = db.open_tree(b"id_counter").unwrap();
     let users = db.open_tree(b"users").unwrap();
+
     let usernames = db.open_tree(b"usernames").unwrap();
+    let emails = db.open_tree(b"emails").unwrap();
+
+    let dev_mode = CONF.read().dev_mode;
+
+    if dev_mode {
+      db.drop_tree(b"username_changes").unwrap();
+      db.drop_tree(b"handle_changes").unwrap();
+    }
+
+    let username_changes = db.open_tree(b"username_changes").unwrap();
+    let email_changes = db.open_tree(b"email_changes").unwrap();
+    let handle_changes = db.open_tree(b"handle_changes").unwrap();
+
     let user_descriptions = db.open_tree(b"user_descriptions").unwrap();
     let user_verifications = db.open_tree(b"user_verifications").unwrap();
 
-    let emails = db.open_tree(b"emails").unwrap();
     let user_email_index = db.open_tree(b"user_email_index").unwrap();
 
     let user_attributes = db.open_tree(b"user_attributes").unwrap();
@@ -107,8 +123,6 @@ impl Orchestrator {
 
     let ratelimiter = RateLimiter::setup(&db);
 
-    let dev_mode = CONF.read().dev_mode;
-
     let writs = db.open_tree("writs").unwrap();
     let raw_content = db.open_tree("raw_content").unwrap();
     let content = db.open_tree("content").unwrap();
@@ -136,6 +150,9 @@ impl Orchestrator {
       users,
       usernames,
       emails,
+      username_changes,
+      email_changes,
+      handle_changes,
       user_email_index,
       user_verifications,
       user_descriptions,
