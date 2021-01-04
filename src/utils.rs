@@ -135,14 +135,14 @@ pub fn is_char_number_or_uppercase(c: char) -> bool {
 }
 
 pub fn is_char_username_unfriendly(c: char) -> bool {
-  !c.is_alphanumeric() && c != '_' && c != '-' && c != ' '
+  !c.is_alphanumeric()
 }
 
 #[inline]
 pub fn is_username_ok(username: &str) -> bool {
   let len = username.len();
-  len > 3
-    && len < 50
+  len >= 3
+    && len <= 50
     && !username.starts_with(' ')
     && !username.ends_with(' ')
     && !username.contains("  ")
@@ -154,6 +154,24 @@ pub fn is_username_ok(username: &str) -> bool {
     && !username.ends_with('_')
     && !username.contains("__")
     && username.find(is_char_username_unfriendly).is_none()
+}
+
+#[inline]
+pub fn is_handle_ok(handle: &str) -> bool {
+  let len = handle.len();
+  len >= 3
+    && len <= 50
+    && !handle.starts_with(' ')
+    && !handle.ends_with(' ')
+    && !handle.contains("  ")
+    && !handle.starts_with('-')
+    && !handle.ends_with('-')
+    && !handle.contains("--")
+    && !handle.contains("--")
+    && !handle.starts_with('_')
+    && !handle.ends_with('_')
+    && !handle.contains("__")
+    && handle.find(is_char_username_unfriendly).is_none()
 }
 
 pub fn is_email_ok(email: &str) -> bool {
