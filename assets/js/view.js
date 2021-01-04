@@ -190,7 +190,12 @@ postFilterView.collectTags = (newTag) => {
                 df.attrToggle(postFilterView.tagListContainer, 'hidden', !postFilterView.tags.length)
 
                 app.postQuery.page = 0
-                postFilterView.runQuery(false)
+                if (postFilterView.tags.length == 0) {
+                    delete app.postQuery.tags
+                    app.postFilter({})
+                } else {
+                    postFilterView.runQuery(false)
+                }
             }
         }, tag)
     })
@@ -291,6 +296,7 @@ const publicPost = w => div({
         if (e.target.classList.contains('tag')) {
             let tag = e.target.getAttribute('title')
             if (tag != null) {
+                app.postQuery.page = 0
                 postFilterView.runQuery(tag)
             }
             return
