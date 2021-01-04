@@ -10,7 +10,16 @@ use slug::slugify;
 use thiserror::Error;
 use time::Duration;
 
-use std::{collections::BTreeMap};
+use std::{
+  collections::{
+    BTreeMap,
+    HashMap
+  },
+  sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+  }
+};
 
 use super::{CONF, TEMPLATES};
 
@@ -18,6 +27,7 @@ use crate::orchestrator::{Orchestrator, ORC};
 use crate::utils::{
   is_email_ok,
   is_username_ok,
+  is_handle_ok,
   random_string,
   unix_timestamp,
   // FancyBool,
@@ -520,46 +530,120 @@ impl Orchestrator {
     None
   }
 
-  pub fn change_username(&self, usr: &mut User, new_username: &str) -> bool {
+  pub fn change_username(&self, usr: &mut User, new_username: &str) -> Option<UserError> {
     if self.username_taken(new_username).unwrap_or(true) {
-      return false;
+      return Some(UserError::UsernameTaken);
     }
 
     let old_username = usr.username.clone();
     usr.username = new_username.to_string();
 
-    let res: TransactionResult<(), ()> =
-      (&self.users, &self.usernames).transaction(|(users, usernames)| {
-        users.insert(IVec::from_u64(usr.id), usr.try_to_vec().unwrap())?;
-        usernames.remove(old_username.as_bytes())?;
-        usernames.insert(new_username.as_bytes(), IVec::from_u64(usr.id))?;
-        Ok(())
-      });
-    res.is_ok()
+    let too_soon = Arc::new(AtomicBool::new(false));
+    let tooson_clone = too_soon.clone();
+
+    let res: TransactionResult<(), ()> = (
+      &self.users,
+      &self.username_changes,
+      &self.usernames
+    ).transaction(|(users, username_changes, usernames)| {
+      let usr_id = IVec::from_u64(usr.id);
+
+      users.insert(&usr_id, usr.try_to_vec().unwrap())?;
+      usernames.remove(old_username.as_bytes())?;
+
+      if let Some(raw) = username_changes.get(&usr_id)? {
+        let mut old_usernames: HashMap<String, i64> = BorshDeserialize::try_from_slice(&raw).unwrap();
+
+        let now = unix_timestamp();
+        let mut changes = 0;
+        for (_, timestamp) in &old_usernames {
+          if let Some(res) = now.checked_sub(*timestamp) {
+            let week = 60 * 60 * 24 * 7;
+            if res < week {
+              changes += 1;
+              if changes == 2 {
+                break;
+              }  
+            }
+          }
+        }
+        if changes > 1 {
+          tooson_clone.store(true, Ordering::SeqCst);
+          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+        }
+         
+        old_usernames.insert(old_username.clone(), unix_timestamp());
+        let new_raw = old_usernames.try_to_vec().unwrap();
+        username_changes.insert(&usr_id, new_raw)?;
+      } else {
+        let mut old_usernames: HashMap<String, i64> = HashMap::new();
+        old_usernames.insert(old_username.clone(), unix_timestamp());
+        let raw = old_usernames.try_to_vec().unwrap();
+        username_changes.insert(&usr_id, raw.as_slice())?;
+      }
+
+      if let Some(_) = usernames.insert(new_username.as_bytes(), usr_id)? {
+        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+      }
+      Ok(())
+    });
+    
+    if res.is_err() {
+      if too_soon.load(Ordering::SeqCst) {
+        return Some(UserError::ChangedUsernameTooSoon);
+      }
+      return Some(UserError::DBIssue);
+    }
+
+    None
   }
 
-  pub fn change_handle(&self, usr: &mut User, new_handle: &str) -> bool {
+  pub fn change_handle(&self, usr: &mut User, new_handle: &str) -> Option<UserError> {
     if self.handle_taken(new_handle).unwrap_or(true) {
-      return false;
+      return Some(UserError::HandleTaken);
     }
 
     let old_handle = usr.handle.clone();
     usr.handle = new_handle.to_string();
-    let res: TransactionResult<(), ()> =
-      (&self.users, &self.handles).transaction(|(users, handles)| {
-        users.insert(&usr.id.to_be_bytes(), usr.try_to_vec().unwrap())?;
-        handles.remove(old_handle.as_bytes())?;
-        handles.insert(new_handle.as_bytes(), &usr.id.to_be_bytes())?;
-        Ok(())
-      });
-    res.is_ok()
+    let res: TransactionResult<(), ()> = (
+      &self.users, 
+      &self.handle_changes, 
+      &self.handles
+    ).transaction(|(users, handle_changes, handles)| {
+      let usr_id = IVec::from_u64(usr.id);
+      
+      users.insert(&usr_id, usr.try_to_vec().unwrap())?;
+      handles.remove(old_handle.as_bytes())?;
+
+      if let Some(raw) = handle_changes.get(&usr_id)? {
+        let mut old_handles: HashMap<String, i64> = BorshDeserialize::try_from_slice(&raw).unwrap();
+        old_handles.insert(old_handle.clone(), unix_timestamp());
+        let new_raw = old_handles.try_to_vec().unwrap();
+        handle_changes.insert(&usr_id, new_raw)?;
+      } else {
+        let mut old_handles = HashMap::new();
+        old_handles.insert(old_handle.clone(), unix_timestamp());
+        let raw = old_handles.try_to_vec().unwrap();
+        handle_changes.insert(&usr_id, raw)?;
+      }
+
+      if let Some(_) = handles.insert(new_handle.as_bytes(), &usr_id)? {
+        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+      }
+      Ok(())
+    });
+    
+    if res.is_err() {
+      return Some(UserError::DBIssue);
+    }
+    None
   }
 
-  pub fn change_description(&self, usr: &mut User, new_desc: &str) -> bool {
-    new_desc.len() > 1
-    && self.user_descriptions
-        .insert(usr.id.to_be_bytes(), new_desc.as_bytes())
-        .is_ok()
+  pub fn change_description(&self, usr: &User, new_desc: &str) -> bool {
+    new_desc.len() > 2 && new_desc.len() < 301 && self.user_descriptions.insert(
+  usr.id.to_be_bytes(),
+new_desc.as_bytes()
+    ).is_ok()
   }
 
   pub fn make_admin(&self, usr_id: u64, level: u8, reason: Option<String>) -> bool {
@@ -567,8 +651,8 @@ impl Orchestrator {
       aquired: unix_timestamp(),
       reason,
     };
-    let res: TransactionResult<(), ()> =
-      (&self.user_attributes, &self.admins).transaction(|(usr_attrs, admins)| {
+    let res: TransactionResult<(), ()> = (&self.user_attributes, &self.admins)
+      .transaction(|(usr_attrs, admins)| {
         let key = format!("{}:admin", usr_id);
         usr_attrs.insert(key.as_bytes(), attr.try_to_vec().unwrap())?;
         admins.insert(IVec::from_u64(usr_id), &[level])?;
@@ -757,6 +841,27 @@ pub enum AuthError {
   SessionErr,
   #[error("ran into trouble removing bad or expired sessions")]
   SessionRemovalErr,
+  #[error("Unknown auth error")]
+  Unknown,
+}
+#[derive(Error, Debug)]
+pub enum UserError {
+  #[error("username is already taken or blacklisted")]
+  UsernameTaken,
+  #[error("username is invalid or malformed")]
+  BadUsername,
+  #[error("username was changed too soon after last change")]
+  ChangedUsernameTooSoon,
+  #[error("handle is already taken or blacklisted")]
+  HandleTaken,
+  #[error("handle is invalid or malformed")]
+  BadHandle,
+  #[error("email is already taken or blacklisted")]
+  EmailTaken,
+  #[error("email is invalid or malformed")]
+  BadEmail,
+  #[error("there was a problem interacting with the db")]
+  DBIssue,
   #[error("Unknown auth error")]
   Unknown,
 }
@@ -1182,6 +1287,92 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
   }
 
   crate::responses::Forbidden("not working, we might be under attack")
+}
+
+#[get("/user/{id}/description")]
+pub async fn get_user_description(id: web::Path<u64>) -> HttpResponse {
+  let usr_id = id.to_be_bytes();
+
+  if let Ok(Some(desc)) = ORC.user_descriptions.get(&usr_id) {
+    return crate::responses::Ok(desc.to_string());
+  }
+
+  crate::responses::NotFound("No user description found, sorry")
+}
+
+#[post("/user/change/{detail}")]
+pub async fn change_user_detail(req: HttpRequest, detail: web::Path<String>, value: web::Json<String>) -> HttpResponse {
+  match detail.as_str() {
+    "username" => {
+      if !is_username_ok(value.as_str()) {
+        return crate::responses::BadRequest("invalid username");
+      }
+
+      if let Some(mut usr) = ORC.user_by_session(&req) {
+        if let Some(err) = ORC.change_username(&mut usr, value.as_str()) {
+          match err {
+            UserError::UsernameTaken => {
+              return crate::responses::BadRequest("username already taken or blacklisted")
+            },
+            UserError::ChangedUsernameTooSoon => {
+              return crate::responses::InternalServerError("Username change limit reached, you can only change it twice a week, you may change it again a week after the second change");
+            },
+            UserError::DBIssue => {
+              return crate::responses::InternalServerError("database troubles, failed to change username");
+            },
+            _ => {},
+          }
+        } else {
+          return crate::responses::AcceptedStatusData(
+          "username successfully changed",
+            value.to_owned()
+          );
+        }
+      } else {
+        return crate::responses::Forbidden("can't change anything if you're not logged in");
+      }
+    },
+    "handle" => {
+      if !is_handle_ok(value.as_str()) {
+        return crate::responses::BadRequest("invalid user handle");
+      }
+
+      if let Some(mut usr) = ORC.user_by_session(&req) {
+        if let Some(err) = ORC.change_handle(&mut usr, value.as_str()) {
+          match err {
+            UserError::HandleTaken => {
+              return crate::responses::BadRequest("user handle already taken or blacklisted")
+            },
+            UserError::DBIssue => {
+              return crate::responses::InternalServerError("database troubles, failed to change username");
+            },
+            _ => {},
+          }
+        } else {
+          return crate::responses::AcceptedStatusData(
+          "user handle successfully changed",
+            value.to_owned()
+          );
+        }
+      } else {
+        return crate::responses::Forbidden("can't change anything if you're not logged in");
+      }
+    },
+    "description" => {
+      if let Some(usr) = ORC.user_by_session(&req) {
+        if ORC.change_description(&usr, value.as_str()) {
+          return crate::responses::Accepted("user description successfully changed");
+        }
+      } else {
+        return crate::responses::Forbidden("can't change anything if you're not logged in");
+      }
+    },
+    _ => {
+      return crate::responses::BadRequest("invalid user detail");
+    }
+  }
+  
+  crate::responses::InternalServerError("failed to change user details")
 }
 
 fn build_the_usual_cookie<'c, N, V>(
