@@ -14,10 +14,6 @@ use std::{
   collections::{
     BTreeMap,
     HashMap
-  },
-  sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
   }
 };
 
@@ -538,10 +534,7 @@ impl Orchestrator {
     let old_username = usr.username.clone();
     usr.username = new_username.to_string();
 
-    let too_soon = Arc::new(AtomicBool::new(false));
-    let tooson_clone = too_soon.clone();
-
-    let res: TransactionResult<(), ()> = (
+    let res: TransactionResult<(), UserError> = (
       &self.users,
       &self.username_changes,
       &self.usernames
@@ -568,8 +561,7 @@ impl Orchestrator {
           }
         }
         if changes > 1 {
-          tooson_clone.store(true, Ordering::SeqCst);
-          return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+          return Err(sled::transaction::ConflictableTransactionError::Abort(UserError::ChangedUsernameTooSoon));
         }
          
         old_usernames.insert(old_username.clone(), unix_timestamp());
@@ -583,16 +575,21 @@ impl Orchestrator {
       }
 
       if let Some(_) = usernames.insert(new_username.as_bytes(), usr_id)? {
-        return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+        return Err(sled::transaction::ConflictableTransactionError::Abort(UserError::UsernameTaken));
       }
       Ok(())
     });
     
-    if res.is_err() {
-      if too_soon.load(Ordering::SeqCst) {
-        return Some(UserError::ChangedUsernameTooSoon);
+    if let Err(err) = res {
+      match err {
+        sled::transaction::TransactionError::Abort(ur) => {
+          return Some(ur);
+        },
+        sled::transaction::TransactionError::Storage(e) => {
+          println!("storage error: {:?}", e);
+          return Some(UserError::DBIssue);
+        }
       }
-      return Some(UserError::DBIssue);
     }
 
     None
