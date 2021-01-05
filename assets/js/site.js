@@ -1,9 +1,8 @@
-import domlib from '/js/domlib.min.js'
+import d from '/js/domlib.min.js'
 
-const app = domlib.emitter()
-const d = app.d = domlib, df = domlib.domfn
+const app = d.emitter({d})
+const df = d.domfn
 const {div, article, textarea, input, a, p, button, hr, h1, h4, section, span, header} = df
-const {txt} = d
 
 const reqWithBody = (contentType = 'application/json', bodyMorpher = JSON.stringify) => method => (url, body, ops = {}) => fetch(url, {
     method,
@@ -42,9 +41,7 @@ app.setupToggleSituation = (launcher, view, renderTo = 'body', {viewOutAnimation
             df.hasClass(view, 'open') &&
             e.target != launcher
         ) {
-            if (e.path.some(el => el instanceof Element && el.classList.contains('toast'))) {
-                return
-            }
+            if (e.path.some(el => el instanceof Element && el.classList.contains('toast'))) return
             e.preventDefault()
             ts.toggleView(false)
             ts.clickOutHandler.off()
@@ -158,20 +155,20 @@ app.components.toggleBox = (name, {id, checked, ...ops} = {}) => div.togglebox(
     span()
 )
 
-domlib.createElementPlugins.contingentVisibility = (event, el) => {
-    if (domlib.isArr(event)) var [event, fn] = event
-    if (!domlib.isStr(event)) return
+d.createElementPlugins.contingentVisibility = (event, el) => {
+    if (d.isArr(event)) var [event, fn] = event
+    if (!d.isStr(event)) return
     app.on['cv:' + event](state => {
         if (!state) {
             el.setAttribute('hidden', true)
         } else {
             el.removeAttribute('hidden')
         }
-        if (domlib.isFunc(fn)) fn(state)
+        if (d.isFunc(fn)) fn(state)
     })
 }
 
-app.dismissIcon = () => domlib.html( /*html*/
+app.dismissIcon = () => d.html( /*html*/
 `<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="width: 16px; height: 22px;">
 <polygon fill="rgb(255, 66, 66)" points="11.649 9.882 18.262 3.267 16.495 1.5 9.881 8.114 3.267 1.5 1.5 3.267 8.114 9.883 1.5 16.497 3.267 18.264 9.881 11.65 16.495 18.264 18.262 16.497">
 </polygon>
