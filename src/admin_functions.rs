@@ -10,12 +10,11 @@ use serde_json::json;
 use std::{
     collections::HashMap,
     process::Command,
-    sync::Arc,
     thread,
     io::{self, Write}
 };
 
-use crate::orchestrator::{ORC, Orchestrator};
+use crate::orchestrator::{ORC};
 
 use super::TEMPLATES;
 
@@ -254,9 +253,8 @@ impl RemoteHttpRequest {
 pub async fn remote_http(
     req: HttpRequest,
     remote_req: web::Json<RemoteHttpRequest>,
-    orc: web::Data<Arc<Orchestrator>>,
 ) -> HttpResponse {
-    if orc.is_valid_admin_session(&req) {
+    if ORC.is_valid_admin_session(&req) {
         if let Some(res) = remote_req.run().await {
             return HttpResponse::Ok().json(json!({
                 "ok": true,
