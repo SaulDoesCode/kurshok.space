@@ -234,18 +234,16 @@ const quickScroll = d.html( /* html */ `
 </nav>`)
 
 route.on.post(async hash => {
-    setTimeout(() => {
-        if (!app.posts[hash] && app.failedToFetchPosts) {
+    await app.afterPostsInitialization()
+    let post = app.activePost = app.posts[hash]
+    if (post == null) {
+        const res = await app.writQuery({ids: [hash]})
+        if (!d.isArr(res) || res.length === 0) {
             location.hash = 'no-content'
             route.handle()
+            return
         }
-    }, 1200)
-    await app.afterPostsInitialization()
-    const post = app.activePost = app.posts[hash]
-    if (post == null) {
-        location.hash = 'no-content'
-        route.handle()
-        return
+        post = app.activePost = app.posts[hash] = res[0]
     }
     const {title, tags, author, date, content} = app.postDisplay.parts
     title.textContent = post.title
