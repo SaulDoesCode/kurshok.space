@@ -18,7 +18,7 @@ derive_more = "*"
 itertools = "*"
 lazy_static = "^1"
 parking_lot = "*"
-rand = "^0.8"
+rand = {version = "^0.8", features = ["nightly", "simd_support"]}
 rayon = "^1"
 regex = {version = "^1"}
 rustls = "^0.18"
