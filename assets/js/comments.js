@@ -201,6 +201,8 @@ const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
         commentsDisplay.heading.textContent = 'Comments'
         app.replyingToComment = null
         app.editingCommentParent = null
+        app.editingComment = null
+        commentsDisplay.classList.remove('edit-mode')
         commentPostHandler.on()
     }
 })
@@ -212,15 +214,18 @@ app.commentDateFormat = ts => {
 
 app.deleteComment = async cid => {
     cid = cid.replace('-', '/')
-    const cEl = await d.queryAsync(`[id="comment-${cid}"]`)
-    const delBtn = cEl.querySelector('span.delete')
-    delBtn.classList.add('idle-animation')
+    var cEl;
+    try {
+        await d.queryAsync(`[id="comment-${cid}"]`)
+        const delBtn = cEl.querySelector('span.delete')
+        delBtn.classList.add('idle-animation')
+    } catch(e) {}
     const res = await (await app.jsonDelete('/comment', cid)).json()
-    console.log(res)
     if (res.ok) {
-        df.remove(cEl)
         app.toast.msg('Comment succesfully deleted')
+        df.remove(cEl)
     }
+    console.log(res)
 }
 
 app.editComment = async (cid, author_only) => {
@@ -343,32 +348,24 @@ if (location.pathname.includes('/post/')) {
 
 const randHSLColor = () => `hsla(${Math.random()*360|0}, ${Math.random()*100|30}%, 50%, .8)`
 
-app.formulateThread = (comment, children, $) => div({
+app.formulateThread = (comment, children, $) => div.comment({
     $,
-    class: 'comment',
-    css: {
-        borderLeftColor: randHSLColor(),
-    },
-    attr: {
-        id: 'comment-' + comment.id,
-    },
+    css: {borderLeftColor: randHSLColor()},
+    attr: {id: 'comment-' + comment.id},
 }, cEl => [
     div({class: 'comment-content'},
         header(
             app.votesUI('comment', (() => (comment.id = comment.id.replace('/','-'), comment))()),
-            span({class: 'author-name'}, comment.author_name),
-            span({class: 'txt-divider'}, ' - '),
-            span({class: 'posted'}, 
-                app.renderUXTimestamp(comment.posted, app.commentDateFormat)
-            ),
+            span.author_name(comment.author_name),
+            span.txt_divider(' - '),
+            span.posted(app.renderUXTimestamp(comment.posted, app.commentDateFormat)),
             comment.edited != null && [span({class: 'line-divider'}, '|'), span({class: 'edited'},
                 'edited',
                 app.renderUXTimestamp(comment.edited, app.commentDateFormat)
             )],
-            span({class: 'divider'}),
+            span.divider(),
             (app.user != null && comment.author_name == app.user.username) && [
-                button({
-                    class: 'edit-btn',
+                button.edit_btn({
                     onclick() {
                         app.editComment(comment.id, comment.author_only)
                     }
