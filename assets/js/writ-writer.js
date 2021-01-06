@@ -1,6 +1,6 @@
 import app from '/js/site.min.js'
 const d = app.d, df = d.domfn
-const {div, span} = df
+const {div, span, section, input, textarea} = df
 
 const wwLauncher = d.query('.ww-launcher')
 
@@ -54,6 +54,27 @@ const {
     </aside>
 </article>`.collect()
 
+app.writListPaginationView = section.pagination(
+    app.writListPageBackBtn = div.page_back({
+            contingentVisibility: 'wlpageNot0',
+            onclick(e) {
+                app.populateWritList({back: true})
+            }
+        },
+        '<<'
+    ),
+    app.writListPageNumView = div.page_num(),
+    app.writListPageForwardBtn = div.page_forward({
+            onclick(e) {
+                app.populateWritList({next: true})
+            }
+        },
+        '>>'
+    ),
+)
+
+writList.after(app.writListPaginationView)
+
 writingPad.value = ''
 
 app.titleInput = titleInput
@@ -61,10 +82,8 @@ app.writingPad = writingPad
 app.tagInput = tagInput
 
 app.doob = async (doobs = 10) => {
-    let x = 0;
-    while (x < doobs) {
-        ++x
-        app.clearEditor();
+    while (doobs-- > 1) {
+        app.clearEditor()
         app.titleInput.value = `Doob # ${x}`
         app.writingPad.value = `Doob # ${x}`
         app.tagInput.value = `test`
@@ -196,28 +215,53 @@ app.pushWrit = async (title, raw_content, tags, ops = {}) => {
 
 app.deleteWritRequest = writID => app.txtDelete('/writ', writID)
 
-app.editableWritQuery({
+app.wwQuery = {
     author_name: app.user.username,
     with_raw_content: false,
-}).then(async writs => {
-    // TODO: Error toasts
-    if (!d.isArr(writs)) {
-        app.toast.error('Failed to fetch your editable writs')
-        return console.error("failed to fetch user's editable writs")
-    }
-    for (const w of writs) {
-        app.ww.writs[w.id] = w
-        writListEntry(w.title, w.id)
-    }
+    page: 0,
+}
 
-    for (const key of await (await app.localForage()).keys()) {
-        if (key.includes('unpushed:')) {
-            const uw = JSON.parse(await localforage.getItem(key))
-            app.ww.unpushed[uw.title] = uw
-            writListEntry(uw.title)
+app.populateWritList = ({page = app.wwQuery.page, next, back} = {}) => {
+    if (back === true) {
+        if (app.wwQuery.page == 0) {
+            return 
         }
+        app.wwQuery.page--
+    } else if (next === true) {
+        app.wwQuery.page++
+    } else if (page != app.wwQuery.page) {
+        app.wwQuery.page = page
     }
-})
+    app.editableWritQuery(app.wwQuery).then(async writs => {
+        if (!d.isArr(writs)) {
+            app.toast.error('Failed to fetch your editable writs')
+            return console.error("failed to fetch user's editable writs")
+        }
+
+        app.cv('wlpageNot0', app.wwQuery.page != 0)
+        app.writListPageNumView.textContent = app.wwQuery.page
+
+        writList.innerHTML = ''
+        for (const w of writs) {
+            app.ww.writs[w.id] = w
+            writListEntry(w.title, w.id)
+        }
+
+        
+        if (app.wwQuery.page == 0) {
+            for (const key of await (await app.localForage()).keys()) {
+                if (key.includes('unpushed:')) {
+                    const uw = JSON.parse(await localforage.getItem(key))
+                    app.ww.unpushed[uw.title] = uw
+                    writListEntry(uw.title)
+                }
+            }
+        }
+    })
+}
+
+app.populateWritList()
+
 
 app.rawContentRequest = async wid => {
     const res = await fetch('/writ-raw-content/' + wid)
