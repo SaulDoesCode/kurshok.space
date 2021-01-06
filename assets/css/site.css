@@ -591,32 +591,33 @@ nav.quick-scroll > div {
   color: hsl(0, 0%, 65%);
 }
 
-.post-pagination {
+.pagination {
   display: flex;
-  justify-content: center;
+  justify-content: center !important;
   align-content: center;
   align-items: center;
-  flex-flow: row wrap;
+  flex-flow: row nowrap !important;
 }
 
-.post-pagination>* {
+.pagination>* {
   color: hsl(0, 0%, 50%);
   font-weight: 600;
-  font-size: 1.2em;
+  font-size: 1em;
   text-shadow: 0 1px 3px hsla(0, 12%, 63%, 0.25);
   border-radius: 4px;
   padding: .25em;
   margin: .25em;
   transition: all 140ms ease-in;
+  user-select: none;
 }
 
-.post-pagination>.page-back,
-.post-pagination>.page-forward {
+.pagination>.page-back,
+.pagination>.page-forward {
   cursor: pointer;
 }
 
-.post-pagination>.page-back:hover,
-.post-pagination>.page-forward:hover {
+.pagination>.page-back:hover,
+.pagination>.page-forward:hover {
   color: #ffb638;
 }
 
@@ -629,7 +630,6 @@ nav.quick-scroll > div {
   padding-bottom: .25em;
   line-height: 1.3;
   border-top: 1px solid hsl(0, 0%, 20%);
-  
 }
 
 .comment-list > .comment:first-of-type {
