@@ -40,16 +40,16 @@ async fn main() -> std::io::Result<()> {
         .author("Saul <saul@kurshok.space>")
         .about("multipurpose web app database thingy")
         .arg(
-            clap::Arg::with_name("production")
-                .short("p")
+            clap::Arg::new("production")
+                .short('p')
                 .long("production")
-                .help("run the server in production mode"),
+                .about("run the server in production mode")
         )
         .arg(
-            clap::Arg::with_name("domain")
-                .short("d")
+            clap::Arg::new("domain")
+                .short('d')
                 .long("domain")
-                .help("set the server's domain name"),
+                .about("set the server's domain name")
         )
         .get_matches();
 
