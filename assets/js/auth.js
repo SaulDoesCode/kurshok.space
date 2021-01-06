@@ -1,7 +1,7 @@
 import app from '/js/site.min.js'
 const d = app.d, df = d.domfn
 
-const authLauncher = d.query('.auth-launcher')
+const authLauncher = d.query('.auth-launcher') || df.div.auth_launcher({$: 'body'}, 'Auth')
 
 const {
   authView,
@@ -139,4 +139,6 @@ window.addEventListener('storage', () => {
   }
 })
 
-app.authViewToggle.toggleView()
+if (window.location.pathname === '/') {
+  app.authViewToggle.toggleView()
+}
