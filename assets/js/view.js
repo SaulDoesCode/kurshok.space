@@ -335,14 +335,14 @@ app.fetchPostContent = async id => {
 app.posts = Object.create(null)
 app.postPages = Object.create(null)
 
-app.postPaginationView = section.post_pagination(
+app.postPaginationView = section.pagination(
     app.postPageBackBtn = div.page_back({
         contingentVisibility: 'pageNot0',
         onclick(e) {
             app.fetchPosts(app.activePostPage - 1)
         }
     }, 
-        '<<',
+        '<<'
     ),
     app.pageNumView = div.page_num(),
     app.postPageForwardBtn = div.page_forward({
@@ -350,7 +350,7 @@ app.postPaginationView = section.post_pagination(
                 app.fetchPosts(app.activePostPage + 1)
             }
         },
-        '>>',
+        '>>'
     ),
 )
 
