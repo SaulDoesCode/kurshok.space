@@ -167,16 +167,23 @@ const commentPostHandler = d.once.click(commentsDisplay.postBtn, async e => {
                 app.formulateThread(res.data)
             )
 
+            setTimeout(() => {
+                cEl.childenContainer.focus()
+                cEl.scrollIntoView({behavior: 'smooth'})
+            }, 120)
+
             const btnRack = cEl.querySelector('.btn-rack')
 
-            button({
-                $: btnRack,
-                class: 'hide-replies-btn',
-                onclick(e, el) {
-                    df.class(cEl, 'hidden-children')
-                    el.textContent = cEl.classList.contains('hidden-children') ? 'show replies' : 'hide replies'
-                }
-            }, 'hide replies')
+            if (btnRack.querySelector('.hide-replies-btn') == null) {
+                button.hide_replies_btn({
+                    $: btnRack,
+                    onclick(e, el) {
+                        df.class(cEl, 'hidden-children')
+                        el.textContent = (cEl.classList.contains('hidden-children') ? 'show' : 'hide') + ' replies'
+                    }
+                }, 'hide replies')
+            }
+
         } else {
             let cEl
             if (app.editingCommentParent != null) {
