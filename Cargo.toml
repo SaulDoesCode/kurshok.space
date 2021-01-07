@@ -5,25 +5,26 @@ name = "kurshok-space"
 version = "0.1.1"
 
 [dependencies]
-# actix-files = { git = "https://github.com/SaulDoesCode/actix-web" }
-# actix-web = { git = "https://github.com/SaulDoesCode/actix-web", features = ["rustls"] }
-actix-web = { version = "^3", features = ["rustls"]}
-actix-files = "^0"
+actix-web = { version = "4.0.0-beta.1", features = ["rustls"]}
+actix-files = "0.6.0-beta.1"
+actix-web-actors = "4.0.0-beta.1"
+actix = "0.11.0-beta.1"
 bincode = "^1.3"
 borsh = "^0"
 clap = "3.0.0-beta.2"
 comrak = {version = "^0", default-features = false}
 crossbeam-channel = "^0"
 derive_more = "*"
+futures = "*"
 itertools = "*"
 lazy_static = "^1"
-parking_lot = "*"
+notify = "^5.0.0-pre.4"
+parking_lot = { version = "*", features = ["nightly"]}
 rand = {version = "^0.8", features = ["nightly", "simd_support"]}
 rayon = "^1"
 regex = {version = "^1"}
-rustls = "^0.18"
+rustls = "0.19.0"
 lettre = {version = "0.10.0-alpha.4", features = ["builder", "smtp-transport", "rustls-tls"], default-features = false}
-notify = "^5.0.0-pre.4"
 syn = "1.0.57"
 serde = {version = "^1", features = ["derive"]}
 serde_json = "^1"
@@ -33,7 +34,7 @@ sthash = {git = "https://github.com/SaulDoesCode/rust-sthash"}
 tera = { version = "^1.6", features = ["builtins"] }
 thiserror = "^1"
 time = {version = "^0.2", features = ["serde", "rand"]}
-tokio = {version = "^0.2", features = ["full"]}
+tokio = {version = "^1", features = ["full"]}
 toml = "^0"
 walkdir = "^2"
 
