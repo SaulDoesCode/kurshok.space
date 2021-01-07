@@ -1212,7 +1212,7 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
         ar.email.clone(),
       ) {
         if let Some(preauth_token) = ORC.create_preauth_token(usr_id) {
-          if crate::email::send_email(&msg) {
+          if ORC.send_email(msg) {
             return HttpResponse::Accepted()
             .cookie(
               build_cookie_with_ttl("preauth", &preauth_token, 60 * 10)
@@ -1258,7 +1258,7 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
       ar.email.clone(),
     ) {
       if let Some(preauth_token) = ORC.create_preauth_token(usr.id) {
-        if crate::email::send_email(&msg) {
+        if ORC.send_email(msg) {
           return HttpResponse::Accepted()
             .cookie(
               build_cookie_with_ttl("preauth", &preauth_token, 60 * 10)
