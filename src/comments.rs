@@ -1022,7 +1022,7 @@ pub async fn comment_query(o_usr: Option<&User>, mut query: CommentQuery) -> Opt
     return None;
   }
 
-  let (mut tx, mut rx) = tokio::sync::mpsc::channel::<CommentIDTree>(amount as usize);
+  let (tx, mut rx) = tokio::sync::mpsc::channel::<CommentIDTree>(amount as usize);
   let mut iter = ORC.comment_trees.scan_prefix(path.as_bytes());
   let page = query.page;
 
