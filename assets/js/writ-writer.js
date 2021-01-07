@@ -1,8 +1,9 @@
 import app from '/js/site.min.js'
 const d = app.d, df = d.domfn
 const {div, span, section, input, textarea} = df
+const {query, on, once} = d
 
-const wwLauncher = d.query('.ww-launcher')
+const wwLauncher = query('.ww-launcher')
 
 const {
     wwView,
@@ -105,9 +106,7 @@ const writListEntry = (title, id, prepend = false) => div({
     $: prepend ? undefined : writList,
     attr: {wid: id == null ? title : id}
 }, parent => {
-    if (prepend) {
-        writList.prepend(parent)
-    }
+    if (prepend) writList.prepend(parent)
     return [
         parent.titleSpan = span(title),
         div(
@@ -119,7 +118,7 @@ const writListEntry = (title, id, prepend = false) => div({
 
                 // manually jigging double click/tap
                 let timeout, clicks = 0
-                const clickHandler = d.on.pointerup(delBtn, async e => {
+                const clickHandler = on.pointerup(delBtn, async e => {
                     clearTimeout(timeout)
                     if (++clicks == 2) {
                         clicks = 0
@@ -277,7 +276,7 @@ d.run(async () => {
     app.emit('localForageLoaded', app.localForageLoaded = true)
 })
 
-d.on.pointerup(writList, e => {
+on.pointerup(writList, e => {
     if (e.target.classList.contains('selected') || e.target.parentElement.classList.contains('selected')) return
     let wid = e.target.getAttribute('wid') || e.target.parentElement.getAttribute('wid')
     if (wid != null) {
@@ -377,7 +376,7 @@ app.editorPushWrit = async () => {
     return res
 }
 
-d.on.pointerup(saveLocallyBtn, async e => {
+on.pointerup(saveLocallyBtn, async e => {
     if (app.ww.active && app.ww.active.id != null) return
     const {title, raw_content, tags, ops} = app.gatherWritFromWriter()
     const writ = {title, raw_content, tags, ...ops}
@@ -389,13 +388,14 @@ d.on.pointerup(saveLocallyBtn, async e => {
     app.ww.selectedWLE.classList.add('selected')
 })
 
-d.on.pointerup(clearEditorBtn, app.clearEditor)
+on.pointerup(clearEditorBtn, app.clearEditor)
 
-d.on.pointerup(pushWritBtn, e => {
+on.pointerup(pushWritBtn, e => {
     app.editorPushWrit()
 })
 
-d.on.keydown(tagInput, e => {
+on.input(tagInput, app.filterTagInput)
+on.keydown(tagInput, e => {
     if (e.key === 'Enter') {
         app.editorPushWrit()
         e.preventDefault()
@@ -403,7 +403,7 @@ d.on.keydown(tagInput, e => {
     }
 })
 
-d.on.input(titleInput, e => {
+on.input(titleInput, e => {
     if (e.key === 'Enter') {
         writingPad.focus()
         e.preventDefault()

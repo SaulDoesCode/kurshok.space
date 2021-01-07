@@ -6,9 +6,7 @@ const {div, article, textarea, input, a, p, button, hr, h1, h4, section, span, h
 
 const reqWithBody = (contentType = 'application/json', bodyMorpher = JSON.stringify) => method => (url, body, ops = {}) => fetch(url, {
     method,
-    headers: {
-        'Content-Type': contentType
-    },
+    headers: {'Content-Type': contentType},
     body: bodyMorpher(body),
     ...ops,
 })
@@ -370,6 +368,56 @@ app.votesUI = (voteType, {
     )
 
     return votesEl
+}
+
+app.filterTagInput = (e, el) => {
+    if (e.data == null) {
+        el.commas = (el.value.match(/,/g) || []).length
+        e.lastInput = el.value[el.value.length - 1]
+        return
+    }
+
+    if (e.data == ' ') {
+        const vl = el.value.length
+        if (!vl || el.value[vl - 2] != ',') {
+            el.value = el.value.slice(0, -1)
+        }
+    } else if (e.data == ',') {
+        if (el.lastInput == ',' || el.lastInput == '-') {
+            el.value = el.value.slice(0, -1)
+        } else if (el.value.length === 1) {
+            el.value = ''
+        } else {
+            el.commas ? el.commas++ : el.commas = 1
+
+            if (el.commas > 1) {
+                el.value = [...new Set(
+                    el.value.split(',')
+                    .map(tag => tag.trim())
+                    .filter(tag =>
+                        tag.length > 1 && tag.length < 23 &&
+                        tag.search(app.tagRegex) !== -1
+                    )
+                )].join(', ') + ', '
+                el.commas = (el.value.match(/,/g) || []).length
+                e.lastInput = el.value[el.value.length - 1]
+            } else {
+                e.lastInput = e.data
+            }
+        }
+    } else if (e.data == '-') {
+        if (el.value.length == 1) {
+            el.value = ''
+        } else if (el.value[el.value.length - 2] == ',' || el.value[el.value.length - 2] == '-') {
+            el.value = el.value.slice(0, -1)
+        } else {
+            el.lastInput = '-'
+        }
+    } else if (!e.data.match(/[a-zA-Z0-9, -]/)) {
+        el.value = el.value.slice(0, -1)
+    } else {
+        el.lastInput = e.data
+    }
 }
 
 app.tabView = ({

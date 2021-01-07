@@ -53,55 +53,7 @@ const postFilterView = div.post_filter(pf => [
                 }
             },
             oninput(e, el) {
-                if (e.data == null) {
-                    el.commas = (el.value.match(/,/g) || []).length
-                    e.lastInput = el.value[el.value.length - 1]
-                    return
-                }
-
-                if (e.data == ' ') {
-                    const vl = el.value.length
-                    console.log(`el.value = ${el.value} && len = ${vl}`)
-                    if (!vl || el.value[vl - 2] != ',') {
-                        el.value = el.value.slice(0, -1)
-                    }
-                } else if (e.data == ',') {
-                    if (el.lastInput == ',' || el.lastInput == '-') {
-                        el.value = el.value.slice(0, -1)
-                    } else if (el.value.length === 1) {
-                        el.value = ''
-                    } else {
-                        el.commas ? el.commas++ : el.commas = 1
-
-                        if (el.commas > 1) {
-                            el.value = [...new Set(
-                                el.value.split(',')
-                                .map(tag => tag.trim())
-                                .filter(tag =>
-                                    tag.length > 1 && tag.length < 23 &&
-                                    tag.search(app.tagRegex) !== -1
-                                )
-                            )].join(', ') + ', '
-                            el.commas = (el.value.match(/,/g) || []).length
-                            e.lastInput = el.value[el.value.length - 1]
-                            console.log('it happened')
-                        } else {
-                            e.lastInput = e.data
-                        }
-                    }
-                } else if (e.data == '-') {
-                    if (el.value.length == 1) {
-                        el.value = ''
-                    } else if (el.value[el.value.length - 2] == ',') {
-                        el.value = el.value.slice(0, -1)
-                    } else {
-                        el.lastInput = '-'
-                    }
-                } else if (!e.data.match(/[a-zA-Z0-9, -]/)) {
-                    el.value = el.value.slice(0, -1)
-                } else {
-                    el.lastInput = e.data
-                }
+                app.filterTagInput(e, el)
             }
         }),
         pf.tagListContainer = div.tag_list_container({
