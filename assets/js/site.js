@@ -210,15 +210,17 @@ app.toast = new Proxy((kind, msg, displayTime = 15000) => {
 d.run(async () => {
     try {
         await app.loadScriptsThenRunSequentially(true,
-            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/dayjs.min.js',
-            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/utc.min.js',
-            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.8.36/plugin/relativeTime.min.js'
+            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.2/dayjs.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.2/plugin/utc.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.2/plugin/relativeTime.min.js'
         )
         window.dayjs.extend(window.dayjs_plugin_utc)
         window.dayjs.extend(window.dayjs_plugin_relativeTime)
         dayjs().utcOffset(2)
         app.emit('dayjsLoaded', app.dayjsLoaded = true)
-    } catch (e) {}
+    } catch (e) {
+        console.error('failed to load dayjs')
+    }
 })
 
 app.dateFormat = 'HH:mm a DD MMM YYYY'
