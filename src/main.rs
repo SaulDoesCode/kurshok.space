@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![feature(iter_advance_by)]
+// #![feature(drain_filter)]
 
 #[macro_use(lazy_static)]
 extern crate lazy_static;
@@ -19,6 +20,7 @@ mod ratelimiter;
 mod responses;
 mod utils;
 mod writs;
+mod websockets;
 
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_files::NamedFile;
@@ -132,6 +134,7 @@ async fn main() -> std::io::Result<()> {
             .service(comments::downvote_comment)
             .service(posts::render_post)
             .service(posts::render_post_by_slug)
+            .service(web::resource("/ws/").to(websockets::ws_conn_setup))
             .service(admin_functions::remote_http)
             .service(admin_panel)
             .service(admin_gateway)
