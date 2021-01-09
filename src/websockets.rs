@@ -1,12 +1,11 @@
 use actix::prelude::*;
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use parking_lot::RwLock;
+use dashmap::DashMap;
 // use rayon::prelude::*;
 
 use std::{
-    time::{Duration, Instant},
-    collections::HashMap
+    time::{Duration, Instant}
 };
 
 use crate::{
@@ -17,7 +16,7 @@ use crate::{
 
 
 lazy_static!{
-    static ref LIVE_USERS: RwLock<HashMap<u64, i64>> = RwLock::new(HashMap::with_capacity(30));
+    static ref LIVE_USERS: DashMap<u64, i64> = DashMap::new();
 }
 
 /// How often heartbeat pings are sent
@@ -28,7 +27,7 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 /// do websocket handshake and start `WSConn` actor
 pub async fn ws_conn_setup(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
     if let Some(usr) = ORC.user_by_session(&req) {
-        if LIVE_USERS.read().contains_key(&usr.id) {
+        if LIVE_USERS.contains_key(&usr.id) {
             return Err(actix_web::error::ErrorConflict("there is already an open connection"));
         }
         return ws::start(
@@ -39,7 +38,6 @@ pub async fn ws_conn_setup(req: HttpRequest, stream: web::Payload) -> Result<Htt
     }
     Err(actix_web::error::ErrorForbidden("only authenticated users may use websocket facilities"))
 }
-
 struct WSConn {
     usr: User,
     hb: Instant,
@@ -50,7 +48,7 @@ impl Actor for WSConn {
 
     /// Method is called on actor start. We start the heartbeat process here.
     fn started(&mut self, ctx: &mut Self::Context) {
-        LIVE_USERS.write().insert(self.usr.id, unix_timestamp());
+        LIVE_USERS.insert(self.usr.id, unix_timestamp());
         self.hb(ctx);
     }
 }
@@ -71,7 +69,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WSConn {
                 self.hb = Instant::now();
             }
             Ok(ws::Message::Text(text)) => {
-                println!("user - {} sent message: {}", &self.usr.username, &text);
+                let msg = text.trim();
+
 
                 ctx.text(text);
             },
@@ -81,11 +80,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WSConn {
             Ok(ws::Message::Close(reason)) => {
                 ctx.close(reason);
                 ctx.stop();
-                LIVE_USERS.write().remove(&self.usr.id);
+                LIVE_USERS.remove(&self.usr.id);
             }
             _ => {
                 ctx.stop();
-                LIVE_USERS.write().remove(&self.usr.id);
+                LIVE_USERS.remove(&self.usr.id);
             },
         }
     }
@@ -103,7 +102,7 @@ impl WSConn {
                 ctx.ping(b"pong");
             } else {
                 ctx.stop();
-                LIVE_USERS.write().remove(&usr_id);
+                LIVE_USERS.remove(&usr_id);
             }
         });
     }
