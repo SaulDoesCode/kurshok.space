@@ -806,6 +806,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
+name = "dashmap"
+version = "4.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b937cd1fbd1f194ac842196bd2529f21618088ee6d8bff6a46ece611451c96b"
+dependencies = [
+ "cfg-if 1.0.0",
+ "num_cpus",
+ "rayon",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1419,6 +1430,7 @@ dependencies = [
  "clap",
  "comrak",
  "crossbeam-channel 0.5.0",
+ "dashmap",
  "derive_more",
  "futures",
  "itertools 0.10.0",

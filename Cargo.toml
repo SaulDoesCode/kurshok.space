@@ -14,6 +14,7 @@ borsh = "^0"
 clap = "3.0.0-beta.2"
 comrak = {version = "^0", default-features = false}
 crossbeam-channel = "^0"
+dashmap = {version = "  ^4", features = ["rayon"]}
 derive_more = "*"
 futures = "*"
 itertools = "*"
