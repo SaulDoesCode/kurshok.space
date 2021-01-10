@@ -11,25 +11,20 @@ use thiserror::Error;
 use time::Duration;
 
 use std::{
-  collections::{
-    BTreeMap,
-    HashMap
-  }
+  collections::BTreeMap
 };
 
 use super::{CONF, TEMPLATES};
 
-use crate::orchestrator::{Orchestrator, ORC};
-use crate::utils::{
-  is_email_ok,
-  is_username_ok,
-  is_handle_ok,
-  random_string,
-  unix_timestamp,
-  // FancyBool,
-  FancyIVec,
-};
-use crate::expirable_data::ExpirableData;
+use crate::{email::EmailStatus, expirable_data::ExpirableData, orchestrator::{Orchestrator, ORC}, responses, utils::{
+    is_email_ok,
+    is_username_ok,
+    is_handle_ok,
+    random_string,
+    unix_timestamp,
+    // FancyBool,
+    FancyIVec,
+  }};
 
 impl Orchestrator {
   pub fn hash(&self, data: &[u8]) -> Vec<u8> {
@@ -545,7 +540,7 @@ impl Orchestrator {
       usernames.remove(old_username.as_bytes())?;
 
       if let Some(raw) = username_changes.get(&usr_id)? {
-        let mut old_usernames: HashMap<String, i64> = BorshDeserialize::try_from_slice(&raw).unwrap();
+        let mut old_usernames: BTreeMap<String, i64> = BorshDeserialize::try_from_slice(&raw).unwrap();
 
         let now = unix_timestamp();
         let mut changes = 0;
@@ -568,7 +563,7 @@ impl Orchestrator {
         let new_raw = old_usernames.try_to_vec().unwrap();
         username_changes.insert(&usr_id, new_raw)?;
       } else {
-        let mut old_usernames: HashMap<String, i64> = HashMap::new();
+        let mut old_usernames: BTreeMap<String, i64> = BTreeMap::new();
         old_usernames.insert(old_username.clone(), unix_timestamp());
         let raw = old_usernames.try_to_vec().unwrap();
         username_changes.insert(&usr_id, raw.as_slice())?;
@@ -613,12 +608,12 @@ impl Orchestrator {
       handles.remove(old_handle.as_bytes())?;
 
       if let Some(raw) = handle_changes.get(&usr_id)? {
-        let mut old_handles: HashMap<String, i64> = BorshDeserialize::try_from_slice(&raw).unwrap();
+        let mut old_handles: BTreeMap<String, i64> = BorshDeserialize::try_from_slice(&raw).unwrap();
         old_handles.insert(old_handle.clone(), unix_timestamp());
         let new_raw = old_handles.try_to_vec().unwrap();
         handle_changes.insert(&usr_id, new_raw)?;
       } else {
-        let mut old_handles = HashMap::new();
+        let mut old_handles = BTreeMap::new();
         old_handles.insert(old_handle.clone(), unix_timestamp());
         let raw = old_handles.try_to_vec().unwrap();
         handle_changes.insert(&usr_id, raw)?;
@@ -1049,6 +1044,35 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
     }
   }
   crate::responses::Forbidden("authentication failed, missing preauth cookie")
+}
+
+#[get("/auth/email-status")]
+pub async fn auth_email_status_check(req: HttpRequest) -> HttpResponse {
+  if let Some(preauth_cookie) = req.cookie("preauth") {
+    let preauth_token = preauth_cookie.value().to_string();
+    if preauth_token.len() == 22 {
+      if let Ok(res) = ORC.email_statuses.get(preauth_token.as_bytes()) {
+          if let Some(raw) = res {
+            let status: EmailStatus = BorshDeserialize::try_from_slice(&raw).unwrap();
+            return match status {
+              EmailStatus::Failed(reason) => responses::InternalServerError(
+                reason.unwrap_or("The email failed to send, reason unknown".to_string())
+              ),
+              EmailStatus::Sending => responses::NotModified("The email is still sending"),
+              EmailStatus::Sent => responses::Accepted("The email was successfully sent"),
+            }
+
+          } else {
+            return crate::responses::BadRequest("Email status check failed, expired preauth cookie");
+          }
+      } else {
+        return crate::responses::InternalServerError("Failed to read preauth token from database");
+      }
+    } else {
+      return crate::responses::BadRequest("invalid preauth cookie, are you trying to hack?");
+    }
+  }
+  crate::responses::Forbidden("emails status check failed, missing preauth cookie")
 }
 
 #[get("/auth/{code}")]
