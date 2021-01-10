@@ -7,14 +7,11 @@
   <title>Kurshok Space</title>
   <link rel="stylesheet" href="/css/marx.min.css">
   <link rel="stylesheet" href="/css/style.css">
-  <script src="/js/domlib.min.js"></script>
-  <script src="/js/main.js"></script>
-  <script src="/js/view.js"></script>
+  <script src="/js/main.js" type="module"></script>
   {% include 'head-imports.html' %}
 </head>
 
 <body>
-  <noscript>No JavaScript? Or, old browswer perhaps? <br> Well, then, no website :|</noscript>
   <header>
     <div>
       <h1>Kurshok Space</h1>
@@ -36,17 +33,20 @@
           <header>Auth</header>
           <div>
             {% if username is undefined %}
-            <div class="auth">
-              <div class="field">
-                <label for="auth-username">Username</label>
-                <input type="text" name="username" id="auth-username">
-                <label for="auth-pwd">Password</label>
-                <input type="password" name="password" id="auth-pwd">
-              </div>
-              <button class="submit" onclick="app.authContingent()">🔑</button>
+            <div class="auth auth-launcher 🔑">
+              Open Auth Box
             </div>
-            <script src="/js/auth.js"></script>
+            <script src="/js/auth.min.js" type="module" defer></script>
+            <script type="module">
+              import app from '/js/site.min.js'
+              app.loadStyle('/css/auth.min.css')
+            </script>
             {% else %}
+            <script src="/js/profile.min.js" type="module" defer></script>
+            <script type="module">
+              import app from '/js/site.min.js'
+              app.loadStyle('/css/postauth.min.css')
+            </script>
             <div>Account</div>
             <div>Logout</div>
             {% endif %}

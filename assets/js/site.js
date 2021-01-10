@@ -501,6 +501,80 @@ app.tabView = ({
     }
 }
 
+const isURL = url => {
+    try {
+        new URL(url);
+        return true;
+    } catch (e) {}
+    return false;
+}
+
+const Socket = (address, protocols) => {
+    if (!isURL(address)) {
+        let match = address.match(/^(\/.*?)?$/)
+        if (d.isEmpty(match)) throw new Error('invalid url')
+        address = location.host + match[0]
+    }
+    if (!address.includes('ws://') && !address.includes('wss://')) address = (location.protocol === 'http:' ? 'ws://' : 'wss://') + address
+    if (isURL(address)) {
+        const newSock = () => new WebSocket(address, protocols)
+        const options = {
+            socket: null,
+            open: false,
+            recievers: [],
+            message: '',
+            send(msg) {
+                if (options.socket['readyState'] == 1) options.socket.send(d.isObj(msg) ? JSON.stringify(msg) : msg);
+                else {
+                    const poll = setInterval(() => {
+                        if (options.socket['readyState'] == 1) {
+                            options.socket.send(d.isObj(msg) ? JSON.stringify(msg) : msg)
+                            clearInterval(poll)
+                        }
+                    }, 15)
+                    setTimeout(_ => clearInterval(poll), 2000)
+                }
+                return options
+            },
+            recieve(fn) {
+                if (d.isFunc(fn)) options.recievers.push(fn)
+            },
+            get msg() { return options.message },
+            close() {
+                options.socket.close()
+            },
+            reopen() {
+                openSocket()
+            }
+        }
+
+        function openSocket(sock = options.open ? options.socket : (options.socket = newSock())) {
+            sock.onopen = () => {
+                options.open = true
+                sock.onmessage = e => {
+                    options.message = e.data
+                    options.recievers.forEach(fn => fn(e.data, e))
+                }
+            }
+            sock.onclose = () => {
+                options.open = false
+            }
+            sock.onerror = e => {
+                throw e
+            }
+        }
+        openSocket(options.socket = newSock())
+        return options
+    }
+}
+
+d.run(app.sock = () => {
+    app.ws = Socket('/ws/')
+    app.ws.recieve(msg => {
+        console.log("ws-msg: ", msg)
+    })
+    app.ws.send("This is a websocket message. D'ya hear it?!?!?!?")
+})
 
 window.app = app
 export default app

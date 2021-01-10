@@ -69,7 +69,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WSConn {
                 self.hb = Instant::now();
             }
             Ok(ws::Message::Text(text)) => {
-                let msg = text.trim();
+                let _msg = text.trim();
 
 
                 ctx.text(text);

@@ -1,3 +1,5 @@
+import domlib from '/js/domlib.min.js'
+
 const app = {}
 
 app.initDropdown = el => {

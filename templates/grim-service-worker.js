@@ -1,9 +1,25 @@
-const version = 'v0.0.1'
+const version = 'v0.0.4'
 const cacheName = version + '-kurshok.space'
 
 const cachedPaths = [
   '/css/marx.min.css',
-  '/js/domlib.js',
+  '/css/site.min.css',
+  '/css/fontello/css/fontello.min.css',
+  '/css/fontello/font/fontello.woff2?9565335',
+  '/css/auth.min.css',
+  '/css/postauth.min.css',
+  '/css/SuperTinyIcons/amazon.svg',
+  '/css/SuperTinyIcons/paypal.svg',
+  '/css/SuperTinyIcons/digitalocean.svg',
+  '/css/SuperTinyIcons/opensource.svg',
+  '/css/SuperTinyIcons/ethereum.svg',
+  '/css/SuperTinyIcons/github.svg',
+  '/js/domlib.min.js',
+  '/js/router.min.js',
+  '/js/site.min.js',
+  '/js/writ-writer.min.js',
+  '/js/localforage.min.js',
+  '/js/profile.min.js',
   /* 
   '/',
   '/css/style.css',
