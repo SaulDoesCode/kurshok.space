@@ -147,8 +147,6 @@ postFilterView.collectTags = (newTag) => {
     return postFilterView.tags
 }
 
-app.tagRegex = /^[a-zA-Z0-9-]+$/
-
 route('posts', [contentDisplay, postFilterView])
 
 if (location.hash == '' || location.hash == '#') {
