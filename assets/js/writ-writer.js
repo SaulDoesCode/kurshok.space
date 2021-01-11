@@ -400,6 +400,10 @@ on.keydown(tagInput, e => {
         app.editorPushWrit()
         e.preventDefault()
         titleInput.focus()
+    } else if (e.ctrlKey) {
+        setTimeout(() => {
+            tagInput.value = app.cleanseTagValue(tagInput.value)
+        }, 0)
     }
 })
 
