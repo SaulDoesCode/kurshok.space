@@ -379,15 +379,47 @@ app.filterTagInput = (e, el) => {
         return
     }
 
+    const vl = el.value.length
+    const lastChar = vl ? el.value[vl - 1] : ''
+    const penultimateChar = vl ? el.value[vl - 2] : ''
+
     if (e.data == ' ') {
-        const vl = el.value.length
-        if (!vl || el.value[vl - 2] != ',') {
+        if (penultimateChar == ' ') {
             el.value = el.value.slice(0, -1)
+        } else if (!vl || (penultimateChar != ',' && penultimateChar != '-')) {
+            if (vl && penultimateChar != ' ') {
+                el.value = el.value
+                    .replaceAll(/, /g, ',')
+                    .replaceAll(/  /g, '-')
+                    .replaceAll(' ', '-')
+                    .replaceAll(',', ', ')
+                return
+            }
+            el.value = el.value.slice(0, -1) + '-'
+        } else if (vl) {
+            if (penultimateChar == '-') {
+                if (lastChar == ' ' || lastChar == ',') {
+                    el.value = el.value.slice(0, -1)
+                } else{
+                    el.value = el.value.slice(0, -1)
+                        .replaceAll(/, /g, ',')
+                        .replaceAll(/  /g, '-')
+                        .replaceAll(' ', '-')
+                        .replaceAll(',', ', ')
+
+                }
+            } else {
+                if (penultimateChar == ',' || lastChar == ' ') {
+                    el.value = el.value.slice(0, -1)
+                } else {
+                    el.value = el.value.replaceAll(/  /g, '-')
+                }
+            }
         }
     } else if (e.data == ',') {
-        if (el.lastInput == ',' || el.lastInput == '-') {
+        if (penultimateChar == ',' || penultimateChar == '-') {
             el.value = el.value.slice(0, -1)
-        } else if (el.value.length === 1) {
+        } else if (vl == 1) {
             el.value = ''
         } else {
             el.commas ? el.commas++ : el.commas = 1
@@ -405,22 +437,67 @@ app.filterTagInput = (e, el) => {
                 e.lastInput = el.value[el.value.length - 1]
             } else {
                 e.lastInput = e.data
+                el.value += ' '
             }
         }
     } else if (e.data == '-') {
-        if (el.value.length == 1) {
+        if (vl == 1) {
             el.value = ''
-        } else if (el.value[el.value.length - 2] == ',' || el.value[el.value.length - 2] == '-') {
-            el.value = el.value.slice(0, -1)
         } else {
-            el.lastInput = '-'
+            if (
+                penultimateChar == ',' ||
+                penultimateChar == '-' ||
+                penultimateChar == ' ' ||
+                lastChar == ' ' ||
+                lastChar == ',' ||
+                lastChar == '-'
+            ) {
+                el.value = el.value.slice(0, -1)
+                return
+            }
         }
-    } else if (!e.data.match(/[a-zA-Z0-9, -]/)) {
-        el.value = el.value.slice(0, -1)
-    } else {
-        el.lastInput = e.data
+    } else if (!e.data.match(/[a-zA-Z0-9]/)) {
+        el.value = app.cleanseTagValue(el.value)
     }
 }
+
+app.cleanseTagValue = value => {
+    value = [...new Set(value.split(',').map(tag => {
+        tag = tag.trim().split('').filter(c => !!c.match(/[a-zA-Z0-9]/) || !!c.match('-')).join('')
+        if (tag.length && (tag != '' || tag != ' ' || tag != '\n')) {
+            while (value.includes('  ')) value = value.replaceAll(/  /g, '-')
+            while (value.includes('--')) value = value.replaceAll(/--/g, '-')
+            while (tag[0] == '-' || tag[0] == ' ' || tag[0] == ',') tag = tag.slice(1)
+            while (tag[tag.length - 1] == '-' || tag[tag.length - 1] == ' ' || tag[tag.length - 1] == ',') tag = tag.slice(0, -1)
+        }
+        return tag
+    }).filter(tag => tag.length < 23 && tag != '' && tag != ' ' && tag != '\n'))].join(', ')
+
+    value = value.split('').filter((c, i) =>
+            !!c.match(/[a-zA-Z0-9]/) ||
+            !!(c.match('-') && (i != 0 || i != len - 1)) ||
+            !!(c.match(',') && (i != 0 || i != len - 1))
+        ).join('')
+        .replaceAll('\n', '')
+        .replaceAll(/, /g, ',')
+        .replaceAll(/  /g, '-')
+        .replaceAll(' ', '-')
+        .replaceAll(/--/g, '-')
+        .replaceAll(/---/g, '-')
+        .replaceAll(',', ', ')
+
+    value = value.replace(/-$/g, '')
+
+    if (value.includes('-,')) value = value.replaceAll(/,-/g, ',')
+    while (value.includes('--')) value = value.replaceAll(/--/g, '-')
+    while (value.includes(',,')) value = value.replaceAll(/,,/g, ',')
+    while (value.includes(', , ')) value = value.replaceAll(/, , /g, ', ')
+    while (value.includes('  ')) value = value.replaceAll(/,,/g, ',')
+
+    return value.length ? value : ''
+}
+
+app.tagRegex = /^[a-zA-Z0-9-]+$/
 
 app.tabView = ({
     $,
