@@ -223,6 +223,14 @@ d.run(async () => {
     }
 })
 
+app.uponDayjsLoaded = fn => {
+    if (fn) {
+        return app.dayjsLoaded ? fn() : app.once.dayjsLoaded(fn)
+    } else {
+        return app.dayjsLoaded ? Promise.resolve(app.dayjsLoaded) : new Promise(r => app.once.dayjsLoaded(r))
+    }
+}
+
 app.dateFormat = 'HH:mm a DD MMM YYYY'
 
 app.dayjsUXTSformat = ts => {
