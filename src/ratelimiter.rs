@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sled::{Db, Tree};
 use time::{Duration, OffsetDateTime};
 
-use crate::orchestrator::ORC;
+use crate::{expirable_data::ExpirableData, orchestrator::ORC};
 
 fn now() -> i64 {
   OffsetDateTime::now_utc().unix_timestamp()
@@ -21,20 +21,26 @@ impl RateLimiter {
   pub fn hit(&self, data: &[u8], threshhold: u32, dur: Duration) -> Option<RateLimited> {
     if let Some(mut rl) = self.get(data) {
       if self.store.insert(data, rl.hit(1, threshhold, &dur).to_bin()).is_ok() {
-        ORC.expire_key(
+        ORC.expire_data(
           rl.seconds_left(),
-          "rl".to_string(),
-          data
+          ExpirableData::Single{
+            tree: "rl".to_string(),
+            key: data.to_vec(),
+          },
+          Some(data)
         );
         return Some(rl);
       }
     }
     let rl = RateLimited::new();
     if self.insert(data, rl.to_bin()) {
-      ORC.expire_key(
+      ORC.expire_data(
         rl.seconds_left(),
-        "rl".to_string(),
-        data
+        ExpirableData::Single{
+          tree: "rl".to_string(),
+          key: data.to_vec(),
+        },
+        Some(data)
       );
       return Some(rl);
     }
@@ -43,7 +49,7 @@ impl RateLimiter {
 
   pub fn forget(&self, data: &[u8]) -> bool {
     if let Ok(Some(_)) = self.store.remove(data) {
-      ORC.unexpire_key("rl".to_string(), data);
+      ORC.unexpire_data(data);
       return true;
     }
     false

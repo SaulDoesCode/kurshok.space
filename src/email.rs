@@ -9,9 +9,7 @@ use lettre::{
 };
 
 use super::CONF;
-use crate::{
-    orchestrator::{ORC, Orchestrator}
-};
+use crate::{expirable_data::ExpirableData, orchestrator::{ORC, Orchestrator}};
 
 // TODO: Send emails in non-blocking tokio tasks
 
@@ -90,19 +88,25 @@ impl Orchestrator {
                 if let Err(_) = ORC.email_statuses.insert(&sid, EmailStatus::Sending.try_to_vec().unwrap()) {
                     return
                 }
-                ORC.expire_key(60 * 6, "email_statuses".to_string(), &sid);
+                
+                let mut unexpire_key = vec![];
+                unexpire_key.extend_from_slice(b"sid:");
+                unexpire_key.extend_from_slice(&sid);
+
+                let exp_data = ExpirableData::Single{
+                    tree: "email_statuses".to_string(),
+                    key: sid.clone()
+                };
+
+                ORC.expire_data(60 * 6, exp_data, Some(&unexpire_key));
 
                 match mailer.send(&email) {
                     Ok(response) => {
                         if response.is_positive() {
                             if let Err(_) = ORC.email_statuses.insert(&sid, EmailStatus::Sent.try_to_vec().unwrap()) {}
-                            ORC.unexpire_key("email_statuses".to_string(), &sid);
-                            ORC.expire_key(60 * 6, "email_statuses".to_string(), &sid);
                         } else {
                             let reason = Some(response.message.join("\n"));
                             if let Err(_) = ORC.email_statuses.insert(&sid, EmailStatus::Failed(reason).try_to_vec().unwrap()) {}
-                            ORC.unexpire_key("email_statuses".to_string(), &sid);
-                            ORC.expire_key(60 * 6, "email_statuses".to_string(), &sid);
                         }
                     },
                     Err(e) => {
@@ -111,8 +115,6 @@ impl Orchestrator {
                         }
                         let reason = Some(format!("failed to send email: {}", e));
                         if let Err(_) = ORC.email_statuses.insert(&sid, EmailStatus::Failed(reason).try_to_vec().unwrap()) {}
-                        ORC.unexpire_key("email_statuses".to_string(), &sid);
-                        ORC.expire_key(60 * 6, "email_statuses".to_string(), &sid);
                     },
                 }
             }
