@@ -1301,10 +1301,9 @@ pub async fn make_comment_on_writ(usr: &User, rc: RawComment) -> HttpResponse {
     ) {
       return crate::responses::AcceptedData(comment);
     }
-    return crate::responses::BadRequest("Can't comment on non-existing post");
+    return crate::responses::InternalServerError("troubles abound, couldn't make subcomment :(");
   }
-
-  crate::responses::InternalServerError("troubles abound, couldn't make subcomment :(")
+  crate::responses::BadRequest("Can't comment on non-existing post")
 }
 
 pub async fn make_comment_on_comment(usr: &User, rc: RawComment) -> HttpResponse {
