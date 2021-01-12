@@ -1,91 +1,86 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use parking_lot::RwLock;
+use sled::{transaction::*, Transactional};
 use rayon::prelude::*;
-use sled::{transaction::*, IVec, Transactional};
 
 use std::{
     thread,
-    collections::{HashSet, BTreeMap}
+    collections::BTreeMap
 };
 
 use crate::orchestrator::{Orchestrator, ORC};
-use crate::utils::{unix_timestamp, FancyIVec};
-
-lazy_static! {
-  static ref EXPIRY_TIMES: RwLock<HashSet<i64>> = RwLock::new(HashSet::new());
-}
+use crate::utils::{unix_timestamp};
 
 impl Orchestrator {
-    pub fn expire_key(&self, from_now: i64, tree: String, key: &[u8]) -> bool {
+    pub fn expire_data(&self, from_now: i64, data: ExpirableData, unexpire_key: Option<&[u8]>) -> bool {
         let exp = unix_timestamp() + from_now;
-        let data = ExpirableData::Single{tree, key: key.to_vec()};
 
-        self.expirable_data.insert(
-            data.try_to_vec().unwrap(),
-            IVec::from_i64(exp)
-        ).map_or(false, |res| {
-            if let Some(old_exp) = res {
-                (EXPIRY_TIMES.write()).remove(&old_exp.to_i64());
+        let res: TransactionResult<(), ()> = (
+            &self.expirable_data,
+            &self.expirable_data_unexpire_keys
+        ).transaction(|(ed, unexpire_keys)| {
+            if let Some(uk) = unexpire_key {
+                if unexpire_keys.insert(uk, &exp.to_be_bytes())?.is_some() {
+                    return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+                }
             }
-            (EXPIRY_TIMES.write()).insert(exp);
-            true
-        })
-    }
 
-    pub fn expire_keys(&self, from_now: i64, tree: String, keys: Vec<Vec<u8>>) -> bool {
-        let exp = unix_timestamp() + from_now;
-        let data = ExpirableData::MultiKey{tree, keys};
+            let container = ExpDataContainer{
+                data: data.clone(),
+                unexpire_key: unexpire_key.map(|key| key.to_vec())
+            };
 
-        self.expirable_data.insert(
-            data.try_to_vec().unwrap(),
-            IVec::from_i64(exp)
-        ).map_or(false, |res| {
-            if let Some(old_exp) = res {
-                (EXPIRY_TIMES.write()).remove(&old_exp.to_i64());
+            if let Some(raw) = ed.get(&exp.to_be_bytes())? {
+                let mut old_containers: Vec<ExpDataContainer> = BorshDeserialize::try_from_slice(&raw).unwrap();
+                old_containers.push(container);
+
+                ed.insert(
+                    &exp.to_be_bytes(),
+                    old_containers.try_to_vec().unwrap().as_slice()
+                )?;
+            } else {
+                let containers: Vec<ExpDataContainer> = vec![container];
+                ed.insert(
+                    &exp.to_be_bytes(),
+                    containers.try_to_vec().unwrap().as_slice()
+                )?;
             }
-            (EXPIRY_TIMES.write()).insert(exp);
-            true
-        })
+            Ok(())
+        });
+
+        res.is_ok()
     }
 
-    pub fn expire_data(&self, from_now: i64, tree: BTreeMap<String, Vec<Vec<u8>>>) -> bool {
-        let exp = unix_timestamp() + from_now;
-        let data = ExpirableData::MultiTree(tree);
+    pub fn unexpire_data(&self, unexpire_key: &[u8]) -> bool {
+        let res: TransactionResult<(), ()> = (
+            &self.expirable_data,
+            &self.expirable_data_unexpire_keys
+        ).transaction(|(ed, unexpire_keys)| {
+            if let Some(key) = unexpire_keys.remove(unexpire_key)? {
+                if let Some(raw) = ed.get(&key)? {
+                    let mut containers: Vec<ExpDataContainer> = BorshDeserialize::try_from_slice(&raw).unwrap();
+                    let uk = unexpire_key.to_vec();
+                    containers.drain_filter(|c| {
+                        if let Some(og_uk) = &c.unexpire_key {
+                            return og_uk.eq(&uk)
+                        }
+                        false
+                    });
 
-        self.expirable_data.insert(
-            data.try_to_vec().unwrap(),
-            IVec::from_i64(exp)
-        ).map_or(false, |res| {
-            if let Some(old_exp) = res {
-                (EXPIRY_TIMES.write()).remove(&old_exp.to_i64());
+                    if containers.len() == 0 {
+                        ed.remove(key)?;
+                    } else {
+                        ed.insert(key, containers.try_to_vec().unwrap().as_slice())?;
+                    }
+                    return Ok(());
+                }
             }
-            (EXPIRY_TIMES.write()).insert(exp);
-            true
-        })
-    }
+            if self.dev_mode {
+                println!("failed to unexpire data with key {:?}", unexpire_key);
+            }
+            Err(sled::transaction::ConflictableTransactionError::Abort(()))
+        });
 
-    pub fn unexpire_data(&self, data: ExpirableData) -> Option<i64> {
-        if let Ok(o_exp) = self.expirable_data.remove(data.try_to_vec().unwrap()) {
-            o_exp.map(|raw| {
-                let exp = raw.to_i64();
-                (*EXPIRY_TIMES.write()).remove(&exp);
-                exp
-            })
-        } else {
-            None
-        }
-    }
-
-    pub fn unexpire_key(&self, tree: String, key: &[u8]) -> Option<i64> {
-        self.unexpire_data(ExpirableData::Single{tree, key: key.to_vec()})
-    }
-
-    pub fn unexpire_keys(&self, tree: String, keys: Vec<Vec<u8>>) -> Option<i64> {
-        self.unexpire_data(ExpirableData::MultiKey{tree, keys})
-    }
-
-    pub fn unexpire_map(&self, map: BTreeMap<String, Vec<Vec<u8>>>) -> Option<i64> {
-        self.unexpire_data(ExpirableData::MultiTree(map))
+        res.is_ok()
     }
 }
 
@@ -107,9 +102,7 @@ fn expirable_data_into_map(map: &mut BTreeMap<String, Vec<Vec<u8>>>, data: Expir
                 map.insert(tree, keys);
             }
         },
-        ExpirableData::MultiTree(old_map) => {
-            map.extend(old_map);
-        }
+        ExpirableData::MultiTree(old_map) => map.extend(old_map),
     }
 }
 
@@ -126,7 +119,6 @@ fn expirable_data_to_map(data: ExpirableData) -> BTreeMap<String, Vec<Vec<u8>>> 
             map.extend(old_map);
         }
     }
-
     map
 }
 
@@ -137,66 +129,68 @@ fn merge_expirable_data(data: ExpirableData, old_data: ExpirableData) -> Expirab
     ExpirableData::MultiTree(map)
 }
 
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
 pub enum ExpirableData {
     Single {tree: String, key: Vec<u8>},
     MultiKey {tree: String, keys: Vec<Vec<u8>>},
     MultiTree(BTreeMap<String, Vec<Vec<u8>>>),
 }
 
-pub fn start_system() -> thread::JoinHandle<()> {
-    let mut iter = ORC.expirable_data.iter();
-    while let Some(Ok((_, exp))) = iter.next() {
-        let exp = exp.to_i64();
-        (EXPIRY_TIMES.write()).insert(exp);
-    }
-    clean_up_all();
+#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+struct ExpDataContainer{
+    unexpire_key: Option<Vec<u8>>,
+    data: ExpirableData,
+}
 
+pub fn start_system() -> thread::JoinHandle<()> {
     thread::spawn(|| {
         loop {
-            let now = unix_timestamp();
-            if EXPIRY_TIMES.read().par_iter().any(|e| now >= *e) {
-                clean_up_all();
-            }
+            clean_up_all();
             thread::sleep(std::time::Duration::from_secs(1));
         }
     })
 }
 
 pub fn clean_up_all() {
-    let mut for_removal: Vec<i64> = vec![];
+    let now = unix_timestamp();
+    let now_bytes: &[u8] = &now.to_be_bytes();
+    
+    let mut iter = ORC.expirable_data.range(..now_bytes);
+    while let Some(Ok((key, raw))) = iter.next() {
+        let containers: Vec<ExpDataContainer> = BorshDeserialize::try_from_slice(&raw).unwrap();
 
-    let mut iter = ORC.expirable_data.iter();
-    while let Some(Ok((raw_data, raw_exp))) = iter.next() {
-        let now = unix_timestamp();
-        let exp = raw_exp.to_i64();
-        if ORC.dev_mode {
-            println!(
-                "found something expirable now = {} >= exp = {} == {}",
-                now, exp, now >= exp
-            );
-        }
+        containers.par_iter().for_each(|c| {
+            if ORC.dev_mode {
+                println!(
+                    "found something expirable: {:?}",
+                    &c.data
+                );
+            }
 
-        if now >= exp {
-            clean_up_expirable_datum(raw_data, None);
-            for_removal.push(exp);
-        }
-    }
 
-    let mut et = EXPIRY_TIMES.write();
-    for el in for_removal{
-        (*et).remove(&el);
+            if let Some(uk) = &c.unexpire_key {
+                if let Err(_) = ORC.expirable_data_unexpire_keys.remove(uk.as_slice()) {}
+            }   
+        
+            if clean_up_expirable_datum(&c.data) && ORC.dev_mode {
+                println!("cleaned up expirable datum");
+            }
+        });
+
+        if let Err(_) = ORC.expirable_data.remove(key) {}
     }
 }
 
-fn clean_up_expirable_datum(raw_data: IVec, exp: Option<i64>) -> bool {
-    let data = ExpirableData::try_from_slice(&raw_data).unwrap();
+fn clean_up_expirable_datum(data: &ExpirableData) -> bool {
     let mut ok = false;
     match data {
         ExpirableData::Single{tree, key} => {
             if let Ok(tr) = ORC.db.open_tree(tree.as_bytes()) {
                 if let Ok(Some(_)) = tr.remove(key.as_slice()) {
                     ok = true;
+                    if ORC.dev_mode {
+                        println!("removing key from tree - {} went ok", tree);
+                    }
                 }
             }
         },
@@ -254,13 +248,6 @@ fn clean_up_expirable_datum(raw_data: IVec, exp: Option<i64>) -> bool {
                 println!("removing many keys from many trees went {}", ok);
             }
         },
-    }
-
-    if let Some(exp) = exp {
-        (*EXPIRY_TIMES.write()).remove(&exp);
-    }
-    if let Err(_) = ORC.expirable_data.remove(&raw_data) {
-        if let Ok(_) = ORC.expirable_data.remove(raw_data) {}
     }
 
     ok
