@@ -11,7 +11,7 @@ use thiserror::Error;
 use time::Duration;
 
 use std::{
-  collections::BTreeMap
+  collections::{BTreeMap}
 };
 
 use super::{CONF, TEMPLATES};
@@ -131,10 +131,11 @@ impl Orchestrator {
           // 5 min
           5 * 60
         } else {
-          // 15 min
-          15 * 60
+          // 8 min
+          8 * 60
         },
-        exp_data
+    ExpirableData::MultiTree(exp_data),
+    Some(&usr.id.to_be_bytes())
       ) && self.dev_mode {
         println!("failed to set expiry for unverified user");
       }
@@ -270,19 +271,9 @@ impl Orchestrator {
     });
 
     if let Ok((usr, email, first_time)) = res {
-      if first_time {
-        let mut exp_data: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
-      
-        exp_data.insert("users".to_string(), vec!(usr.id.to_be_bytes().to_vec()));
-        exp_data.insert("usernames".to_string(), vec!(usr.username.as_bytes().to_vec()));
-        exp_data.insert("emails".to_string(), vec!(email.as_bytes().to_vec()));
-        exp_data.insert("user_email_index".to_string(), vec!(usr.id.to_be_bytes().to_vec()));
-        exp_data.insert("handles".to_string(), vec!(usr.handle.as_bytes().to_vec()));
-  
-        if let Some(_) = self.unexpire_data(ExpirableData::MultiTree(exp_data)) {
-          if self.dev_mode {
-            println!("no need to clean up user: {} anymore, they are verified", &usr.username);
-          }
+      if first_time {  
+        if self.unexpire_data(&usr.id.to_be_bytes()) && self.dev_mode {
+          println!("no need to clean up user: {} anymore, they are verified", &usr.username);
         } else if self.dev_mode {
           println!("we fucked up, a verified user: {} was/will-be deleted", &usr.username);
         }
@@ -308,11 +299,12 @@ impl Orchestrator {
     });
   
     if let Ok(token) = res {
-      ORC.expire_key(
-        // 7 minutes
-        60*7,
-        "preauth_tokens".to_string(),
-        token.as_bytes()
+      // 7 minutes
+      ORC.expire_data(60 * 7, ExpirableData::Single{
+          tree: "preauth_tokens".to_string(),
+          key: token.as_bytes().to_vec(),
+        },
+        Some(token.as_bytes())
       );
       return Some(token);
     }
@@ -325,10 +317,7 @@ impl Orchestrator {
       Ok(())
     });
 
-    ORC.unexpire_data(ExpirableData::Single{
-      tree: "preauth_tokens".to_string(),
-      key: preauth_token.as_bytes().to_vec(),
-    });
+    ORC.unexpire_data(preauth_token.as_bytes());
 
     res.is_ok()
   }
@@ -858,7 +847,7 @@ pub enum UserError {
   Unknown,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct User {
   pub id: u64,
   pub username: String,
