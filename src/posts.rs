@@ -4,9 +4,14 @@ use time::Duration;
 
 use super::TEMPLATES;
 
-use crate::orchestrator::ORC;
-use crate::utils::FancyIVec;
-use crate::writs::WritQuery;
+use crate::{
+    orchestrator::ORC,
+//  utils::FancyIVec,
+    writs::{
+        WritID,
+        WritQuery
+    }
+};
 
 #[get("/post/{author_id}:{writ_id}")]
 pub async fn render_post(
@@ -63,7 +68,7 @@ pub async fn render_post_by_slug(
 
     let slug_key = format!("post:{}", slug.into_inner());
     let writ_id = if let Ok(Some(writ_id)) = ORC.slugs.get(slug_key.as_bytes()) {
-        writ_id.to_string()
+        WritID::from_bin(&writ_id).to_string()
     } else {
         return render_404(
             &mut ctx,
@@ -75,7 +80,7 @@ pub async fn render_post_by_slug(
     let (o_usr, potential_renewal_cookie) = ORC.user_by_session_renew(&req, Duration::days(3));
 
     if let Some(usr) = &o_usr {
-        ctx.insert("username", &usr.username);
+        ctx.insert("user", usr);
     }
 
     let mut query = WritQuery::default();
@@ -86,9 +91,11 @@ pub async fn render_post_by_slug(
     let public_writ = match ORC.public_writ_query(query, o_usr.as_ref()) {
         Some(mut writs) => writs.pop().unwrap(),
         None => {
-            return HttpResponse::NotFound()
-                .content_type("text/html")
-                .body("We couldn't find a post with that slug.");
+            return render_404(
+                &mut ctx,
+                "That's a bad slug, we couldn't find any posts matching it.",
+                ORC.dev_mode,
+            );
         }
     };
 
