@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![feature(iter_advance_by)]
-// #![feature(drain_filter)]
+#![feature(drain_filter)]
 
 #[macro_use(lazy_static)]
 extern crate lazy_static;
