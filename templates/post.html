@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="/css/marx.min.css">
     <link rel="stylesheet" href="/css/fontello/css/fontello.min.css">
     <link rel="stylesheet" href="/css/site.min.css">
-{% if username is undefined %}
+{% if user is undefined %}
     <link rel="stylesheet" href="/css/auth.min.css">
 {% else %}
     <link rel="stylesheet" href="/css/postauth.min.css">
@@ -28,13 +28,17 @@
             <div>For the brainsick ones</div>
         </header>
 
-    {% if username is defined %}
+    {% if user is defined %}
         <button class="profile-launcher" title="click to see or build your profile">
-            {{ username }}
+            {{ user.username }}
         </button>
         <script type="module" defer>
             import app from '/js/site.min.js'
-            app.user = { username: "{{ username }}".trim() }
+            app.user = { 
+                username: "{{ user.username }}".trim(),
+                id: "{{ user.id }}",
+                handle: "{{ user.handle }}"
+            }
             import('/js/profile.min.js')
             // d.once.click('.profile-launcher', () => {})
             {% if is_writer %}
@@ -46,9 +50,9 @@
         <script type="module" defer>
             import d from '/js/domlib.min.js'
                 d.once.click('.auth-launcher', async e => {
-                e.preventDefault()
-                import('/js/auth.min.js')
-            })
+                    e.preventDefault()
+                    import('/js/auth.min.js')
+                })
         </script>
     {% endif %}
     </nav>
@@ -67,7 +71,7 @@
                     <div class="author-name">By {{ public_writ.author_name }}</div>
                     <div> ● </div>
                     <div class="posted">
-                        {{ public_writ.posted | date(format="%H:%M %P %d %b %Y") }}
+                        {{ public_writ.posted }}
                     </div>
                     <div class="tags">
                     {% for tag in public_writ.tags %}
@@ -89,6 +93,17 @@
     app.renderComments(app.postID)
 </script>
 {% endif %}
+<script defer type="module">
+    import app from '/js/site.min.js'
+    app.uponDayjsLoaded(() => {
+        const postedEl = app.d.query('.post .posted')
+        const posted = Number(postedEl.textContent.trim())
+        postedEl.innerHTML = ''
+        postedEl.appendChild(
+            app.renderUXTimestamp(posted)
+        )
+    })
+</script>
 
 {% include "footer.html" %}
 </body>
