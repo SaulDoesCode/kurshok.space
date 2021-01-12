@@ -10,7 +10,6 @@ lazy_static! {
 }
 
 pub struct Orchestrator {
-  // auth
   pub db: Db,
   pub id_counter: Tree,
   pub users: Tree,
@@ -27,7 +26,6 @@ pub struct Orchestrator {
   pub magic_links: Tree,
   pub preauth_tokens: Tree,
   pub email_statuses: Tree,
-  pub expirable_data: Tree,
   pub users_primed_for_auth: Tree,
   pub handles: Tree,
   pub sessions: Tree,
@@ -37,6 +35,11 @@ pub struct Orchestrator {
   pub expiry_tll: i64,
   pub dev_mode: bool,
   pub hasher: Hasher,
+  
+  pub expirable_data: Tree,
+  pub expirable_data_unexpire_keys: Tree,
+
+//pub fnv_key: u64,
 
   // writs
   pub writs: Tree,
@@ -85,6 +88,8 @@ impl Orchestrator {
     if dev_mode {
       db.drop_tree(b"username_changes").unwrap();
       db.drop_tree(b"handle_changes").unwrap();
+      db.drop_tree(b"expirable_data").unwrap();
+      db.drop_tree(b"expirable_data_unexpire_keys").unwrap();
     }
 
     let username_changes = db.open_tree(b"username_changes").unwrap();
@@ -103,15 +108,16 @@ impl Orchestrator {
     let magic_links = db.open_tree(b"magic_links").unwrap();
     let preauth_tokens = db.open_tree(b"preauth_tokens").unwrap();
     let email_statuses = db.open_tree(b"email_statuses").unwrap();
-    let expirable_data = db.open_tree(b"expirable_data").unwrap();
     let users_primed_for_auth = db.open_tree(b"users_primed_for_auth").unwrap();
     let sessions = db.open_tree(b"sessions").unwrap();
     let session_data = db.open_tree(b"session_data").unwrap();
     
+    let expirable_data = db.open_tree(b"expirable_data").unwrap();
+    let expirable_data_unexpire_keys = db.open_tree(b"expirable_data_unexpire_keys").unwrap();
+
     let secrets = db.open_tree(b"secrets").unwrap();
 
-    let hasher = if secrets.contains_key(b"hasher_seed").unwrap() {
-      let seed = secrets.get(b"hasher_seed").unwrap().unwrap();
+    let hasher = if let Some(seed) = secrets.get(b"hasher_seed").unwrap() {
       Hasher::new(Key::from_seed(&seed, None), None)
     } else {
       let mut seed = [0; SEED_BYTES];
@@ -120,6 +126,16 @@ impl Orchestrator {
       db.flush().unwrap();
       Hasher::new(Key::from_seed(&seed, None), None)
     };
+
+/*
+    let fnv_key = if let Some(raw) = secrets.get(b"fnv_key").unwrap() {
+      raw.to_u64()
+    } else {
+      let fnv_key = rand::random::<u64>();
+      secrets.insert(b"fnv_key", &fnv_key.to_be_bytes()).unwrap();
+      fnv_key
+    };
+*/
 
     let ratelimiter = RateLimiter::setup(&db);
 
@@ -161,7 +177,6 @@ impl Orchestrator {
       magic_links,
       preauth_tokens,
       email_statuses,
-      expirable_data,
       users_primed_for_auth,
       sessions,
       session_data,
@@ -171,6 +186,10 @@ impl Orchestrator {
       expiry_tll,
       dev_mode,
       hasher,
+
+      expirable_data,
+      expirable_data_unexpire_keys,
+//    fnv_key,
 
       writs,
       raw_content,
