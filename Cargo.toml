@@ -10,7 +10,7 @@ actix-files = "0.6.0-beta.1"
 actix-web-actors = "4.0.0-beta.1"
 actix = "0.11.0-beta.1"
 bincode = "^1.3"
-borsh = { git = "https://github.com/near/borsh-rs", branch = "feat/added-support-for-more-built-in-types", features = ["std"]}
+borsh = { version = "0.8.1", features = ["std"]}
 clap = "3.0.0-beta.2"
 comrak = {version = "^0", default-features = false}
 crossbeam-channel = "^0"
@@ -25,7 +25,7 @@ rand = {version = "^0.8", features = ["nightly", "simd_support"]}
 rayon = "^1"
 regex = {version = "^1"}
 rustls = "0.19.0"
-lettre = {version = "0.10.0-alpha.4", features = ["builder", "smtp-transport", "rustls-tls"], default-features = false}
+lettre = {git = "https://github.com/lettre/lettre", branch = "master", features = ["builder", "smtp-transport", "rustls-tls"], default-features = false}
 serde = {version = "^1", features = ["derive"]}
 serde_json = "^1"
 sled = {version = "^0.34", features = ["compression", "rio"]}
@@ -33,8 +33,8 @@ slug = "^0.1.4"
 sthash = {git = "https://github.com/SaulDoesCode/rust-sthash"}
 tera = { version = "^1.6", default-features = false }
 thiserror = "^1"
-time = {version = "^0.2", features = ["serde", "rand"]}
-tokio = {version = "^1", features = ["full"]}
+time = {version = "^0.2", default-features = false}
+tokio = {version = "^1", features = ["sync", "parking_lot"], default-features = false}
 toml = "^0"
 walkdir = "^2"
 
