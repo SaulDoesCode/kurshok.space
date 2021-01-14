@@ -19,7 +19,7 @@ derive_more = "*"
 futures = "*"
 itertools = "*"
 lazy_static = "^1"
-notify = { git = "https://github.com/notify-rs/notify", branch = "main" }
+# notify = { git = "https://github.com/notify-rs/notify", branch = "main" }
 parking_lot = { version = "*", features = ["nightly"]}
 rand = {version = "^0.8", features = ["nightly", "simd_support"]}
 rayon = "^1"
@@ -36,7 +36,6 @@ thiserror = "^1"
 time = {version = "^0.2", default-features = false}
 tokio = {version = "^1", features = ["sync", "parking_lot"], default-features = false}
 toml = "^0"
-walkdir = "^2"
 
 mimalloc = {version = "*", default-features = false}
 
