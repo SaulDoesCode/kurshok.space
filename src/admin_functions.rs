@@ -1,23 +1,24 @@
 use actix_web::{
     client,
     http::{Cookie, HeaderName, HeaderValue},
-    post, web, HttpRequest, HttpResponse,
+    get, post, web, HttpRequest, HttpResponse,
 };
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+// use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use std::{
     collections::HashMap,
     process::Command,
-    thread,
-    io::{self, Write}
+    //thread,
+    //io::{self, Write}
 };
 
 use crate::orchestrator::{ORC};
 
 use super::TEMPLATES;
 
+/*
 pub fn watch_and_update_files() -> thread::JoinHandle<()> {
     thread::spawn(|| {
         let (tx, rx) = crossbeam_channel::unbounded();
@@ -119,6 +120,15 @@ pub fn watch_and_update_files() -> thread::JoinHandle<()> {
         }
     })
 }
+*/
+
+pub fn watch_and_update_files() -> bool {
+    Command::new("node")
+        .current_dir("./scripts")
+        .arg("index.js")
+        .spawn().is_ok()
+}
+
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct RemoteHttpResponse {
@@ -272,4 +282,20 @@ pub async fn remote_http(
         "ok": false,
         "status": "remote-http is for admins only",
     }));
+}
+
+#[get("/reload-templates")]
+pub async fn reload_templates_request(req: HttpRequest) -> HttpResponse {
+    if let Some(value) = req.headers().get("Authorization") {
+        let key = include_bytes!("../private/template-reload-key.txt");
+        if key == value.as_bytes() {
+            if TEMPLATES.write().full_reload().is_err() {
+                println!(":( the templates were not properly reloaded, trouble is afoot.");
+                return crate::responses::InternalServerError(":( the templates were not reloaded, trouble is afoot.");
+            }
+            println!("templates reloaded!");
+            return crate::responses::Accepted("templates succesfully reloaded");
+        }
+    }
+    crate::responses::Forbidden("invalid key")
 }
