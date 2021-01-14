@@ -66,8 +66,9 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    admin_functions::watch_and_update_files();
-    println!("file watching active");
+    if admin_functions::watch_and_update_files() {
+        println!("file watching active");
+    }
 
     expirable_data::start_system();
     println!("expirable_data system active");
@@ -136,8 +137,8 @@ async fn main() -> std::io::Result<()> {
             .service(posts::render_post_by_slug)
             .service(web::resource("/ws/").to(websockets::ws_conn_setup))
             .service(admin_functions::remote_http)
+            .service(admin_functions::reload_templates_request)
             .service(admin_panel)
-            .service(admin_gateway)
             .service(serve_files_and_templates)
     })
     // .bind_rustls("0.0.0.0:8443", tls_config)?
@@ -240,26 +241,6 @@ async fn admin_panel(req: HttpRequest) -> HttpResponse {
         return HttpResponse::Ok().content_type("text/html").body(s);
     }
     HttpResponse::Ok()
-        .content_type("text/plain")
-        .body("The home page template is broken! :( We have failed you.")
-}
-
-#[get("/admin-gateway")]
-async fn admin_gateway(req: HttpRequest) -> HttpResponse {
-    let mut ctx = Context::new();
-    if let Some(usr) = ORC.user_by_session(&req) {
-        ctx.insert("username", &usr.username);
-        ctx.insert("dev_mode", &ORC.dev_mode);
-    } else {
-        return HttpResponse::Found()
-            .header(actix_web::http::header::LOCATION, "/")
-            .finish()
-            .into_body();
-    }
-    if let Ok(s) = TEMPLATES.read().render("admin-gateway.html", &ctx) {
-        return HttpResponse::Ok().content_type("text/html").body(s);
-    }
-    HttpResponse::InternalServerError()
         .content_type("text/plain")
         .body("The home page template is broken! :( We have failed you.")
 }
