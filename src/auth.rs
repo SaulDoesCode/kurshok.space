@@ -462,10 +462,10 @@ impl Orchestrator {
   }
 
   pub fn user_by_id(&self, id: u64) -> Option<User> {
-    if let Ok(Some(raw)) = self.users.get(&id.to_be_bytes()) {
-      return Some(User::try_from_slice(&raw).unwrap());
+    match self.users.get(&id.to_be_bytes()) {
+      Ok(raw) => raw.map(|raw| User::try_from_slice(&raw).unwrap()),
+      Err(_) => None,
     }
-    None
   }
 
   pub fn user_by_ivec(&self, id: IVec) -> Option<User> {
