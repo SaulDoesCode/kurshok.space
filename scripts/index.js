@@ -12,9 +12,9 @@ const assetWatcher = chokidar.watch('./assets/', {
 })
 
 assetWatcher.on('change', filePath => {
-    console.log('change', filePath)
     if (filePath.includes('.min')) return
     if (!filePath.includes('assets')) return
+    console.log('change', filePath)
 
     if (filePath.includes('.js')) {
         const {name, dir} = path.parse(filePath)
