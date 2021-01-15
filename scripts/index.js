@@ -41,8 +41,6 @@ assetWatcher.on('change', filePath => {
     }
 })
 
-const templateReloadKey = fs.readFileSync("../private/template-reload-key.txt", "utf8")
-
 const templateWatcher = chokidar.watch('./templates/', {
     cwd: '../',
     ignored: '*.min.*',
@@ -55,5 +53,5 @@ templateWatcher.on('change', filePath => {
     console.log('template change detected: ', filePath)
 
     // http.get just kept timing out with 408s, no idea why, so bleh, just use curl cuz it works and it's easy
-    child_process.exec('curl -k --header "Authorization: ' + templateReloadKey + '" https://127.0.0.1/reload-templates')
+    child_process.exec('curl -k https://127.0.0.1/reload-templates')
 })
