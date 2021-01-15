@@ -1352,8 +1352,7 @@ pub async fn make_comment_edit(usr_id: u64, rce: RawCommentEdit) -> HttpResponse
 }
 
 fn get_prefix_and_parts(id: &str, prefix_parts: usize) -> (String, Vec<String>) {
-  let mut parts: Vec<String> = id
-    .split_terminator('/')
+  let mut parts: Vec<String> = id.split_terminator('/')
     .filter(|s| *s != "")
     .map(|p| p.to_string())
     .collect();

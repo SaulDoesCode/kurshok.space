@@ -268,23 +268,13 @@ pub async fn remote_http(
     remote_req: web::Json<RemoteHttpRequest>,
 ) -> HttpResponse {
     if ORC.is_valid_admin_session(&req) {
-        if let Some(res) = remote_req.run().await {
-            return HttpResponse::Ok().json(json!({
-                "ok": true,
-                "data": res
-            }));
+        match remote_req.run().await {
+            Some(res) => responses::Ok(res),
+            None => responses::InternalServerError("something went wrong"),
         }
-
-        return HttpResponse::InternalServerError().body(json!({
-            "ok": false,
-            "status": "something went wrong",
-        }));
+    } else {
+        responses::Forbidden("remote-http is for admins only")
     }
-
-    return HttpResponse::Unauthorized().body(json!({
-        "ok": false,
-        "status": "remote-http is for admins only",
-    }));
 }
 
 #[get("/reload-templates")]
