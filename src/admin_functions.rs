@@ -3,15 +3,11 @@ use actix_web::{
     http::{Cookie, HeaderName, HeaderValue},
     get, post, web, HttpRequest, HttpResponse,
 };
-// use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use std::{
     collections::HashMap,
     process::Command,
-    //thread,
-    //io::{self, Write}
 };
 
 use crate::{
@@ -21,109 +17,6 @@ use crate::{
 
 use super::TEMPLATES;
 
-/*
-pub fn watch_and_update_files() -> thread::JoinHandle<()> {
-    thread::spawn(|| {
-        let (tx, rx) = crossbeam_channel::unbounded();
-
-        let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| {
-            if let Ok(event) = res {
-                if let Err(err) = tx.send(event) {
-                    println!("error sending file change event through channel: {}", err);
-                }
-            }
-        })
-        .expect("failed to setup file watcher for hot reloading related development features");
-
-        watcher
-            .watch("./templates", RecursiveMode::Recursive)
-            .expect("watcher failed to watch ./templates");
-
-        if ORC.dev_mode {
-            watcher
-                .watch("./assets/js", RecursiveMode::Recursive)
-                .expect("watcher failed to watch ./assets/js");
-            watcher
-                .watch("./assets/css", RecursiveMode::Recursive)
-                .expect("watcher failed to watch ./assets/css");
-        }
-
-        let current_dir = {
-            let p = std::env::current_dir().unwrap();
-            let d = p.to_str().unwrap();
-            d.to_string()
-        };
-        while let Ok(event) = rx.recv() {
-            match event.kind {
-                notify::EventKind::Modify(_) => {
-                    for path in event.paths {
-                        if !path.is_file() {
-                            continue;
-                        }
-                        if path.to_str().unwrap().contains("templates") {
-                            println!("reloading templates...");
-                            let mut templates = TEMPLATES.write();
-                            if (*templates).full_reload().is_err() {
-                                println!(":( the templates were not reloaded, trouble is afoot.");
-                            }
-                            break;
-                        }
-                        if let Some(ext) = path.extension() {
-                            let filename =
-                                String::from(path.file_name().unwrap().to_str().unwrap());
-                            if filename.contains(".min.") {
-                                continue;
-                            }
-                            if ext == "js" {
-                                let res = Command::new("python")
-                                    .current_dir(path.parent().unwrap())
-                                    .arg(
-                                        format!("{}/scripts/minify-js.py", current_dir)
-                                    )
-                                    .arg(&filename)
-                                    .output();
-                                match res {
-                                    Ok(out) => {
-                                        println!("minified {}", &filename);
-                                        if ORC.dev_mode {
-                                            io::stdout().write_all(&out.stdout).unwrap();
-                                            io::stderr().write_all(&out.stderr).unwrap();
-                                        }
-                                    },
-                                    Err(e) => {
-                                        println!("failed to minify {}, error: {:?}", &filename, e);
-                                    },
-                                }
-                            } else if ext == "css" {
-                                let res = Command::new("python")
-                                    .current_dir(path.parent().unwrap())
-                                    .arg(
-                                        format!("{}/scripts/minify-css.py", current_dir)
-                                    )
-                                    .arg(&filename)
-                                    .output();
-                                match res {
-                                    Ok(out) => {
-                                        println!("minified {} \n", &filename);
-                                        if ORC.dev_mode {
-                                            io::stdout().write_all(&out.stdout).unwrap();
-                                            io::stderr().write_all(&out.stderr).unwrap();
-                                        }
-                                    },
-                                    Err(e) => {
-                                        println!("failed to minify {}, error: {:?}", &filename, e);
-                                    },
-                                }
-                            }
-                        }
-                    }
-                }
-                _ => continue,
-            }
-        }
-    })
-}
-*/
 
 pub fn watch_and_update_files() -> bool {
     Command::new("node")
