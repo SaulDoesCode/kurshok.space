@@ -1,4 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Serialize, Deserialize};
 use sled::{transaction::*, Transactional};
 use rayon::prelude::*;
 
@@ -129,7 +130,7 @@ fn merge_expirable_data(data: ExpirableData, old_data: ExpirableData) -> Expirab
     ExpirableData::MultiTree(map)
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Debug, Clone)]
 pub enum ExpirableData {
     Single {tree: String, key: Vec<u8>},
     MultiKey {tree: String, keys: Vec<Vec<u8>>},
@@ -154,7 +155,7 @@ pub fn start_system() -> thread::JoinHandle<()> {
 pub fn clean_up_all() {
     let now = unix_timestamp();
     let now_bytes: &[u8] = &now.to_be_bytes();
-    
+
     let mut iter = ORC.expirable_data.range(..now_bytes);
     while let Some(Ok((key, raw))) = iter.next() {
         let containers: Vec<ExpDataContainer> = BorshDeserialize::try_from_slice(&raw).unwrap();
@@ -170,8 +171,8 @@ pub fn clean_up_all() {
 
             if let Some(uk) = &c.unexpire_key {
                 if let Err(_) = ORC.expirable_data_unexpire_keys.remove(uk.as_slice()) {}
-            }   
-        
+            }
+
             if clean_up_expirable_datum(&c.data) && ORC.dev_mode {
                 println!("cleaned up expirable datum");
             }
