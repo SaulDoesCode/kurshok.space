@@ -73,7 +73,6 @@ impl Orchestrator {
       .mode(sled::Mode::LowSpace)
       .use_compression(true)
       .compression_factor(20)
-      .flush_every_ms(Some(1500))
       .open()
       .expect("failed to open main.db");
 
