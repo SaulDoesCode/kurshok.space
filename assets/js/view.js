@@ -109,7 +109,7 @@ postFilterView.collectTags = (newTag) => {
             tag.length > 1 && tag.length < 23 &&
             tag.search(app.tagRegex) !== -1
         )
-    
+
     df.attrToggle(postFilterView.tagListContainer, 'hidden', !postFilterView.tags.length)
 
     const alreadyThere = []

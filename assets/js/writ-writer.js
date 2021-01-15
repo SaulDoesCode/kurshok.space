@@ -222,9 +222,7 @@ app.wwQuery = {
 
 app.populateWritList = ({page = app.wwQuery.page, next, back} = {}) => {
     if (back === true) {
-        if (app.wwQuery.page == 0) {
-            return 
-        }
+        if (app.wwQuery.page == 0) return
         app.wwQuery.page--
     } else if (next === true) {
         app.wwQuery.page++
@@ -246,7 +244,6 @@ app.populateWritList = ({page = app.wwQuery.page, next, back} = {}) => {
             writListEntry(w.title, w.id)
         }
 
-        
         if (app.wwQuery.page == 0) {
             for (const key of await (await app.localForage()).keys()) {
                 if (key.includes('unpushed:')) {
