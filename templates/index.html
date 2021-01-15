@@ -75,6 +75,35 @@
             {% if is_writer %}
                 app.d.once.click('.ww-launcher', () => import('/js/writ-writer.min.js'))
             {% endif %}
+
+                app.openWS = () => {
+                    if (app.ws && app.wsOpen) return
+
+                    app.ws = new WebSocket('wss://' + location.hostname + '/ws/')
+
+                    app.wsSend = msg => {
+                        if (app.wsClosed) throw new Error('tried to send msg with closed websocket')
+                        if (app.wsOpen) return app.ws.send(msg)
+                        app.once.wsOpen(() => app.ws.send(msg))
+                    }
+
+                    app.ws.onopen = () => {
+                        app.ws.onmessage = e => {
+                            app.emit.wsMsg(e.data, e)
+                            console.log("ws-msg: ", e.data)
+                        }
+                        app.wsOpen = true
+                        app.emit.wsOpen()
+                    }
+                    app.ws.onclose = () => {
+                        app.wsOpen = false
+                        app.emit.wsClosed()
+                    }
+                    app.ws.onerror = e => {throw e}
+                }
+
+                app.openWS()
+                app.wsSend("This is a websocket message. D'ya hear it?!?!?!?")
             </script>
         {% else %}
             <button class="auth-launcher" title="click for a login or signup modal">
