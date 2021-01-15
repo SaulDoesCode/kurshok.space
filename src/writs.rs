@@ -851,11 +851,7 @@ impl Writ {
     None
   }
 
-  pub fn public(
-    &self,
-    requestor_id: &Option<u64>,
-    with_content: bool,
-  ) -> Option<PublicWrit> {
+  pub fn public(&self, requestor_id: &Option<u64>, with_content: bool) -> Option<PublicWrit> {
     let author_id = match self.author_id() {
       Some(au_id) => au_id,
       None => return None,
@@ -871,13 +867,10 @@ impl Writ {
       }
     }
 
-    let author = if let Some(author) = ORC.user_by_id(author_id) {
-      author
+    let (author_name, author_handle) = if let Some(author) = ORC.user_by_id(author_id) {
+      (author.username, author.handle)
     } else {
-      if ORC.dev_mode {
-        println!("writ.public: no such author");
-      }
-      return None;
+      ("Unknown".to_string(), "Unknown".to_string())
     };
 
     let writ_id = match WritID::from_str(&self.id) {
@@ -886,61 +879,49 @@ impl Writ {
     };
     let wid = writ_id.to_bin();
 
-    let res: TransactionResult<PublicWrit, ()> = (
-      &ORC.content,
-      &ORC.votes,
-      &ORC.writ_voters
-    ).transaction(|(content_tree, votes, writ_voters)| {
-        let vote: i64 = if let Some(res) = votes.get(&wid)? {
-          res.to_i64()
-        } else {
-          0
-        };
+    let vote: i64 = if let Ok(Some(res)) = ORC.votes.get(&wid) {
+      res.to_i64()
+    } else {
+      0
+    };
 
-        let content = if with_content {
-          if let Some(res) = content_tree.get(&wid)? {
-            Some(res.to_string())
-          } else {
-            if ORC.dev_mode {
-              println!("writ.public: could not retrieve content");
-            }
-            return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-          }
-        } else {
-          None
-        };
-
-        let you_voted = match &requestor_id {
-          Some(req_id) => writ_voters
-            .get(self.vote_id(*req_id).as_bytes())?
-            .map(|raw| Vote::try_from_slice(&raw).unwrap().up),
-          None => None,
-        };
-
-        Ok(PublicWrit {
-          id: self.id.clone(),
-          title: self.title.clone(),
-          author_name: author.username.clone(),
-          author_handle: author.handle.clone(),
-          kind: self.kind.clone(),
-          tags: self.tags.clone(),
-          posted: self.posted,
-          content,
-          commentable: self.commentable,
-          vote,
-          you_voted,
-        })
-      });
-
-    match res {
-      Ok(pw) => Some(pw),
-      Err(e) => {
+    let content = if with_content {
+      if let Ok(Some(res)) = ORC.content.get(&wid) {
+        Some(res.to_string())
+      } else {
         if ORC.dev_mode {
-          println!("writ.public crapped out with: {:?}", e);
+          println!("writ.public: could not retrieve content");
         }
         None
       }
-    }
+    } else {
+      None
+    };
+
+    let you_voted = match &requestor_id {
+      Some(req_id) => {
+        if let Ok(Some(raw)) = ORC.writ_voters.get(self.vote_id(*req_id).as_bytes()) {
+          Some(Vote::try_from_slice(&raw).unwrap().up)
+        } else {
+          None
+        }
+      },
+      None => None,
+    };
+
+    Some(PublicWrit {
+      id: self.id.clone(),
+      title: self.title.clone(),
+      author_name,
+      author_handle,
+      kind: self.kind.clone(),
+      tags: self.tags.clone(),
+      posted: self.posted,
+      content,
+      commentable: self.commentable,
+      vote,
+      you_voted,
+    })
   }
 
   pub fn editable(
@@ -1010,7 +991,7 @@ impl Writ {
         let wid = wid_vec.as_slice();
 
         let mut count = votes.get(wid)?.unwrap().to_i64();
-  
+
         if let Some(raw) = writ_voters.get(vote_id.as_bytes())? {
           let rw = Vote::try_from_slice(&raw).unwrap();
           if let Some(up) = &up {
