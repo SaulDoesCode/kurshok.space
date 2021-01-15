@@ -14,7 +14,10 @@ use std::{
     //io::{self, Write}
 };
 
-use crate::orchestrator::{ORC};
+use crate::{
+    orchestrator::{ORC},
+    responses,
+};
 
 use super::TEMPLATES;
 
@@ -286,16 +289,15 @@ pub async fn remote_http(
 
 #[get("/reload-templates")]
 pub async fn reload_templates_request(req: HttpRequest) -> HttpResponse {
-    if let Some(value) = req.headers().get("Authorization") {
-        let key = include_bytes!("../private/template-reload-key.txt");
-        if key == value.as_bytes() {
-            if TEMPLATES.write().full_reload().is_err() {
-                println!(":( the templates were not properly reloaded, trouble is afoot.");
-                return crate::responses::InternalServerError(":( the templates were not reloaded, trouble is afoot.");
-            }
-            println!("templates reloaded!");
-            return crate::responses::Accepted("templates succesfully reloaded");
+    if req.peer_addr().map_or(false, |ip| format!("{}", ip).contains("127.0.0.1")) || ORC.is_valid_admin_session(&req) {
+        if TEMPLATES.write().full_reload().is_err() {
+            println!(":( the templates were not properly reloaded, trouble is afoot.");
+            return responses::InternalServerError(
+                ":( the templates were not reloaded, trouble is afoot.",
+            );
         }
+        println!("templates reloaded!");
+        return responses::Accepted("templates succesfully reloaded");
     }
-    crate::responses::Forbidden("invalid key")
+    responses::Forbidden("templates may only be reloaded by admins or requests from localhost")
 }
