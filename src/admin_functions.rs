@@ -4,14 +4,16 @@ use actix_web::{
     get, post, web, HttpRequest, HttpResponse,
 };
 use serde::{Deserialize, Serialize};
+use rayon::prelude::*;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, BTreeMap},
     process::Command,
 };
 
 use crate::{
     orchestrator::{ORC},
+    expirable_data::{ExpirableData},
     responses,
 };
 
@@ -183,4 +185,46 @@ pub async fn reload_templates_request(req: HttpRequest) -> HttpResponse {
         return responses::Accepted("templates succesfully reloaded");
     }
     responses::Forbidden("templates may only be reloaded by admins or requests from localhost")
+}
+
+#[post("/expire-data")]
+pub async fn expire_data_request(
+    req: HttpRequest,
+    exp_data_req: web::Data<ExpireDataRequest>,
+) -> HttpResponse {
+    if ORC.is_valid_admin_session(&req) {
+        let exp_data_req = exp_data_req.into_inner();
+
+        let mut exp_data: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
+
+        for (tree, keys) in exp_data_req.data.iter() {
+            exp_data.insert(
+                tree.clone(),
+                keys.into_par_iter()
+                    .map(|key| key.as_bytes().to_vec())
+                    .collect()
+            );
+        }
+
+        let expirable_data = ExpirableData::MultiTree(exp_data);
+
+        let unexpire_key = exp_data_req.unexpire_key.as_ref().map(|uk| uk.as_bytes());
+
+        if ORC.expire_data(
+            exp_data_req.from_now,
+            expirable_data,
+            unexpire_key,
+        ) {
+            return responses::Accepted("data will be expired");
+        }
+        return responses::InternalServerError("something went wrong, data will not be expired");
+    }
+    responses::Forbidden("data may only be expired by admins")
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ExpireDataRequest {
+    pub from_now: i64,
+    pub data: HashMap<String, Vec<String>>,
+    pub unexpire_key: Option<String>,
 }
