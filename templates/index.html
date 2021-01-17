@@ -79,7 +79,7 @@
                 app.openWS = () => {
                     if (app.ws && app.wsOpen) return
 
-                    app.ws = new WebSocket('wss://' + location.hostname + '/ws/')
+                    app.ws = new WebSocket('wss://' + location.hostname + '/ws')
 
                     app.wsSend = msg => {
                         if (app.wsClosed) throw new Error('tried to send msg with closed websocket')
