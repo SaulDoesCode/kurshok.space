@@ -17,7 +17,7 @@ use crate::{
     responses,
 };
 
-use super::TEMPLATES;
+use super::{TEMPLATES};
 
 
 pub fn watch_and_update_files() -> bool {
@@ -185,6 +185,27 @@ pub async fn reload_templates_request(req: HttpRequest) -> HttpResponse {
         return responses::Accepted("templates succesfully reloaded");
     }
     responses::Forbidden("templates may only be reloaded by admins or requests from localhost")
+}
+
+#[get("/renew-cert/{domain}")]
+pub async fn renew_cert_request(req: HttpRequest, domain: web::Path<String>) -> HttpResponse {
+    if ORC.is_valid_admin_session(&req) {
+        let mut cd = std::env::current_dir().unwrap().canonicalize().unwrap();
+        cd.push("private/acme");
+
+        if Command::new("certbot")
+            .arg("certonly")
+            .arg("--webroot")
+            .arg("-w")
+            .arg(cd.to_str().unwrap())
+            .arg("-d")
+            .arg(domain.as_str())
+            .spawn().is_err()
+        {
+            return responses::InternalServerError(":( FAILURE");
+        }
+    }
+    responses::Forbidden("admin only route")
 }
 
 #[post("/expire-data")]

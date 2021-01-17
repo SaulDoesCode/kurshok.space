@@ -76,15 +76,25 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new().service(
             web::resource("*").route(
-                web::get().to(|req: HttpRequest|
+                web::get().to(|req: HttpRequest| {
+                    let path = req.path();
+                    if path.contains(".well-known/acme-challenge") {
+                        let challenge_dir = format!("./private/acme/{}", path);
+                        if let Ok(file) = NamedFile::open(&challenge_dir) {
+                            if let Ok(file_response) = file.into_response(&req) {
+                                return file_response;
+                            }
+                        }
+                    }
+
                     HttpResponse::Found()
                         .header(
                             actix_web::http::header::LOCATION,
-                            format!("https://{}{}", CONF.read().domain, req.path()),
+                            format!("https://{}{}", CONF.read().domain, path),
                         )
                         .finish()
                         .into_body()
-                )
+                })
             )
         )
     })
@@ -320,13 +330,12 @@ async fn serve_files_and_templates(req: HttpRequest) -> HttpResponse {
                     .content_type("text/html")
                     .body("Take heed, this page is either broken, forbidden, or nonexistent :(");
             }
-            return HttpResponse::Ok()
-                .content_type(if is_js {
-                    "application/javascript"
-                } else {
-                    "text/html"
-                })
-                .body(s);
+            return HttpResponse::Ok().content_type(if is_js {
+                "application/javascript"
+            } else {
+                "text/html"
+            })
+            .body(s);
         }
     }
 

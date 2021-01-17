@@ -110,7 +110,7 @@ impl Orchestrator {
     let users_primed_for_auth = db.open_tree(b"users_primed_for_auth").unwrap();
     let sessions = db.open_tree(b"sessions").unwrap();
     let session_data = db.open_tree(b"session_data").unwrap();
-    
+
     let expirable_data = db.open_tree(b"expirable_data").unwrap();
     let expirable_data_unexpire_keys = db.open_tree(b"expirable_data_unexpire_keys").unwrap();
 
