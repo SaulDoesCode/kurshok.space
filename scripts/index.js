@@ -47,11 +47,8 @@ const templateWatcher = chokidar.watch('./templates/', {
     depth: 20
 })
 
-process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0
-
 templateWatcher.on('change', filePath => {
     console.log('template change detected: ', filePath)
-
     // http.get just kept timing out with 408s, no idea why, so bleh, just use curl cuz it works and it's easy
     child_process.exec('curl -k https://127.0.0.1/reload-templates')
 })
