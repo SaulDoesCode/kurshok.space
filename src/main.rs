@@ -38,7 +38,7 @@ use orchestrator::ORC;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let matches = clap::App::new("kurshok.space")
-        .version("0.0.1")
+        .version("0.1.1")
         .author("Saul <saul@kurshok.space>")
         .about("multipurpose web app database thingy")
         .arg(
@@ -72,29 +72,36 @@ async fn main() -> std::io::Result<()> {
 
     expirable_data::start_system();
     println!("expirable_data system active");
-    // if CONF.read().dev_mode {}
 
     HttpServer::new(|| {
-        App::new().service(web::resource("*").route(web::get().to(|req: HttpRequest| {
-            HttpResponse::Found()
-                .header(
-                    actix_web::http::header::LOCATION,
-                    format!("https://{}{}", CONF.read().domain, req.path()),
+        App::new().service(
+            web::resource("*").route(
+                web::get().to(|req: HttpRequest|
+                    HttpResponse::Found()
+                        .header(
+                            actix_web::http::header::LOCATION,
+                            format!("https://{}{}", CONF.read().domain, req.path()),
+                        )
+                        .finish()
+                        .into_body()
                 )
-                .finish()
-                .into_body()
-        })))
+            )
+        )
     })
     .disable_signals()
-    .bind("0.0.0.0:80")
-    // .bind("0.0.0.0:8080")
-    .unwrap()
+    .bind("0.0.0.0:80").expect("failed to start :80 -> tls redirect server")
     .run();
 
-    let cert_file =
-        &mut BufReader::new(File::open(CONF.read().cert_path.clone().as_str()).unwrap());
-    let key_file =
-        &mut BufReader::new(File::open(CONF.read().privkey_path.clone().as_str()).unwrap());
+    let app_server = start_server();
+
+    // TODO: automatic letsencrypt tls cert renewal
+
+    app_server.await
+}
+
+fn start_server() -> actix_web::dev::Server {
+    let cert_file = &mut BufReader::new(File::open(CONF.read().cert_path.clone().as_str()).unwrap());
+    let key_file = &mut BufReader::new(File::open(CONF.read().privkey_path.clone().as_str()).unwrap());
 
     let mut tls_config = ServerConfig::new(NoClientAuth::new());
     let cert_chain = certs(cert_file).unwrap();
@@ -105,7 +112,7 @@ async fn main() -> std::io::Result<()> {
         std::process::exit(1);
     }
 
-    let app_server = HttpServer::new(move || {
+    let app_server = HttpServer::new(|| {
         App::new()
             .wrap(actix_web::middleware::Compress::default())
             .service(index)
@@ -135,17 +142,16 @@ async fn main() -> std::io::Result<()> {
             .service(comments::downvote_comment)
             .service(posts::render_post)
             .service(posts::render_post_by_slug)
-            .service(web::resource("/ws/").to(websockets::ws_conn_setup))
+            .service(web::resource("/ws").to(websockets::ws_conn_setup))
             .service(admin_functions::remote_http)
             .service(admin_functions::reload_templates_request)
+            .service(admin_functions::expire_data_request)
             .service(admin_panel)
             .service(serve_files_and_templates)
     })
-    // .bind_rustls("0.0.0.0:8443", tls_config)?
-    .bind_rustls("0.0.0.0:443", tls_config)?
+    .bind_rustls("0.0.0.0:443", tls_config).expect("actix_web server_startup failed to bind rustls")
     .backlog(4096)
-    .run()
-    .await;
+    .run();
 
     app_server
 }
@@ -156,8 +162,8 @@ pub struct Config {
     pub db_location: String,
     pub dev_mode: bool,
     pub admin_emails: Vec<String>,
-    pub mail_server: String,    
-    pub smtp_username: String,   
+    pub mail_server: String,
+    pub smtp_username: String,
     pub smtp_password: String,
     cert_path: String,
     privkey_path: String,
