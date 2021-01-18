@@ -280,9 +280,9 @@ main > section {
 .post-list {
   display: flex;
   justify-content: space-around;
-  align-content: center;
-  align-items: center;
-  flex-flow: row wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  flex-direction: column;
   min-height: 55vh;
 }
 
@@ -301,10 +301,14 @@ main > section {
 }
 
 .post:not(.full) {
-  background: hsl(0,0%,23%);
+  background: hsl(0,0%,16%);
   color: hsl(0, 0%, 80%);
-  max-width: 380px;
+  max-width: 800px;
   padding-left: 0;
+}
+
+.post:not(.full) hr {
+  margin: .5em 0;
 }
 
 main[route-active="no-content"] > :not(.no-content) {
@@ -387,29 +391,32 @@ nav.quick-scroll > div {
 }
 
 .post:not(.full)>header{
-  padding: 0 .5em;
-}
-
-.post:not(.full)>header > .title {
-  width: 100%;
-  flex: 1 1 auto;
+  display: flex;
+  justify-content: space-around;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+  padding: .5em;
 }
 
 .post:not(.full)>header .title > h4 {
   color: #fff;
+  padding-left: .75em;
+  display: inline-block;
 }
 
-.post:not(.full)>header > * {
-  text-align: center;
-}
-
-.post header h4,
-.post:not(.full) header h3 {
+.post header h4 {
   margin: 0 .5em;
   cursor: pointer;
 }
 
+.post:not(.full) > header > div:not(.title) {
+  text-align: center;
+  justify-content: center;
+}
+
 .post>header .author-name {
+  display: block;
   font-style: italic;
   font-size: .92em;
 }
@@ -424,19 +431,21 @@ nav.quick-scroll > div {
   color:hsl(0, 0%, 60%);
 }
 
-.post:not(.full)>header .posted {
-  width: 100%;
-}
-
 .post>header .title {
-  flex: 1 1 auto;  
-  margin: .25em 0 .5em 0;
+  display: block;
+  flex: 1 1 auto;
+  padding: .5em 0 .25em 0;
   overflow: hidden;
 }
 
- .post.full>header .title {
-   text-align: left;
- }
+.post:not(.full)>header .title {
+  padding: .5em 0 0 0;
+}
+
+.post.full>header .title {
+  display: block;
+  text-align: left;
+}
 
 .post>header .title > h4 {
   text-overflow: ellipsis;
@@ -444,8 +453,8 @@ nav.quick-scroll > div {
   white-space: nowrap;
   font-size: 1.38em;
   max-width: 98%;
-  padding: 2px 0;
-  margin: 0;
+  padding: 0;
+  margin: 0 0;
 }
 
 .post.full > * {
@@ -458,8 +467,8 @@ nav.quick-scroll > div {
 
 .post.full>header>div {
   width: 100%;
-  display: flex;
-  justify-content: space-around;
+  display: inline-flex;
+  justify-content: space-between;
   align-content: center;
   align-items: center;
   flex-flow: row wrap;
@@ -567,17 +576,17 @@ nav.quick-scroll > div {
 .post .tags {
   display: inline-flex;
   justify-content: center;
-  align-content: flex-start;
+  align-content: center;
   align-items: center;
   flex-flow: row wrap;
-  max-width: 250px;
   overflow: hidden;
-  margin: .25em;
+  max-width: 256px;
+  margin: .25em .75em;
 }
 
 .tag {
   display: inline-block;
-  margin: .1em .2em;
+  margin: .1em;
   padding: .2em .4em;
   line-height: 1.1;
   font-size: .95em;
@@ -602,7 +611,7 @@ nav.quick-scroll > div {
 .pagination>* {
   color: hsl(0, 0%, 50%);
   font-weight: 600;
-  font-size: 1em;
+  font-size: 1.1em;
   text-shadow: 0 1px 3px hsla(0, 12%, 63%, 0.25);
   border-radius: 4px;
   padding: .25em;
