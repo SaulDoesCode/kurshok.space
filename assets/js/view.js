@@ -205,6 +205,15 @@ route.on.post(async hash => {
     content.innerHTML = 'Content loading...'
     if (app.commentsDisplay) df.remove(app.commentsDisplay)
     df.prepend(mainView, postNavView)
+
+    if (app.activeVotesUI) {
+        app.activeVotesUI.remove()
+        app.activeVotesUI = null
+    }
+    author.before(
+        app.activeVotesUI = app.votesUI('writ', post)()
+    )
+
     const postContent = await app.fetchPostContent(post.id)
     content.innerHTML = ''
     if (post == app.activePost) {
@@ -261,12 +270,13 @@ const publicPost = w => div.post({
     return [
         header(
             div.title(
-                titleEl,
-                div.author_name(`By ${w.author_name}`)
+                titleEl
             ),
-            div.posted(app.renderUXTimestamp(w.posted)),
             hr(),
-            app.votesUI('writ', w),
+            div(
+                div.posted(app.renderUXTimestamp(w.posted)),
+                div.author_name(`By ${w.author_name}`),
+            ),
             div.tags(w.tags.map(t => span.tag({attr: {title: t}}, t)))
         )
     ]
