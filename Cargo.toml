@@ -18,7 +18,6 @@ derive_more = "*"
 futures = "*"
 itertools = "*"
 lazy_static = "^1"
-# notify = { git = "https://github.com/notify-rs/notify", branch = "main" }
 parking_lot = { version = "*", features = ["nightly"]}
 rand = {version = "^0.8", features = ["nightly", "simd_support"]}
 rayon = "^1"
