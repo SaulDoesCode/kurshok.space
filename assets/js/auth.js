@@ -62,19 +62,18 @@ app.authenticate = async (
   }
 
   showAuthMsg('attempting authentication...')
-  
+
 
   const res = await app.jsonPost('/auth', { username, email })
   const data = await res.json()
 
   console.log(data)
   if (data.ok) {
-    app.toast.msg(`auth went through: ` + data.status)
-    showAuthMsg(`auth went through: ` + data.status)
+    app.toast.msg(`auth email is sending: ` + data.status)
+    showAuthMsg(`auth email is sending: ` + data.status)
 
-    try {
-      await app.try_auth_verify()
-    } catch(e) {}
+    showAuthMsg(`auth email status: ` + await app.check_email_status())
+    await app.try_auth_verify()
 
     return true
   } else {
@@ -84,16 +83,52 @@ app.authenticate = async (
   }
 }
 
-app.try_auth_verify = () => new Promise((resolve, reject) => {
+app.check_email_status = () => new Promise((resolve, reject) => {
   let keepTrying = true
-  let to = setTimeout(() => {
+  const to = setTimeout(() => {
     keepTrying = false
     clearInterval(ti)
     reject()
   }, 600000)
-  let ti = setInterval(async () => {
+  let to2 = setTimeout(async function check() {
     if (!keepTrying) {
-      clearInterval(ti)
+      clearTimeout(to)
+      clearTimeout(to2)
+      reject()
+      return
+    }
+    const res = await (await fetch('/auth/email-status')).json();
+    if (res.ok) {
+      app.toast.msg("Auth Email: " + res.status)
+      clearTimeout(to2)
+      clearTimeout(to)
+      resolve(res.status)
+    } else {
+      console.log(res)
+      if (
+        res.status.includes('failed to send') ||
+        res.status.includes('Failed to read preauth token') ||
+        res.status.includes('preauth cookie')
+      ) {
+        clearTimeout(to2)
+        clearTimeout(to)
+        return reject()
+      }
+      to2 = setTimeout(check, 1500)
+    }
+  }, 1500)
+})
+
+app.try_auth_verify = () => new Promise((resolve, reject) => {
+  let keepTrying = true
+  const to = setTimeout(() => {
+    keepTrying = false
+    clearTimeout(to2)
+    reject()
+  }, 600000)
+  let to2 = setTimeout(async function check() {
+    if (!keepTrying) {
+      clearTimeout(to2)
       clearTimeout(to)
       reject()
       return
@@ -101,7 +136,7 @@ app.try_auth_verify = () => new Promise((resolve, reject) => {
     const res = await (await fetch('/auth/verification')).json();
     if (res.ok) {
       app.toast.msg("Auth: " + res.status)
-      clearInterval(ti)
+      clearTimeout(to2)
       clearTimeout(to)
       resolve()
       setTimeout(() => {
@@ -113,9 +148,13 @@ app.try_auth_verify = () => new Promise((resolve, reject) => {
         setTimeout(() => {
           window.location.reload()
         }, window.location.hostname == 'localhost' ? 4500 : 800)
+        clearTimeout(to2)
+        clearTimeout(to)
+        reject()
       }
+      to2 = setTimeout(check, 1500)
     }
-  }, 1500)
+  }, 3000)
 })
 
 const authClickHandle = d.once.click(authBtn, async e => {
