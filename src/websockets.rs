@@ -5,7 +5,8 @@ use dashmap::DashMap;
 // use rayon::prelude::*;
 
 use std::{
-    time::{Duration, Instant}
+    time::{Duration, Instant},
+    lazy::SyncLazy,
 };
 
 use crate::{
@@ -14,10 +15,7 @@ use crate::{
     utils::{unix_timestamp}
 };
 
-
-lazy_static!{
-    static ref LIVE_USERS: DashMap<u64, i64> = DashMap::new();
-}
+static LIVE_USERS: SyncLazy<DashMap<u64, i64>> = SyncLazy::new(|| DashMap::new());
 
 /// How often heartbeat pings are sent
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
