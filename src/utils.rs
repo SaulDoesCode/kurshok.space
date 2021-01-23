@@ -4,31 +4,31 @@ use regex::Regex;
 use sled::IVec;
 use time::OffsetDateTime;
 
-use std::convert::TryInto;
+use std::{convert::TryInto, lazy::SyncLazy};
 
-lazy_static! {
-  static ref COMRAK_OPTS: ComrakOptions = {
-    let mut md_opts = ComrakOptions::default();
-    md_opts.parse.smart = true;
-    md_opts.render.hardbreaks = true;
-    md_opts.render.github_pre_lang = true;
-    md_opts.extension.header_ids = Some("writ-".to_string());
-    md_opts.extension.autolink = true;
-    md_opts.extension.footnotes = true;
-    md_opts.extension.table = true;
-    md_opts.extension.tasklist = true;
-    md_opts.extension.tagfilter = true;
-    md_opts.extension.strikethrough = true;
-    md_opts.extension.superscript = true;
-    md_opts.extension.description_lists = true;
+static COMRAK_OPTS: SyncLazy<ComrakOptions> = SyncLazy::new(|| {
+  let mut md_opts = ComrakOptions::default();
+  md_opts.parse.smart = true;
+  md_opts.render.hardbreaks = true;
+  md_opts.render.github_pre_lang = true;
+  md_opts.extension.header_ids = Some("writ-".to_string());
+  md_opts.extension.autolink = true;
+  md_opts.extension.footnotes = true;
+  md_opts.extension.table = true;
+  md_opts.extension.tasklist = true;
+  md_opts.extension.tagfilter = true;
+  md_opts.extension.strikethrough = true;
+  md_opts.extension.superscript = true;
+  md_opts.extension.description_lists = true;
 
-    md_opts
-  };
-  static ref EMAIL_REGEX: Regex = Regex::new(
+  md_opts
+});
+
+static EMAIL_REGEX: SyncLazy<Regex> = SyncLazy::new(|| {
+  Regex::new(
     r"^([a-z0-9_+]([a-z0-9_+.]*[a-z0-9_+])?)@([a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6})"
-  )
-  .unwrap();
-}
+  ).unwrap()
+});
 
 pub fn unix_timestamp() -> i64 {
   OffsetDateTime::now_utc().unix_timestamp()
@@ -109,9 +109,13 @@ impl FancyIVec for IVec {
   }
 }
 
+/*
+
 pub fn generate_random_bytes(len: usize) -> Vec<u8> {
   (0..len).map(|_| rand::random::<u8>()).collect()
 }
+
+*/
 
 pub fn random_string(len: usize) -> String {
   thread_rng()
@@ -119,7 +123,7 @@ pub fn random_string(len: usize) -> String {
   .map(char::from)
   .take(len).collect()
 }
-
+/*
 #[inline]
 pub fn word_count_bytes(text: &[u8]) -> usize {
   text.split(is_whitespace).count()
@@ -133,6 +137,7 @@ fn is_whitespace(c: &u8) -> bool {
 pub fn is_char_number_or_uppercase(c: char) -> bool {
   c.is_numeric() || c.is_uppercase()
 }
+*/
 
 pub fn is_char_username_unfriendly(c: char) -> bool {
   !c.is_alphanumeric()
@@ -141,8 +146,7 @@ pub fn is_char_username_unfriendly(c: char) -> bool {
 #[inline]
 pub fn is_username_ok(username: &str) -> bool {
   let len = username.len();
-  len >= 3
-    && len <= 50
+  len >= 3 && len <= 50
     && !username.starts_with(' ')
     && !username.ends_with(' ')
     && !username.contains("  ")
@@ -159,8 +163,7 @@ pub fn is_username_ok(username: &str) -> bool {
 #[inline]
 pub fn is_handle_ok(handle: &str) -> bool {
   let len = handle.len();
-  len >= 3
-    && len <= 50
+  len >= 3 && len <= 50
     && !handle.starts_with(' ')
     && !handle.ends_with(' ')
     && !handle.contains("  ")
@@ -181,7 +184,7 @@ pub fn is_email_ok(email: &str) -> bool {
 pub fn i64_is_zero(i: &i64) -> bool {
   *i == 0
 }
-
+/*
 pub fn read_be_u64(input: &mut &[u8]) -> u64 {
   let (int_bytes, rest) = input.split_at(std::mem::size_of::<u64>());
   *input = rest;
@@ -211,7 +214,7 @@ pub fn read_be_i64_from_ivec(ivec: IVec) -> i64 {
 pub fn string_from_ivec(ivec: IVec) -> String {
   std::str::from_utf8(&ivec).unwrap().to_owned()
 }
-
+*/
 pub fn render_md(html: &str) -> String {
   markdown_to_html(html, &COMRAK_OPTS)
 }
