@@ -1,9 +1,7 @@
-#![allow(dead_code)]
+// #![allow(dead_code)]
+#![feature(once_cell)]
 #![feature(iter_advance_by)]
 #![feature(drain_filter)]
-
-#[macro_use(lazy_static)]
-extern crate lazy_static;
 
 use mimalloc::MiMalloc;
 #[global_allocator]
@@ -22,11 +20,11 @@ mod utils;
 mod writs;
 mod websockets;
 
-use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_files::NamedFile;
+use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::BufReader};
+use std::{fs::File, io::BufReader, lazy::SyncLazy};
 use tera::{Context, Tera};
 use time::Duration;
 
@@ -34,6 +32,28 @@ use rustls::internal::pemfile::{certs, pkcs8_private_keys};
 use rustls::{NoClientAuth, ServerConfig};
 
 use orchestrator::ORC;
+
+pub static TEMPLATES: SyncLazy<RwLock<Tera>> = SyncLazy::new(|| {
+    let mut tera = match Tera::new(&format!(
+        "{}/templates/**/*",
+        std::env::current_dir().unwrap().to_str().unwrap()
+    )) {
+        Ok(t) => t,
+        Err(e) => {
+            println!("Tera ran into trouble parsing your templates. errs: {}", e);
+            std::process::exit(1);
+        }
+    };
+    tera.autoescape_on(vec![]);
+    RwLock::new(tera)
+});
+
+pub static CONF: SyncLazy<RwLock<Config>> = SyncLazy::new(|| {
+    let config_toml =
+        std::fs::read_to_string("./private/config.toml").expect("couldn't read the config file");
+    let config: Config = toml::from_str(&config_toml).expect("config file is broken TOML");
+    RwLock::new(config)
+});
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -129,6 +149,7 @@ fn start_server() -> actix_web::dev::Server {
             .service(auth::check_authentication)
             .service(auth::auth_attempt)
             .service(auth::indirect_auth_verification)
+            .service(auth::auth_email_status_check)
             .service(auth::auth_link)
             .service(auth::logout)
             .service(auth::change_user_detail)
@@ -177,29 +198,6 @@ pub struct Config {
     pub smtp_password: String,
     cert_path: String,
     privkey_path: String,
-}
-
-lazy_static! {
-    pub static ref TEMPLATES: RwLock<Tera> = {
-        let mut tera = match Tera::new(&format!(
-            "{}/templates/**/*",
-            std::env::current_dir().unwrap().to_str().unwrap()
-        )) {
-            Ok(t) => t,
-            Err(e) => {
-                println!("Tera ran into trouble parsing your templates. errs: {}", e);
-                std::process::exit(1);
-            }
-        };
-        tera.autoescape_on(vec![]);
-        RwLock::new(tera)
-    };
-    pub static ref CONF: RwLock<Config> = {
-        let config_toml = std::fs::read_to_string("./private/config.toml")
-            .expect("couldn't read the config file");
-        let config: Config = toml::from_str(&config_toml).expect("config file is broken TOML");
-        RwLock::new(config)
-    };
 }
 
 #[get("/")]
