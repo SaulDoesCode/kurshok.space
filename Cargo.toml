@@ -17,11 +17,10 @@ dashmap = {version = "  ^4", features = ["rayon"]}
 derive_more = "*"
 futures = "*"
 itertools = "*"
-lazy_static = "^1"
 parking_lot = { version = "*", features = ["nightly"]}
 rand = {version = "^0.8", features = ["nightly", "simd_support"]}
 rayon = "^1"
-regex = {version = "^1"}
+regex = {version = "^1", features = ["aho-corasick"]}
 rustls = "0.19.0"
 lettre = {git = "https://github.com/lettre/lettre", branch = "master", features = ["builder", "smtp-transport", "rustls-tls"], default-features = false}
 serde = {version = "^1", features = ["derive"]}
