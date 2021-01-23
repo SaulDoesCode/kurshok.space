@@ -22,7 +22,7 @@ impl Orchestrator {
     }
     None
   }
-
+/*
   pub fn index_writ_tags(&self, writ_id: &WritID, tags: &[String]) -> bool {
     let res: TransactionResult<(), ()> =
       (&self.tags_index, &self.tag_counter).transaction(|(tags_index, tag_counter)| {
@@ -30,7 +30,7 @@ impl Orchestrator {
       });
     res.is_ok()
   }
-
+*/
   pub fn index_writ_tags_in_transaction(
     &self,
     tags_index: &TransactionalTree,
@@ -55,7 +55,7 @@ impl Orchestrator {
     }
     Ok(())
   }
-
+/*
   pub fn remove_indexed_writ_tags(&self, writ_id: &WritID, tags: &[String]) -> bool {
     (&self.tags_index, &self.tag_counter).transaction(|(
       tags_index,
@@ -67,7 +67,7 @@ impl Orchestrator {
       tags
     )).is_ok()
   }
-
+*/
   pub fn remove_indexed_writ_tags_in_transaction(
     &self,
     tags_index: &TransactionalTree,
@@ -596,7 +596,7 @@ impl Orchestrator {
     }
     None
   }
-
+/*
   pub fn writ_by_id_bytes(&self, id: &[u8]) -> Option<Writ> {
     match self.writs.get(id) {
       Ok(w) => w.map(|raw| Writ::try_from_slice(&raw).unwrap()),
@@ -625,6 +625,7 @@ impl Orchestrator {
     }
     None
   }
+*/
 }
 
 #[serde(deny_unknown_fields)]
@@ -720,7 +721,7 @@ impl WritID {
 
     Self{kind, author, id}
   }
-
+/*
   pub fn from_bin_safe(bin: &[u8]) -> Option<Self> {
     if let Ok(kind) = (&bin[0..4]).try_into() {
       if let Ok(author_bytes) = (&bin[4..12]).try_into() {
@@ -733,7 +734,7 @@ impl WritID {
     }
     None
   }
-
+*/
   pub fn new(kind: &[u8], author: u64) -> Option<Self> {
     if kind.len() == 4 {
       if let Ok(id) = ORC.generate_id(&kind) {
@@ -821,7 +822,7 @@ impl Writ {
   pub fn writ_id(&self) -> Option<WritID> {
     WritID::from_str(&self.id)
   }
-
+/*
   pub fn content(&self) -> Option<String> {
     if let Some(wid) = self.writ_id() {
       if let Ok(Some(c)) = ORC.content.get(&wid.to_bin()) {
@@ -839,7 +840,7 @@ impl Writ {
     }
     None
   }
-
+*/
   pub fn comment_settings(&self) -> Option<CommentSettings> {
     if self.commentable {
       if let Some(wid) = self.writ_id() {
@@ -1063,14 +1064,14 @@ impl Writ {
   pub fn unvote(&self, usr_id: u64) -> Option<i64> {
     self.vote(usr_id, None)
   }
-
+/*
   pub fn usr_vote(&self, usr_id: u64) -> Option<Vote> {
     match ORC.writ_voters.get(self.vote_id(usr_id).as_bytes()) {
       Ok(wv) => wv.map(|raw| Vote::try_from_slice(&raw).unwrap()),
       Err(_) => None,
     }
   }
-
+*/
   #[inline]
   pub fn vote_id(&self, usr_id: u64) -> String {
     format!("{}:{}", self.id, usr_id)
@@ -1344,13 +1345,6 @@ impl RawWrit {
           .all(|c| c.is_alphanumeric() || c.is_whitespace() || c == '-')
     })
   }
-
-  pub fn writ(&self) -> Option<Writ> {
-    if let Some(id) = &self.id {
-      return ORC.writ_by_id(id.as_str());
-    }
-    None
-  }
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Debug)]
@@ -1410,12 +1404,14 @@ pub enum WritError {
   TitleTaken,
   #[error("there was a problem interacting with the db")]
   DBIssue,
-  #[error("only authorized users may push non-markdown writs")]
-  RateLimit,
   #[error("too many requests to writ api, chill for a bit")]
   NoPermNoMD,
+/*
+  #[error("only authorized users may push non-markdown writs")]
+  RateLimit,
   #[error("unknown writ error")]
   Unknown,
+*/
 }
 
 #[get("/writ-raw-content/{id}")]
@@ -1596,11 +1592,4 @@ pub async fn unvote_writ(
   }
 
   crate::responses::InternalServerError("failed to register vote")
-}
-
-// TODO: prevent malformed ids from even getting to sled .get/.insert/.delete
-#[inline]
-fn is_valid_writ_id(id: &str) -> bool {
-  let len = id.len();
-  len > 2 && len < 30 && id.matches(":").count() > 0
 }
