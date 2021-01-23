@@ -271,13 +271,13 @@ impl Orchestrator {
     });
 
     if let Ok((usr, email, first_time)) = res {
-      if first_time {  
+      if first_time {
         if self.unexpire_data(&usr.id.to_be_bytes()) && self.dev_mode {
           println!("no need to clean up user: {} anymore, they are verified", &usr.username);
         } else if self.dev_mode {
           println!("we fucked up, a verified user: {} was/will-be deleted", &usr.username);
         }
-  
+
         if CONF.read().admin_emails.contains(&email) {
           self.make_admin(usr.id, 0, Some("blessed email".to_string()));
         }
@@ -467,7 +467,7 @@ impl Orchestrator {
       Err(_) => None,
     }
   }
-
+/*
   pub fn user_by_ivec(&self, id: IVec) -> Option<User> {
     if let Ok(Some(raw)) = self.users.get(id) {
       return Some(User::try_from_slice(&raw).unwrap());
@@ -495,7 +495,7 @@ impl Orchestrator {
     }
     None
   }
-
+  */
   pub fn username_taken(&self, username: &str) -> Option<bool> {
     if let Ok(taken) = self.usernames.contains_key(username.as_bytes()) {
       return Some(taken);
@@ -641,7 +641,7 @@ new_desc.as_bytes()
       });
     res.is_ok()
   }
-
+/*
   pub fn change_admin_level(&self, usr_id: &str, level: u8) -> bool {
     let res: TransactionResult<(), ()> =
       (&self.user_attributes, &self.admins).transaction(|(usr_attrs, admins)| {
@@ -740,7 +740,7 @@ new_desc.as_bytes()
     });
     res.is_ok()
   }
-
+  */
   pub fn user_attributes(&self, usr_id: u64) -> Vec<String> {
     let prefix = format!("{}:", usr_id);
     self
@@ -756,7 +756,7 @@ new_desc.as_bytes()
       })
       .collect()
   }
-
+/*
   pub fn get_user_attribute(&self, usr_id: &str, attr: &str) -> Option<UserAttribute> {
     let key = format!("{}:{}", usr_id, attr);
     if let Ok(Some(raw)) = self.user_attributes.get(key.as_bytes()) {
@@ -779,20 +779,6 @@ new_desc.as_bytes()
     Some(true)
   }
 
-  pub fn user_has_some_attrs(&self, usr_id: u64, attrs: &[&str]) -> Option<bool> {
-    for attr in attrs {
-      let key = format!("{}:{}", usr_id, attr);
-      if let Ok(has_attr) = self.user_attributes.contains_key(key.as_bytes()) {
-        if has_attr {
-          return Some(true);
-        }
-      } else {
-        return None;
-      }
-    }
-    Some(false)
-  }
-
   pub fn user_attribute_with_data(
     &self,
     usr_id: &str,
@@ -806,45 +792,59 @@ new_desc.as_bytes()
     }
     None
   }
+*/
+  pub fn user_has_some_attrs(&self, usr_id: u64, attrs: &[&str]) -> Option<bool> {
+    for attr in attrs {
+      let key = format!("{}:{}", usr_id, attr);
+      if let Ok(has_attr) = self.user_attributes.contains_key(key.as_bytes()) {
+        if has_attr {
+          return Some(true);
+        }
+      } else {
+        return None;
+      }
+    }
+    Some(false)
+  }
 }
 
 #[derive(Error, Debug)]
 pub enum AuthError {
+  #[error("ran into trouble removing bad or expired sessions")]
+  SessionRemovalErr,
+  #[error("there was a problem interacting with the db")]
+  DBIssue, /*
   #[error("id does not match any currently existing user")]
   BadID,
   #[error("id generation failed for some reason, maybe try again later")]
   IDGenErr,
-  #[error("there was a problem interacting with the db")]
-  DBIssue,
   #[error("too many requests to Auth API, chill for a bit")]
   RateLimit,
   #[error("something fishy going on with session")]
   SessionErr,
-  #[error("ran into trouble removing bad or expired sessions")]
-  SessionRemovalErr,
   #[error("Unknown auth error")]
-  Unknown,
+  Unknown, */
 }
 #[derive(Error, Debug)]
 pub enum UserError {
   #[error("username is already taken or blacklisted")]
   UsernameTaken,
-  #[error("username is invalid or malformed")]
-  BadUsername,
+  #[error("there was a problem interacting with the db")]
+  DBIssue, 
   #[error("username was changed too soon after last change")]
   ChangedUsernameTooSoon,
   #[error("handle is already taken or blacklisted")]
-  HandleTaken,
+  HandleTaken, /*
+  #[error("username is invalid or malformed")]
+  BadUsername,
   #[error("handle is invalid or malformed")]
   BadHandle,
   #[error("email is already taken or blacklisted")]
   EmailTaken,
   #[error("email is invalid or malformed")]
   BadEmail,
-  #[error("there was a problem interacting with the db")]
-  DBIssue,
   #[error("Unknown auth error")]
-  Unknown,
+  Unknown, */
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -938,11 +938,11 @@ pub async fn logout(req: HttpRequest) -> HttpResponse {
       status = "login was already bad or expired, no worries";
     }
   }
-  let mut res = crate::responses::Accepted(status);
+  let mut res = responses::Accepted(status);
   res.del_cookie("auth");
   res
 }
-
+/*
 pub fn renew_session_cookie<'c>(
   req: &HttpRequest,
   how_far_to_expiry: Duration,
@@ -962,13 +962,14 @@ pub fn renew_session_cookie<'c>(
   }
   None
 }
+*/
 
 #[get("/auth")]
 pub async fn check_authentication(req: HttpRequest) -> HttpResponse {
   if ORC.is_valid_session(&req) {
-    return crate::responses::Accepted("authenticated");
+    return responses::Accepted("authenticated");
   }
-  crate::responses::Forbidden("not authenticated")
+  responses::Forbidden("not authenticated")
 }
 
 
@@ -995,13 +996,13 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
               };
 
               if forbidden {
-                return crate::responses::Forbidden("Sorry, your auth attempt expired or was invalid, you'll have to try again");
+                return responses::Forbidden("Sorry, your auth attempt expired or was invalid, you'll have to try again");
               }
 
               let token = match ORC.setup_session(usr_id) {
                 Ok(t) => t,
                 Err(e) => {
-                  return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
+                  return responses::Forbidden(format!("trouble setting up session: {}", e));
                 }
               };
 
@@ -1020,19 +1021,19 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
                   "status": "Authentication succesful!"
                 }));
             } else {
-              return crate::responses::InternalServerError("Database error encountered during auth");
+              return responses::InternalServerError("Database error encountered during auth");
             }
           } else {
-            return crate::responses::BadRequest("Authentication failed, expired preauth cookie");
+            return responses::BadRequest("Authentication failed, expired preauth cookie");
           }
       } else {
-        return crate::responses::InternalServerError("Failed to read preauth token from database");
+        return responses::InternalServerError("Failed to read preauth token from database");
       }
     } else {
-      return crate::responses::BadRequest("invalid preauth cookie, are you trying to hack your way in?");
+      return responses::BadRequest("invalid preauth cookie, are you trying to hack your way in?");
     }
   }
-  crate::responses::Forbidden("authentication failed, missing preauth cookie")
+  responses::Forbidden("authentication failed, missing preauth cookie")
 }
 
 #[get("/auth/email-status")]
@@ -1050,18 +1051,17 @@ pub async fn auth_email_status_check(req: HttpRequest) -> HttpResponse {
               EmailStatus::Sending => responses::NotModified("The email is still sending"),
               EmailStatus::Sent => responses::Accepted("The email was successfully sent"),
             }
-
           } else {
-            return crate::responses::BadRequest("Email status check failed, expired preauth cookie");
+            return responses::BadRequest("Email status check failed, expired preauth cookie");
           }
       } else {
-        return crate::responses::InternalServerError("Failed to read preauth token from database");
+        return responses::InternalServerError("Failed to read email status from database");
       }
     } else {
-      return crate::responses::BadRequest("invalid preauth cookie, are you trying to hack?");
+      return responses::BadRequest("invalid preauth cookie, are you trying to hack?");
     }
   }
-  crate::responses::Forbidden("emails status check failed, missing preauth cookie")
+  responses::Forbidden("emails status check failed, missing preauth cookie")
 }
 
 #[get("/auth/{code}")]
@@ -1072,7 +1072,7 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
       hitter.as_bytes(), 3, Duration::minutes(2)
     ) {
       if rl.is_timing_out() {
-        return crate::responses::TooManyRequests(format!(
+        return responses::TooManyRequests(format!(
           "Too many requests, timeout has {} minutes left.",
           rl.minutes_left()
         ));
@@ -1087,7 +1087,7 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
       hitter = format!("{}{}", &usr.username, addr);
       ORC.ratelimiter.forget(hitter.as_bytes());
     }
-    
+
     if let Some(preauth_cookie) = req.cookie("preauth") {
       let preauth_token = preauth_cookie.value().to_string();
       if preauth_token.len() == 22 {
@@ -1096,11 +1096,11 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
             let usr_id = raw.to_u64();
             if usr_id == usr.id {
               ORC.destroy_preauth_token(&preauth_token);
-  
+
               let token = match ORC.setup_session(usr_id) {
                 Ok(t) => t,
                 Err(e) => {
-                  return crate::responses::Forbidden(format!("trouble setting up session: {}", e));
+                  return responses::Forbidden(format!("trouble setting up session: {}", e));
                 }
               };
 
@@ -1127,13 +1127,13 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
                 }
               };
             } else {
-              return crate::responses::Forbidden("Where did you get this link? It does not match your account.");
+              return responses::Forbidden("Where did you get this link? It does not match your account.");
             }
           } else {
-            return crate::responses::Forbidden("Invalid preauth token");
+            return responses::Forbidden("Invalid preauth token");
           }
         } else {
-          return crate::responses::InternalServerError("Failed to read preauth token from database");
+          return responses::InternalServerError("Failed to read preauth token from database");
         }
       }
     } else {
@@ -1165,25 +1165,25 @@ pub async fn auth_link(req: HttpRequest, code: web::Path<String>) -> HttpRespons
       }
     }
   }
-  crate::responses::Forbidden("authentication failed")
+  responses::Forbidden("authentication failed")
 }
 
 #[post("/auth")]
 pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpResponse {
   if !is_username_ok(&ar.username) {
-    return crate::responses::BadRequest(
+    return responses::BadRequest(
       "username is no good, it's either too long, too short, or has weird characters in it, fix it up and try again"
     );
   }
-  
+
   if !is_email_ok(&ar.email) {
-    return crate::responses::BadRequest(
+    return responses::BadRequest(
       "email is invalid"
     );
   }
 
   if let Some(usr) = ORC.user_by_session(&req) {
-    return crate::responses::Accepted(format!(
+    return responses::Accepted(format!(
       "Hey {}, you're already authenticated.",
       usr.username
     ));
@@ -1194,12 +1194,12 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
       ar.username.clone(),
       |a| format!("{}{}", &ar.username, a)
     );
-    
+
       if let Some(rl) = ORC.ratelimiter.hit(
         hitter.as_bytes(), 3, Duration::minutes(2)
       ) {
       if rl.is_timing_out() {
-        return crate::responses::TooManyRequests(format!(
+        return responses::TooManyRequests(format!(
           "Too many requests, timeout has {} minutes left.",
           rl.minutes_left()
         ));
@@ -1212,7 +1212,7 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
       let usr_id = raw.to_u64();
       if let Ok(Some(raw)) = ORC.user_email_index.get(raw) {
         if raw.to_string() != ar.email {
-          return crate::responses::Forbidden(
+          return responses::Forbidden(
             "Username or email are either mistaken or already taken"
           );
         }
@@ -1225,32 +1225,26 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
         ar.email.clone(),
       ) {
         if let Some(preauth_token) = ORC.create_preauth_token(usr_id) {
-          if ORC.send_email(msg) {
-            return HttpResponse::Accepted()
+          crate::email::send_email_with_status_identifier(preauth_token.as_bytes().to_vec(), msg);
+
+          return HttpResponse::Accepted()
             .cookie(
               build_cookie_with_ttl("preauth", &preauth_token, 60 * 10)
             )
             .json(json!({
                 "ok": true,
-                "status": "Auth email was sent, please check your inbox and also the spam section just in case.",
+                "status": "Auth email is sending, please check your inbox and also the spam section just in case.",
                 "data": {
                   "first_time": false,
                 }
             }));
-          } else {
-            if ORC.dev_mode {
-              println!("Auth email failed to send for: {}", &ar.email);
-            }
-            ORC.destroy_preauth_token(&preauth_token);
-            return crate::responses::InternalServerError("Auth email failed to send, are you sure your email is in good order?");
-          }
         } else {
-          return crate::responses::InternalServerError("Failed to setup pre-auth token");
+          return responses::InternalServerError("Failed to setup pre-auth token");
         }
       }
     }
   } else {
-    return crate::responses::InternalServerError(
+    return responses::InternalServerError(
       "Server had an error when checking the username"
     );
   }
@@ -1271,32 +1265,36 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
       ar.email.clone(),
     ) {
       if let Some(preauth_token) = ORC.create_preauth_token(usr.id) {
+        crate::email::send_email_with_status_identifier(preauth_token.as_bytes().to_vec(), msg);
+        return HttpResponse::Accepted()
+          .cookie(
+            build_cookie_with_ttl("preauth", &preauth_token, 60 * 10)
+          )
+          .json(json!({
+              "ok": true,
+              "status": "Auth email is sending, please check your inbox and also the spam section just in case.",
+              "data": {
+                "first_time": false,
+              }
+          }));
+      /*
         if ORC.send_email(msg) {
-          return HttpResponse::Accepted()
-            .cookie(
-              build_cookie_with_ttl("preauth", &preauth_token, 60 * 10)
-            )
-            .json(json!({
-                "ok": true,
-                "status": "Auth email was sent, please check your inbox and also the spam section just in case.",
-                "data": {
-                  "first_time": false,
-                }
-            }));
+
         } else {
           if ORC.dev_mode {
             println!("Auth email failed to send for: {}", &ar.email);
           }
           ORC.destroy_preauth_token(&preauth_token);
-          return crate::responses::InternalServerError("Auth email failed to send, are you sure your email is in good order?");
+          return responses::InternalServerError("Auth email failed to send, are you sure your email is in good order?");
         }
+      */
       }
     } else {
-      return crate::responses::InternalServerError("magic-link creation failed");
+      return responses::InternalServerError("magic-link creation failed");
     }
   }
 
-  crate::responses::Forbidden("not working, we might be under attack")
+  responses::Forbidden("not working, we might be under attack")
 }
 
 #[get("/user/{id}/description")]
@@ -1304,10 +1302,10 @@ pub async fn get_user_description(id: web::Path<u64>) -> HttpResponse {
   let usr_id = id.to_be_bytes();
 
   if let Ok(Some(desc)) = ORC.user_descriptions.get(&usr_id) {
-    return crate::responses::Ok(desc.to_string());
+    return responses::Ok(desc.to_string());
   }
 
-  crate::responses::NotFound("No user description found, sorry")
+  responses::NotFound("No user description found, sorry")
 }
 
 #[post("/user/change/{detail}")]
@@ -1315,74 +1313,74 @@ pub async fn change_user_detail(req: HttpRequest, detail: web::Path<String>, val
   match detail.as_str() {
     "username" => {
       if !is_username_ok(value.as_str()) {
-        return crate::responses::BadRequest("invalid username");
+        return responses::BadRequest("invalid username");
       }
 
       if let Some(mut usr) = ORC.user_by_session(&req) {
         if let Some(err) = ORC.change_username(&mut usr, value.as_str()) {
           match err {
             UserError::UsernameTaken => {
-              return crate::responses::BadRequest("username already taken or blacklisted")
+              return responses::BadRequest("username already taken or blacklisted")
             },
             UserError::ChangedUsernameTooSoon => {
-              return crate::responses::InternalServerError("Username change limit reached, you can only change it twice a week, you may change it again a week after the second change");
+              return responses::InternalServerError("Username change limit reached, you can only change it twice a week, you may change it again a week after the second change");
             },
             UserError::DBIssue => {
-              return crate::responses::InternalServerError("database troubles, failed to change username");
+              return responses::InternalServerError("database troubles, failed to change username");
             },
             _ => {},
           }
         } else {
-          return crate::responses::AcceptedStatusData(
+          return responses::AcceptedStatusData(
           "username successfully changed",
             value.to_owned()
           );
         }
       } else {
-        return crate::responses::Forbidden("can't change anything if you're not logged in");
+        return responses::Forbidden("can't change anything if you're not logged in");
       }
     },
     "handle" => {
       if !is_handle_ok(value.as_str()) {
-        return crate::responses::BadRequest("invalid user handle");
+        return responses::BadRequest("invalid user handle");
       }
 
       if let Some(mut usr) = ORC.user_by_session(&req) {
         if let Some(err) = ORC.change_handle(&mut usr, value.as_str()) {
           match err {
             UserError::HandleTaken => {
-              return crate::responses::BadRequest("user handle already taken or blacklisted")
+              return responses::BadRequest("user handle already taken or blacklisted")
             },
             UserError::DBIssue => {
-              return crate::responses::InternalServerError("database troubles, failed to change username");
+              return responses::InternalServerError("database troubles, failed to change username");
             },
             _ => {},
           }
         } else {
-          return crate::responses::AcceptedStatusData(
+          return responses::AcceptedStatusData(
           "user handle successfully changed",
             value.to_owned()
           );
         }
       } else {
-        return crate::responses::Forbidden("can't change anything if you're not logged in");
+        return responses::Forbidden("can't change anything if you're not logged in");
       }
     },
     "description" => {
       if let Some(usr) = ORC.user_by_session(&req) {
         if ORC.change_description(&usr, value.as_str()) {
-          return crate::responses::Accepted("user description successfully changed");
+          return responses::Accepted("user description successfully changed");
         }
       } else {
-        return crate::responses::Forbidden("can't change anything if you're not logged in");
+        return responses::Forbidden("can't change anything if you're not logged in");
       }
     },
     _ => {
-      return crate::responses::BadRequest("invalid user detail");
+      return responses::BadRequest("invalid user detail");
     }
   }
   
-  crate::responses::InternalServerError("failed to change user details")
+  responses::InternalServerError("failed to change user details")
 }
 
 fn build_the_usual_cookie<'c, N, V>(
