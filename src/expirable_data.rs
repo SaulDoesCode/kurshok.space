@@ -85,6 +85,7 @@ impl Orchestrator {
     }
 }
 
+/*
 fn expirable_data_into_map(map: &mut BTreeMap<String, Vec<Vec<u8>>>, data: ExpirableData) {
     match data {
         ExpirableData::Single{tree, key} => {
@@ -129,6 +130,7 @@ fn merge_expirable_data(data: ExpirableData, old_data: ExpirableData) -> Expirab
 
     ExpirableData::MultiTree(map)
 }
+*/
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Debug, Clone)]
 pub enum ExpirableData {

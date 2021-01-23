@@ -66,9 +66,11 @@ impl RateLimiter {
     }
   }
 
+/*
   pub fn has(&self, data: &str) -> bool {
     self.store.contains_key(data.as_bytes()).unwrap_or(false)
   }
+*/
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]

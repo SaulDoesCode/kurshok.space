@@ -5,9 +5,11 @@ use sthash::*;
 use super::CONF;
 use crate::ratelimiter::RateLimiter;
 
-lazy_static! {
-  pub static ref ORC: Orchestrator = Orchestrator::new(60 * 60 * 24 * 7 * 2);
-}
+use std::lazy::SyncLazy;
+
+pub static ORC: SyncLazy<Orchestrator> = SyncLazy::new(|| {
+  Orchestrator::new(60 * 60 * 24 * 7 * 2)
+});
 
 pub struct Orchestrator {
   pub db: Db,
