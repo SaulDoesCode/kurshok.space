@@ -82,7 +82,7 @@ impl Comment {
     }
     None
   }
-
+/*
   pub fn writ_id(&self) -> String {
     self.id[..self.id.chars().position(|c| c == '/').unwrap()].to_string()
   }
@@ -94,7 +94,7 @@ impl Comment {
   pub fn author_id(&self) -> Option<u64> {
     Self::get_author_id_from_id(&self.id)
   }
-
+*/
   pub fn get_author_id_from_id(id: &str) -> Option<u64> {
     if let Some(raw) = id.split('/').last() {
       if let Some(raw) = raw.split(':').next() {
@@ -183,7 +183,7 @@ impl Comment {
   pub fn is_root_comment(&self) -> bool {
     self.id.matches(":").count() > 1
   }
-
+/*
   pub fn get_root_comment_id(&self) -> Option<String> {
     if self.id.matches(":").count() > 1 {
       return Some(self.id.clone());
@@ -232,7 +232,7 @@ impl Comment {
     }
     None
   }
-
+*/
   pub fn remove_in_transaction(
     &self,
     kpi: &TransactionalTree,
@@ -725,11 +725,7 @@ impl CommentIDTree {
     None
   }
 
-  fn to_comment_tree(
-    &self,
-    query: &CommentQuery,
-    is_top_level: bool,
-  ) -> Option<CommentTree> {
+  fn to_comment_tree(&self, query: &CommentQuery) -> Option<CommentTree> {
     if let Some(max_level) = &query.max_level {
       if self.level == *max_level {
         return None;
@@ -772,19 +768,9 @@ impl CommentIDTree {
       if check_query_conditions(query, &comment, author_id) {
         return Some(CommentTree {
           comment,
-          children: if is_top_level {
-            self
-              .children
-              .par_iter()
-              .filter_map(|(_, child)| child.to_comment_tree(query, false))
-              .collect()
-          } else {
-            self
-              .children
-              .iter()
-              .filter_map(|(_, child)| child.to_comment_tree(query, false))
-              .collect()
-          },
+          children: self.children.iter()
+              .filter_map(|(_, child)| child.to_comment_tree(query))
+              .collect(),
         });
       }
     }
@@ -910,7 +896,10 @@ pub fn check_query_conditions(query: &CommentQuery, comment: &Comment, author_id
   true
 }
 
-pub async fn comment_query(o_usr: Option<&User>, mut query: CommentQuery) -> Option<Vec<CommentTree>> {
+pub async fn comment_query(
+  o_usr: Option<&User>,
+  mut query: CommentQuery,
+) -> Option<Vec<CommentTree>> {
   query.path = query.path.trim_end_matches("/").to_string();
   if query.path.is_empty() {
     return None;
@@ -1022,46 +1011,37 @@ pub async fn comment_query(o_usr: Option<&User>, mut query: CommentQuery) -> Opt
     return None;
   }
 
-  let (tx, mut rx) = tokio::sync::mpsc::channel::<CommentIDTree>(amount as usize);
+  let mut cits = vec![];
+  let mut count = 0;
   let mut iter = ORC.comment_trees.scan_prefix(path.as_bytes());
-  let page = query.page;
-
-  tokio::spawn(async move {
-    let mut count = 0;
-    while let Some(Ok((_, raw))) = iter.next_back() {
-      if page < 2 {
-        if count == amount {
-          break;
-        }
-      } else if count != (amount * page) {
-        count += 1;
-        continue;
-      }
-
-      let id_tree = bincode::deserialize::<CommentIDTree>(&raw).unwrap();
-
-      if let Some(dp) = depth_path {
-        if let Some(st) = id_tree.subtree(dp) {
-          if tx.send(st.clone()).await.is_ok() {
-            break;
-          }
-        }
+  while let Some(Ok((_, raw))) = iter.next_back() {
+    if query.page < 2 {
+      if count == amount {
         break;
       }
+    } else if count != (amount * query.page) {
+      count += 1;
+      continue;
+    }
 
-      if tx.send(id_tree).await.is_ok() {
-        count += 1;
+    let id_tree = bincode::deserialize::<CommentIDTree>(&raw).unwrap();
+
+    if let Some(dp) = depth_path {
+      if let Some(st) = id_tree.subtree(dp) {
+        cits.push(st.clone());
       }
+      break;
     }
-  });
 
-  let mut comment_trees = Vec::with_capacity(10);
-  while let Some(cit) = rx.recv().await {
-    if let Some(ct) = cit.to_comment_tree(&query, true) {
-      comment_trees.push(ct);
-    }
+    cits.push(id_tree);
+    count += 1;
   }
-  Some(comment_trees)
+
+  Some(
+    cits.into_par_iter()
+    .filter_map(|cit| cit.to_comment_tree(&query))
+    .collect::<Vec<CommentTree>>()
+  )
 }
 
 #[post("/comments")]
