@@ -40,7 +40,7 @@ pub fn NotModified<T: Serialize>(status: T) -> HttpResponse {
     HttpResponse::NotModified().json(APIStatusResponse{ok: false, status})
 }
 
-#[allow(non_snake_case, missing_docs)]
+#[allow(non_snake_case, missing_docs, dead_code)]
 pub fn OkDataStatus<X: Serialize, Y: Serialize>(status: X, data: Y) -> HttpResponse {
     HttpResponse::Ok().json(APIStatusDataResponse {
         ok: true,
