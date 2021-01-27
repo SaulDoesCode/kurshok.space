@@ -177,10 +177,9 @@ const postNavView = d.html(/* html */`
 
 const quickScroll = d.html( /* html */ `
 <nav class="quick-scroll">
-    <div class="to-top icon-up-open" onclick="window.scrollTo({top: 0, left: 0, behavior: 'smooth'})">
-    </div>
-    <div class="to-comments icon-comment" onclick="document.querySelector('#comments').scrollIntoView({behavior: 'smooth'})">
-    </div>
+    <div class="to-top icon-up-open" onclick="window.scrollTo({top: 0, left: 0, behavior: 'smooth'})"></div>
+    <div class="to-comments icon-comment" onclick="document.querySelector('#comments').scrollIntoView({behavior: 'smooth'})"></div>
+    <div class="to-top icon-down-open" onclick="window.scrollTo({top: document.body.scrollHeight, left: 0, behavior: 'smooth'})"></div>
 </nav>`)
 
 route.on.post(async hash => {
