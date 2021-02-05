@@ -297,7 +297,7 @@ main > section {
 }
 
 .post {
-  margin: 1em .5em;
+  margin: .5em .5em;
 }
 
 .post:not(.full) {
@@ -308,7 +308,7 @@ main > section {
 }
 
 .post:not(.full) hr {
-  margin: .5em 0;
+  margin: .25em 0;
 }
 
 main[route-active="no-content"] > :not(.no-content) {
