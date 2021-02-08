@@ -171,7 +171,7 @@ main {
   text-align: center;
   grid-area: widgets;
   width: auto;
-  margin: .25em;  
+  margin: .25em;
 }
 
 .hero .ww-launcher,
@@ -231,17 +231,37 @@ nav.tabs a.active-route {
   color: #fff;
 }
 
-main[route-active="posts"] {
+main {
   position: relative;
-  max-width: 920px;
+  padding-bottom: .25em;
+  width: 100%;
+  max-width: 100%;
 }
 
-main {
-  padding-bottom: .25em;
+main[route-active="posts"] {
+  display: grid;
+  grid-template-columns: minmax(1fr, 800px) auto;
+  grid-template-rows: 1fr;
+  gap: 0px 1em;
+  grid-template-areas: ". .";
+  justify-content: center;
 }
 
 main > section {
   color:hsl(0, 0%, 68%);
+}
+
+.tag-filter {
+  display: flex;
+  justify-content: flex-start;
+  align-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+  max-width: 240px;
+}
+
+.tag-filter > header {
+  margin: .25em .5em;
 }
 
 .tag-filter > input[name="tags"] {
@@ -349,11 +369,12 @@ nav.quick-scroll > div {
 
 .post.full {
   position: relative;
-  margin-top: .5em;
+  margin: .5em auto;
   padding-top: .5em;
   flex-flow: column;
   justify-content: flex-start;
   min-height: 60vh;
+  max-width: 975px;
 }
 
 .post.full.with-comments {
@@ -482,6 +503,7 @@ nav.quick-scroll > div {
 
 .post.full .post-title {
   width: 100%;
+  margin: 1em 1.5em;
 }
 
 .post.full .tags {
@@ -1098,6 +1120,12 @@ article.tab-view>header>.tab-name.active {
   background: var(--highlight-color);
   color: #fff;
   box-shadow: 0 0 3px rgb(0, 0, 0, .2);
+}
+
+@media all and (max-width: 1000px) {
+  main[route-active="posts"] {
+    display: block !important;
+  }
 }
 
 @media all and (max-width: 760px) {
