@@ -120,13 +120,12 @@ const handleTabs = app.tabView({
                 class: 'change-handle',
             }, d => [
                 d.editor = input({
+                    value: app.user.handle,
                     attr: {
                         type: 'text',
                         max: 300,
                         min: 3
                     }
-                }, ta => {
-                    ta.value = app.user.handle
                 }),
                 button({
                     async onclick() {
@@ -144,9 +143,7 @@ const handleTabs = app.tabView({
                             app.user.handle = handle
                             handleTabs.active = 'handle'
                             handleTabs.views.handle.view.innerHTML = ''
-                            handleTabs.views.handle.view.append(
-                                p(app.user.handle)
-                            )
+                            handleTabs.views.handle.view.append(p(app.user.handle))
                             handleView.textContent = app.user.handle
                             app.toast.normal(res.status)
                         } else {
@@ -162,54 +159,44 @@ const handleTabs = app.tabView({
 const usernameTabs = app.tabView({
     $: profileHeader,
     attacher: 'after',
-    tabs: [
-        {
-            name: 'username',
-            view: div({
-                class: 'username',
-            },
-                span(app.user.username)
-            )
-        },
-        {
-            name: 'change',
-            view: div({
-                class: 'change-username',
-            }, d => [
-                d.editor = input({
-                    attr: {
-                        type: 'text',
-                        max: 50,
-                        min: 3
+    tabs: [{
+        name: 'username',
+        view: div.username(span(app.user.username))
+    }, {
+        name: 'change',
+        view: div.change_username(d => [
+            d.editor = input({
+                value: app.user.username,
+                attr: {
+                    type: 'text',
+                    max: 50,
+                    min: 3
+                }
+            }),
+            button({
+                async onclick() {
+                    let username = d.editor.value.trim()
+                    if (username.length > 30 || username.length < 3) {
+                        app.toast.error('User handle is too short')
+                        return
                     }
-                }, ta => {
-                    ta.value = app.user.username
-                }),
-                button({
-                    async onclick() {
-                        let username = d.editor.value.trim()
-                        if (username.length > 30 || username.length < 3) {
-                            app.toast.error('User handle is too short')
-                            return
-                        }
-                        if (app.user.username === username) {
-                            app.toast.error('Username was not altered')
-                            return
-                        }
-                        const res = await (await app.jsonPost('/user/change/username', username)).json()
-                        if (res.ok) {
-                            app.user.username = username
-                            usernameTabs.active = 'username'
-                            usernameTabs.views.username.view.innerHTML = ''
-                            usernameTabs.views.username.view.append(p(app.user.username))
-                            usernameView.textContent = app.user.username
-                            app.toast.normal(res.status)
-                        } else {
-                            app.toast.error(res.status)
-                        }
+                    if (app.user.username === username) {
+                        app.toast.error('Username was not altered')
+                        return
                     }
-                }, 'change')
-            ])
-        }
-    ]
+                    const res = await (await app.jsonPost('/user/change/username', username)).json()
+                    if (res.ok) {
+                        app.user.username = username
+                        usernameTabs.active = 'username'
+                        usernameTabs.views.username.view.innerHTML = ''
+                        usernameTabs.views.username.view.append(p(app.user.username))
+                        usernameView.textContent = app.user.username
+                        app.toast.normal(res.status)
+                    } else {
+                        app.toast.error(res.status)
+                    }
+                }
+            }, 'change')
+        ])
+    }]
 })
