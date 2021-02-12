@@ -275,7 +275,6 @@ impl Comment {
           if let Some(raw_child_comment) = comments.get(cidtree.comment.as_bytes())? {
             let child_comment: Comment = Comment::try_from_slice(&raw_child_comment).unwrap();
             child_comment.remove_in_transaction(
-              
               kpi,
               ctrees,
               comments,
@@ -609,29 +608,15 @@ pub struct CommentTree {
 }
 
 impl CommentTree {
-  pub fn public(
-    self,
-    usr_id: &Option<u64>,
-    top_level: bool,
-  ) -> Option<PublicCommentTree> {
+  pub fn public(self, usr_id: &Option<u64>) -> Option<PublicCommentTree> {
     Some(PublicCommentTree {
       comment: match self.comment.public(usr_id) {
         Some(pc) => pc,
         None => return None,
       },
-      children: if top_level {
-        self
-          .children
-          .into_par_iter()
-          .filter_map(|c| c.public(usr_id, false))
-          .collect()
-      } else {
-        self
-          .children
-          .into_iter()
-          .filter_map(|c| c.public(usr_id, false))
-          .collect()
-      },
+      children: self.children.into_par_iter()
+          .filter_map(|c| c.public(usr_id))
+          .collect(),
     })
   }
 }
@@ -768,9 +753,9 @@ impl CommentIDTree {
       if check_query_conditions(query, &comment, author_id) {
         return Some(CommentTree {
           comment,
-          children: self.children.iter()
-              .filter_map(|(_, child)| child.to_comment_tree(query))
-              .collect(),
+          children: self.children.par_iter()
+            .filter_map(|(_, child)| child.to_comment_tree(query))
+            .collect(),
         });
       }
     }
@@ -972,9 +957,8 @@ pub async fn comment_query(
   query.is_admin = Some(is_admin);
 
   if let Some(authors) = &query.authors {
-    let mut ids: Vec<u64> = authors
-      .par_iter()
-      .filter_map(|a| 
+    let mut ids: Vec<u64> = authors.iter()
+      .filter_map(|a|
         ORC.usernames.get(a.as_bytes())
           .map_or(None, |id| id.map(|id| id.to_u64()))
       )
@@ -1039,8 +1023,8 @@ pub async fn comment_query(
 
   Some(
     cits.into_par_iter()
-    .filter_map(|cit| cit.to_comment_tree(&query))
-    .collect::<Vec<CommentTree>>()
+      .filter_map(|cit| cit.to_comment_tree(&query))
+      .collect::<Vec<CommentTree>>()
   )
 }
 
@@ -1060,9 +1044,8 @@ pub async fn post_comment_query(
     query.into_inner()
   ).await{
     Some(comments) => crate::responses::Ok(
-      comments
-        .into_par_iter()
-        .filter_map(|c| c.public(&usr_id, true))
+      comments.into_par_iter()
+        .filter_map(|c| c.public(&usr_id))
         .collect::<Vec<PublicCommentTree>>(),
     ),
     None => crate::responses::NotFoundEmpty(),
@@ -1132,7 +1115,7 @@ pub async fn make_comment(
 pub async fn edit_comment_request(
   req: HttpRequest,
   rce: web::Json<RawCommentEdit>,
-) -> HttpResponse {  
+) -> HttpResponse {
   let usr = match ORC.user_by_session(&req) {
     Some(usr) => usr,
     None => return crate::responses::Forbidden("Unauthorized comment edit attempt"),
@@ -1198,7 +1181,7 @@ pub async fn delete_comment(
     }
   };
 
-  
+
   if let Some(comment) = Comment::from_id(ctd.as_bytes()) {
     if usr.username == comment.author_name {
       if comment.delete() {

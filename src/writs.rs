@@ -346,7 +346,7 @@ impl Orchestrator {
 
       true
     };
-    
+
     if let Some(ids) = &query.ids {
       let id_iter = {
         let mut iter = ids.iter();
@@ -376,7 +376,7 @@ impl Orchestrator {
           }
         }
 
-        let writ_id= match WritID::from_str(id) {
+        let writ_id = match WritID::from_str(id) {
           Some(wid) => wid,
           None => continue,
         };
@@ -401,7 +401,7 @@ impl Orchestrator {
         if let Some(author_id) = &query.author_id {
           partial_id.extend_from_slice(&author_id.to_be_bytes());
         }
-        
+
         let mut ti_iter = self.tags_index.scan_prefix(partial_id);
 
         let skip_n = query.page * amount;

@@ -27,22 +27,22 @@ pub struct APIStatusDataResponse<X: Serialize, Y: Serialize> {
 
 #[allow(non_snake_case, missing_docs)]
 pub fn NotFoundEmpty() -> HttpResponse {
-    HttpResponse::NotFound().json(EmptyAPIResponse { ok: false })
+    HttpResponse::NotFound().json(&EmptyAPIResponse { ok: false })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn Ok<T: Serialize>(data: T) -> HttpResponse {
-    HttpResponse::Ok().json(APIResponse { ok: true, data })
+    HttpResponse::Ok().json(&APIResponse { ok: true, data })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn NotModified<T: Serialize>(status: T) -> HttpResponse {
-    HttpResponse::NotModified().json(APIStatusResponse{ok: false, status})
+    HttpResponse::NotModified().json(&APIStatusResponse{ok: false, status})
 }
 
 #[allow(non_snake_case, missing_docs, dead_code)]
 pub fn OkDataStatus<X: Serialize, Y: Serialize>(status: X, data: Y) -> HttpResponse {
-    HttpResponse::Ok().json(APIStatusDataResponse {
+    HttpResponse::Ok().json(&APIStatusDataResponse {
         ok: true,
         data,
         status,
@@ -51,12 +51,12 @@ pub fn OkDataStatus<X: Serialize, Y: Serialize>(status: X, data: Y) -> HttpRespo
 
 #[allow(non_snake_case, missing_docs)]
 pub fn AcceptedData<T: Serialize>(data: T) -> HttpResponse {
-    HttpResponse::Accepted().json(APIResponse { ok: true, data })
+    HttpResponse::Accepted().json(&APIResponse { ok: true, data })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn AcceptedStatusData<X: Serialize, Y: Serialize>(status: X, data: Y) -> HttpResponse {
-    HttpResponse::Accepted().json(APIStatusDataResponse {
+    HttpResponse::Accepted().json(&APIStatusDataResponse {
         ok: true,
         data,
         status,
@@ -65,30 +65,30 @@ pub fn AcceptedStatusData<X: Serialize, Y: Serialize>(status: X, data: Y) -> Htt
 
 #[allow(non_snake_case, missing_docs)]
 pub fn Accepted<T: Serialize>(status: T) -> HttpResponse {
-    HttpResponse::Accepted().json(APIStatusResponse { ok: true, status })
+    HttpResponse::Accepted().json(&APIStatusResponse { ok: true, status })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn NotFound<T: Serialize>(status: T) -> HttpResponse {
-    HttpResponse::NotFound().json(APIStatusResponse { ok: false, status })
+    HttpResponse::NotFound().json(&APIStatusResponse { ok: false, status })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn BadRequest<T: Serialize>(status: T) -> HttpResponse {
-    HttpResponse::BadRequest().json(APIStatusResponse { ok: false, status })
+    HttpResponse::BadRequest().json(&APIStatusResponse { ok: false, status })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn TooManyRequests<T: Serialize>(status: T) -> HttpResponse {
-    HttpResponse::TooManyRequests().json(APIStatusResponse { ok: false, status })
+    HttpResponse::TooManyRequests().json(&APIStatusResponse { ok: false, status })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn Forbidden<T: Serialize>(status: T) -> HttpResponse {
-    HttpResponse::Forbidden().json(APIStatusResponse { ok: false, status })
+    HttpResponse::Forbidden().json(&APIStatusResponse { ok: false, status })
 }
 
 #[allow(non_snake_case, missing_docs)]
 pub fn InternalServerError<T: Serialize>(status: T) -> HttpResponse {
-    HttpResponse::Forbidden().json(APIStatusResponse { ok: false, status })
+    HttpResponse::Forbidden().json(&APIStatusResponse { ok: false, status })
 }

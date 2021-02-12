@@ -76,6 +76,7 @@
                 app.d.once.click('.ww-launcher', () => import('/js/writ-writer.min.js'))
             {% endif %}
 
+            {% if dev_mode  %}
                 app.openWS = () => {
                     if (app.ws && app.wsOpen) return
 
@@ -104,6 +105,7 @@
 
                 app.openWS()
                 app.wsSend("This is a websocket message. D'ya hear it?!?!?!?")
+            {% endif %}
             </script>
         {% else %}
             <button class="auth-launcher" title="click for a login or signup modal">

@@ -68,7 +68,7 @@ impl RemoteHttpRequest {
             for (key, value) in headers {
                 if let Ok(k) = HeaderName::from_bytes(key.as_bytes()) {
                     if let Ok(v) = HeaderValue::from_str(value.as_str()) {
-                        builder = builder.header(k, v);
+                        builder = builder.append_header((k, v));
                     } else {
                         print!("header value fucky");
                     }

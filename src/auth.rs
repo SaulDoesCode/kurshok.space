@@ -1016,7 +1016,7 @@ pub async fn indirect_auth_verification(req: HttpRequest) -> HttpResponse {
                   build_the_usual_cookie("auth", &token)
                 )
                 .content_type("application/json")
-                .json(json!({
+                .json(&json!({
                   "ok": true,
                   "status": "Authentication succesful!"
                 }));
@@ -1231,7 +1231,7 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
             .cookie(
               build_cookie_with_ttl("preauth", &preauth_token, 60 * 10)
             )
-            .json(json!({
+            .json(&json!({
                 "ok": true,
                 "status": "Auth email is sending, please check your inbox and also the spam section just in case.",
                 "data": {
@@ -1270,7 +1270,7 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
           .cookie(
             build_cookie_with_ttl("preauth", &preauth_token, 60 * 10)
           )
-          .json(json!({
+          .json(&json!({
               "ok": true,
               "status": "Auth email is sending, please check your inbox and also the spam section just in case.",
               "data": {

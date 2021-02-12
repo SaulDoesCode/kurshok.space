@@ -101,17 +101,15 @@ async fn main() -> std::io::Result<()> {
                     if path.contains(".well-known/acme-challenge") {
                         let challenge_dir = format!("./private/acme/{}", path);
                         if let Ok(file) = NamedFile::open(&challenge_dir) {
-                            if let Ok(file_response) = file.into_response(&req) {
-                                return file_response;
-                            }
+                            return file.into_response(&req);
                         }
                     }
 
                     HttpResponse::Found()
-                        .header(
+                        .append_header((
                             actix_web::http::header::LOCATION,
                             format!("https://{}{}", CONF.read().domain, path),
-                        )
+                        ))
                         .finish()
                         .into_body()
                 })
@@ -246,7 +244,7 @@ async fn admin_panel(req: HttpRequest) -> HttpResponse {
         ctx.insert("dev_mode", &ORC.dev_mode);
     } else {
         return HttpResponse::Found()
-            .header(actix_web::http::header::LOCATION, "/admin-gateway")
+            .append_header((actix_web::http::header::LOCATION, "/admin-gateway"))
             .finish()
             .into_body();
     }
@@ -264,10 +262,10 @@ async fn serve_files_and_templates(req: HttpRequest) -> HttpResponse {
     let path: &str = req.path();
     if path.ends_with("/") {
         return HttpResponse::Found()
-            .header(
+            .append_header((
                 actix_web::http::header::LOCATION,
                 path.trim_end_matches("/"),
-            )
+            ))
             .finish()
             .into_body();
     }
@@ -276,12 +274,7 @@ async fn serve_files_and_templates(req: HttpRequest) -> HttpResponse {
         if let Some(usr) = ORC.admin_by_session(&req) {
             let asset_dir = format!("./assets{}", path);
             if let Ok(file) = NamedFile::open(&asset_dir) {
-                if let Ok(file_response) = file.into_response(&req) {
-                    return file_response;
-                }
-                return HttpResponse::Unauthorized()
-                    .content_type("text/plain")
-                    .body("Non-admins may not load admin only content");
+                return file.into_response(&req);
             }
 
             let mut name = path.trim_start_matches('/').to_string();
@@ -305,12 +298,14 @@ async fn serve_files_and_templates(req: HttpRequest) -> HttpResponse {
                     .body(s);
             }
         }
+
+        return HttpResponse::Unauthorized()
+                    .content_type("text/plain")
+                    .body("Non-admins may not load admin only content");
     } else {
         let asset_dir = format!("./assets{}", req.path());
         if let Ok(file) = NamedFile::open(&asset_dir) {
-            if let Ok(file_response) = file.into_response(&req) {
-                return file_response;
-            }
+            return file.into_response(&req);
         }
 
         let mut name = path.trim_start_matches('/').to_string();
