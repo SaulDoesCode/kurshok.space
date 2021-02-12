@@ -1277,17 +1277,6 @@ pub async fn auth_attempt(req: HttpRequest, ar: web::Json<AuthRequest>) -> HttpR
                 "first_time": false,
               }
           }));
-      /*
-        if ORC.send_email(msg) {
-
-        } else {
-          if ORC.dev_mode {
-            println!("Auth email failed to send for: {}", &ar.email);
-          }
-          ORC.destroy_preauth_token(&preauth_token);
-          return responses::InternalServerError("Auth email failed to send, are you sure your email is in good order?");
-        }
-      */
       }
     } else {
       return responses::InternalServerError("magic-link creation failed");
