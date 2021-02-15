@@ -628,8 +628,8 @@ impl Orchestrator {
 */
 }
 
-#[serde(deny_unknown_fields)]
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct WritQuery {
   pub title: Option<String>,
   pub slug: Option<String>,
