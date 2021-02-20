@@ -1053,7 +1053,7 @@ article.book {
   display: flex;
   justify-content: center;
   align-content: center;
-  align-items: flex-start;
+  align-items: center;
   flex-flow: row wrap;
   margin: 1.5em 0;
 }
