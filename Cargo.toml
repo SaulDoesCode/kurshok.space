@@ -11,7 +11,7 @@ actix-web-actors = "4.0.0-beta.4"
 actix = "0.11.1"
 awc = "3.0.0-beta.4"
 bincode = "^1"
-borsh = { version = "0.8.1", features = ["std"]}
+borsh = { version = "^0.9", features = ["std"]}
 clap = "3.0.0-beta.2"
 comrak = {version = "^0", default-features = false}
 dashmap = {version = "  ^4", features = ["rayon"]}
