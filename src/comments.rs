@@ -7,12 +7,15 @@ use sled::{transaction::*, IVec, Transactional};
 use std::{cell::Cell, collections::HashMap};
 use time::{Duration};
 
-use crate::auth::User;
-use crate::orchestrator::ORC;
-use crate::utils::{
-  datetime_from_unix_timestamp, i64_is_zero, render_md, unix_timestamp, FancyBool, FancyIVec,
+use crate::{
+  auth::User,
+  responses,
+  orchestrator::ORC,
+  utils::{
+    datetime_from_unix_timestamp, i64_is_zero, render_md, unix_timestamp, FancyBool, FancyIVec,
+  },
+  writs::{CommentSettings, Vote, Writ, WritID}
 };
-use crate::writs::{CommentSettings, Vote, Writ, WritID};
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct PublicComment {
@@ -1043,12 +1046,12 @@ pub async fn post_comment_query(
     o_usr.as_ref(),
     query.into_inner()
   ).await{
-    Some(comments) => crate::responses::Ok(
+    Some(comments) => responses::Ok(
       comments.into_par_iter()
         .filter_map(|c| c.public(&usr_id))
         .collect::<Vec<PublicCommentTree>>(),
     ),
-    None => crate::responses::NotFoundEmpty(),
+    None => responses::NotFoundEmpty(),
   }
 }
 
@@ -1075,7 +1078,7 @@ pub async fn make_comment(
 ) -> HttpResponse {
   let usr = match ORC.user_by_session(&req) {
     Some(usr) => usr,
-    None => return crate::responses::BadRequest("only authorized users may post comments"),
+    None => return responses::BadRequest("only authorized users may post comments"),
   };
 
   let mut rc = rc.into_inner();
@@ -1086,7 +1089,7 @@ pub async fn make_comment(
     let hitter = ORC.hash(rc.raw_content.as_bytes());
     if let Some(rl) = ORC.ratelimiter.hit(&hitter, 1, Duration::minutes(60)) {
       if rl.is_timing_out() {
-        return crate::responses::TooManyRequests(
+        return responses::TooManyRequests(
           format!("don't copy existing comments, write your own")
         );
       }
@@ -1097,7 +1100,7 @@ pub async fn make_comment(
       .hit(hitter.as_bytes(), 3, Duration::minutes(2))
     {
       if rl.is_timing_out() {
-        return crate::responses::TooManyRequests(format!(
+        return responses::TooManyRequests(format!(
           "too many requests, timeout has {} minutes left.",
           rl.minutes_left()
         ));
@@ -1118,7 +1121,7 @@ pub async fn edit_comment_request(
 ) -> HttpResponse {
   let usr = match ORC.user_by_session(&req) {
     Some(usr) => usr,
-    None => return crate::responses::Forbidden("Unauthorized comment edit attempt"),
+    None => return responses::Forbidden("Unauthorized comment edit attempt"),
   };
 
   let mut rce = rce.into_inner();
@@ -1134,7 +1137,7 @@ pub async fn edit_comment_request(
       .hit(hitter.as_bytes(), 3, Duration::minutes(5))
     {
       if rl.is_timing_out() {
-        return crate::responses::TooManyRequests(format!(
+        return responses::TooManyRequests(format!(
           "too many requests, timeout has {} minutes left.",
           rl.minutes_left()
         ));
@@ -1156,15 +1159,15 @@ pub async fn fetch_comment_raw_content(
     if let Some(author_id) = Comment::get_author_id_from_id(cid.as_str()) {
       if author_id == usr.id {
         if let Ok(Some(raw_rc)) = ORC.comment_raw_content.get(cid.as_bytes()) {
-          return crate::responses::Ok(raw_rc.to_string());
+          return responses::Ok(raw_rc.to_string());
         } else {
-          return crate::responses::NotFound("comment id didn't match anything of yours");
+          return responses::NotFound("comment id didn't match anything of yours");
         }
       }
     }
   }
 
-  crate::responses::Forbidden(
+  responses::Forbidden(
     "You can't load the raw_contents of comments if you aren't logged in or if the contents in question aren't yours"
   )
 }
@@ -1177,7 +1180,7 @@ pub async fn delete_comment(
   let usr = match ORC.user_by_session(&req) {
     Some(usr) => usr,
     None => {
-      return crate::responses::Forbidden("You can't delete your comments if you're not logged in")
+      return responses::Forbidden("You can't delete your comments if you're not logged in")
     }
   };
 
@@ -1185,16 +1188,16 @@ pub async fn delete_comment(
   if let Some(comment) = Comment::from_id(ctd.as_bytes()) {
     if usr.username == comment.author_name {
       if comment.delete() {
-        return crate::responses::Ok("Comment successfully deleted");
+        return responses::Ok("Comment successfully deleted");
       }
     } else {
-      return crate::responses::Forbidden("You can't delete someone else's comment");
+      return responses::Forbidden("You can't delete someone else's comment");
     }
   } else {
-    return crate::responses::BadRequest("can't delete non-existent comment");
+    return responses::BadRequest("can't delete non-existent comment");
   }
 
-  crate::responses::InternalServerError("troubles abound, failed to delete comment :(")
+  responses::InternalServerError("troubles abound, failed to delete comment :(")
 }
 
 #[get("/comment/{id}/upvote")]
@@ -1206,14 +1209,14 @@ pub async fn upvote_comment(
   if let Some(usr_id) = ORC.user_id_by_session(&req) {
     if let Some(comment) = Comment::from_id(id.as_bytes()) {
       if let Some(count) = comment.upvote(usr_id) {
-        return crate::responses::AcceptedStatusData("vote went through", count);
+        return responses::AcceptedStatusData("vote went through", count);
       }
     }
   } else {
-    return crate::responses::Forbidden("only users may vote on writs");
+    return responses::Forbidden("only users may vote on writs");
   }
 
-  crate::responses::InternalServerError("failed to register vote")
+  responses::InternalServerError("failed to register vote")
 }
 
 #[get("/comment/{id}/downvote")]
@@ -1225,14 +1228,14 @@ pub async fn downvote_comment(
   if let Some(usr_id) = ORC.user_id_by_session(&req) {
     if let Some(comment) = Comment::from_id(id.as_bytes()) {
       if let Some(count) = comment.downvote(usr_id) {
-        return crate::responses::AcceptedStatusData("vote went through", count);
+        return responses::AcceptedStatusData("vote went through", count);
       }
     }
   } else {
-    return crate::responses::Forbidden("only users may vote on writs");
+    return responses::Forbidden("only users may vote on writs");
   }
 
-  crate::responses::InternalServerError("failed to register vote")
+  responses::InternalServerError("failed to register vote")
 }
 
 #[get("/comment/{id}/unvote")]
@@ -1244,14 +1247,14 @@ pub async fn unvote_comment(
   if let Some(usr_id) = ORC.user_id_by_session(&req) {
     if let Some(comment) = Comment::from_id(id.as_bytes()) {
       if let Some(count) = comment.unvote(usr_id) {
-        return crate::responses::AcceptedStatusData("vote went through", count);
+        return responses::AcceptedStatusData("vote went through", count);
       }
     }
   } else {
-    return crate::responses::Forbidden("only users may vote on writs");
+    return responses::Forbidden("only users may vote on writs");
   }
 
-  crate::responses::InternalServerError("failed to register vote")
+  responses::InternalServerError("failed to register vote")
 }
 
 pub async fn make_comment_on_writ(usr: &User, rc: RawComment) -> HttpResponse {
@@ -1262,11 +1265,11 @@ pub async fn make_comment_on_writ(usr: &User, rc: RawComment) -> HttpResponse {
       rc.raw_content,
       rc.author_only.unwrap_or(false),
     ) {
-      return crate::responses::AcceptedData(comment);
+      return responses::AcceptedData(comment);
     }
-    return crate::responses::InternalServerError("troubles abound, couldn't make subcomment :(");
+    return responses::InternalServerError("troubles abound, couldn't make subcomment :(");
   }
-  crate::responses::BadRequest("Can't comment on non-existing post")
+  responses::BadRequest("Can't comment on non-existing post")
 }
 
 pub async fn make_comment_on_comment(usr: &User, rc: RawComment) -> HttpResponse {
@@ -1282,21 +1285,21 @@ pub async fn make_comment_on_comment(usr: &User, rc: RawComment) -> HttpResponse
           rc.raw_content,
           parent_comment.author_only,
         ) {
-          return crate::responses::AcceptedData(comment);
+          return responses::AcceptedData(comment);
         }
       }
     }
   }
-  crate::responses::InternalServerError("troubles abound, couldn't make subcomment :(")
+  responses::InternalServerError("troubles abound, couldn't make subcomment :(")
 }
 
 pub async fn make_comment_edit(usr_id: u64, rce: RawCommentEdit) -> HttpResponse {
   if let Some(author_id) = Comment::get_author_id_from_id(&rce.id) {
     if author_id != usr_id {
-      return crate::responses::Forbidden("You cannot edit another user's comments.");
+      return responses::Forbidden("You cannot edit another user's comments.");
     }
   } else {
-    return crate::responses::BadRequest("Bad comment id");
+    return responses::BadRequest("Bad comment id");
   }
 
   if let Some(wid) = WritID::from_str(&rce.writ_id) {
@@ -1305,13 +1308,13 @@ pub async fn make_comment_edit(usr_id: u64, rce: RawCommentEdit) -> HttpResponse
       // TODO: proper error handling instead of do or fail generically
       if let Some(comment) = edit_comment(&settings, rce) {
         if let Some(pc) = comment.public(&Some(usr_id)) {
-          return crate::responses::AcceptedData(pc);
+          return responses::AcceptedData(pc);
         }
-        return crate::responses::Accepted("Comment edited succesfully, but retrieving the updated version hit a snag, no worries just reload the page");
+        return responses::Accepted("Comment edited succesfully, but retrieving the updated version hit a snag, no worries just reload the page");
       }
     }
   }
-  crate::responses::InternalServerError("troubles abound, couldn't edit comment :(")
+  responses::InternalServerError("troubles abound, couldn't edit comment :(")
 }
 
 fn get_prefix_and_parts(id: &str, prefix_parts: usize) -> (String, Vec<String>) {
