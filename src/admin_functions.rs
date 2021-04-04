@@ -1,5 +1,4 @@
 use actix_web::{
-    client,
     http::{Cookie, HeaderName, HeaderValue},
     get, post, web, HttpRequest, HttpResponse,
 };
@@ -49,7 +48,7 @@ pub struct RemoteHttpRequest {
 
 impl RemoteHttpRequest {
     pub async fn run(&self) -> Option<RemoteHttpResponse> {
-        let client = client::Client::default();
+        let client = awc::Client::default();
         let mut builder = match self.method.to_lowercase().as_str() {
             "get" => client.get(&self.url),
             "post" => client.post(&self.url),
